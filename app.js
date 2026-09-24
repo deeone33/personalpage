@@ -1,4 +1,4 @@
-var VERSION = 10;
+var VERSION = 11;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -69,6 +69,7 @@ function applyTheme() {
   r.style.setProperty("--acfg", lum > 0.6 ? "#111" : "#fff");
   $("themeBtn").textContent = P.theme === "dark" ? "Switch to light" : "Switch to dark";
   $("accent").value = P.accent;
+  if (P.dockW) r.style.setProperty("--dock-w", P.dockW + "px");
   var c = cols();
   r.style.setProperty("--bg", c.bg); r.style.setProperty("--fg", c.fg); r.style.setProperty("--mut", c.mut);
   r.style.setProperty("--card", rgba(c.card, c.a / 100)); r.style.setProperty("--solid", c.card);
@@ -137,7 +138,7 @@ function adjust(a, id, d) {
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
 }
-function tile(id, title, body, click) {
+function tile(id, title, body, click, hx) {
   var c = LAY().c[id] || DEF_C[id] || 3, t = "", at = "", cp = COMPACT.indexOf(id) >= 0;
   if (click) {
     var pr = typeof click === "string" ? click.split(":") : ["weather"];
@@ -147,8 +148,9 @@ function tile(id, title, body, click) {
     var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
     t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
   }
-  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '"' + at +
-    "><h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>" + t + body + "</div>";
+  var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
+  var head = cp ? h3 : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
+  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
@@ -203,13 +205,13 @@ function render() {
   var twv = (tcat ? tw.filter(function (x) { return (x.sub || "?") === tcat; }) : tw.slice()).sort(function (a, b) {
     return favFirst(a, b) || (TS === "name" ? String(a.name || a.id).toLowerCase().localeCompare(String(b.name || b.id).toLowerCase()) : TS === "cat" ? String(a.sub || "").localeCompare(String(b.sub || "")) || b.v - a.v : b.v - a.v);
   });
-  var ctlT = '<div class="ctl"><label>Sort <select data-s="sort:twitch">' + opts([["viewers", "Viewers"], ["name", "Name"], ["cat", "Category"]], TS) + '</select></label><label>Category <select data-s="tcat"><option value="">All categories</option>' +
-    Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select></label></div>";
-  T.twitch = tile("twitch", "Live on Twitch", ctlT + (twv.length ? lst("twitch", twv.map(function (x) {
+  var ctlT = '<select data-s="sort:twitch" aria-label="Sort streams">' + opts([["viewers", "Viewers"], ["name", "Name"], ["cat", "Category"]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
+    Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select>";
+  T.twitch = tile("twitch", "Live on Twitch", (twv.length ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
   }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
-    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'));
+    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT);
 
   var yb;
   if (P.yt && P.yt.ch && P.yt.ch.length) {
@@ -240,12 +242,12 @@ function render() {
       if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
       return SS === "up" ? b - a : SS === "down" ? a - b : Math.abs(b) - Math.abs(a);
     });
-  var ctlS = '<div class="ctl"><label>Sort <select data-s="sort:stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select></label></div>";
+  var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>";
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
-  T.stocks = tile("stocks", "Stocks", ctlS + (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
+  T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
     return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
-  }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
+  }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add, 0, ctlS);
 
   $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
   renderHidden();
@@ -528,6 +530,23 @@ $("updBtn").onclick = function () { location.reload(); };
 
 // ---- Docked players: keep watching on the left while you use the rest of the site ----
 var DOCK = [], dockUid = 0;
+function setDockW(w) { document.documentElement.style.setProperty("--dock-w", w + "px"); }
+(function () {
+  var grip = $("dockGrip");
+  grip.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (x) {}
+    document.body.classList.add("resizing");
+    var w = 0;
+    function mv(ev) { w = Math.round(Math.max(240, Math.min(ev.clientX, window.innerWidth * 0.75))); setDockW(w); }
+    function up() {
+      grip.removeEventListener("pointermove", mv); grip.removeEventListener("pointerup", up);
+      document.body.classList.remove("resizing");
+      if (w) { P.dockW = w; persist(); }
+    }
+    grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up);
+  });
+})();
 function syncDock() { $("dock").hidden = !DOCK.length; document.body.classList.toggle("docked", DOCK.length > 0); }
 function dockAdd(k) {
   var kind = k.charAt(0), id = k.slice(2);
