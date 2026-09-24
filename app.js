@@ -1,4 +1,4 @@
-var VERSION = 8;
+var VERSION = 9;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -50,6 +50,16 @@ function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
 // ---- Theme, accent, wallpaper ----
+var DEFC = { dark: { bg: "#10131a", card: "#181c26", fg: "#e9ecf2", mut: "#8c93a3", a: 84 }, light: { bg: "#eceff4", card: "#ffffff", fg: "#161a22", mut: "#5d6575", a: 86 } };
+function cols() {
+  var d = DEFC[P.theme] || DEFC.dark, o = (P.colors && P.colors[P.theme]) || {};
+  return { bg: o.bg || d.bg, card: o.card || d.card, fg: o.fg || d.fg, mut: o.mut || d.mut, a: o.a != null ? o.a : d.a };
+}
+function rgba(hex, a) { var n = parseInt(hex.slice(1), 16); return "rgba(" + (n >> 16) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; }
+function setCol(k, v) {
+  P.colors = P.colors || {}; P.colors[P.theme] = P.colors[P.theme] || {};
+  P.colors[P.theme][k] = v; persist(); applyTheme();
+}
 function applyTheme() {
   var r = document.documentElement;
   r.dataset.theme = P.theme;
@@ -59,6 +69,11 @@ function applyTheme() {
   r.style.setProperty("--acfg", lum > 0.6 ? "#111" : "#fff");
   $("themeBtn").textContent = P.theme === "dark" ? "Switch to light" : "Switch to dark";
   $("accent").value = P.accent;
+  var c = cols();
+  r.style.setProperty("--bg", c.bg); r.style.setProperty("--fg", c.fg); r.style.setProperty("--mut", c.mut);
+  r.style.setProperty("--card", rgba(c.card, c.a / 100)); r.style.setProperty("--solid", c.card);
+  r.style.setProperty("--line", rgba(c.fg, 0.14));
+  $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
 }
 function applyWall() {
   var w = null;
@@ -148,8 +163,12 @@ function render() {
     var cfg = P.mail && P.mail[i], m = MAIL[i], id = "gmail" + (i + 1), nm = (cfg && cfg.name) || D.inbox[i].name, body, click = 0;
     if (!cfg || !cfg.url) body = '<div class="mrow"><span class="mut">Not connected. See Settings, Gmail accounts.</span></div>';
     else if (!m) body = '<div class="mrow"><span class="mut">Loading (you need to be signed in)...</span></div>';
-    else if (m.error) body = '<div class="mrow"><span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 70)) + "</span></div>";
-    else { body = '<div class="mrow"><b class="big">' + m.unread + '</b><span class="mut">unread</span></div>'; click = "mail:" + i; }
+    else if (m.error) body = '<div class="mrow"><span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 90)) + "</span></div>";
+    else {
+      var n = mailN(i);
+      body = '<div class="mrow"><b class="big">' + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read</button>' : "") + "</div>";
+      click = "mail:" + i;
+    }
     T[id] = tile(id, esc(nm), body, click);
   });
 
@@ -414,7 +433,7 @@ function openTG(u) {
 var MAIL = [], mBusy = false;
 function fetchMail() {
   if (!sb || !USER || !P.mail || mBusy) return;
-  var list = P.mail.map(function (c, i) { return c && c.url && c.t ? { i: i, url: c.url, t: c.t } : null; }).filter(Boolean);
+  var list = P.mail.map(function (c, i) { return c && c.url && c.t ? { i: i, url: c.url, t: c.t, since: c.seen || 0 } : null; }).filter(Boolean);
   if (!list.length) return;
   mBusy = true;
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: list } }).then(function (r) {
@@ -424,22 +443,35 @@ function fetchMail() {
     render();
   });
 }
+function mailN(i) {
+  var m = MAIL[i], seen = P.mail[i] && P.mail[i].seen, n = seen && m.fresh != null ? m.fresh : m.unread;
+  return { n: n, txt: seen && n >= 30 ? "30+" : n, lab: seen ? "new" : "unread" };
+}
+function markRead(i) {
+  var c = P.mail && P.mail[i];
+  if (!c) return;
+  c.seen = Math.floor(Date.now() / 1000);
+  if (MAIL[i]) { MAIL[i].fresh = 0; MAIL[i].items = []; }
+  persist(); closeModal(); render(); fetchMail();
+}
+function showAllMail(i) { var c = P.mail && P.mail[i]; if (!c) return; delete c.seen; persist(); closeModal(); MAIL[i] = null; render(); fetchMail(); }
 function openMail(i) {
   var m = MAIL[i];
   if (!m || m.error) return;
-  var nm = (P.mail[i] && P.mail[i].name) || "Gmail";
+  var nm = (P.mail[i] && P.mail[i].name) || "Gmail", n = mailN(i), seen = P.mail[i] && P.mail[i].seen;
   var rows = (m.items || []).map(function (x) {
     return '<div class="mi"><div class="r2"><b>' + esc((x.from || "").replace(/<.*>/, "").trim() || x.from) + '</b><small class="mut">' + ago(x.ts) + "</small></div><div>" + esc(x.subject || "(no subject)") +
       '</div><div class="mut sn">' + esc(x.snippet) + '</div><a class="btn" target="_blank" rel="noopener" href="' + esc(x.link) + '">Open in Gmail</a></div>';
   }).join("");
-  openModal(nm + " · " + m.unread + " unread", rows || '<p class="mut">No unread mail.</p>');
+  var ctl = '<div class="tools">' + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read (on this site only)</button>' : "") + (seen ? '<button data-a="mailall" data-k="' + i + '">Show all unread again</button>' : "") + "</div>";
+  openModal(nm + " · " + n.txt + " " + n.lab, ctl + (rows || '<p class="mut">Nothing new.</p>'));
 }
 function loadMailForm() {
   var M = P.mail || [];
   [0, 1].forEach(function (i) { var c = M[i] || {}; $("mn" + i).value = c.name || ""; $("mu" + i).value = c.url || ""; $("mt" + i).value = c.t || ""; });
 }
 $("mailSave").onclick = function () {
-  P.mail = [0, 1].map(function (i) { return { name: $("mn" + i).value.trim(), url: $("mu" + i).value.trim(), t: $("mt" + i).value.trim() }; });
+  P.mail = [0, 1].map(function (i) { return { name: $("mn" + i).value.trim(), url: $("mu" + i).value.trim(), t: $("mt" + i).value.trim(), seen: (P.mail && P.mail[i] && P.mail[i].seen) || undefined }; });
   persist(); MAIL = []; render(); fetchMail(); $("mailMsg").textContent = "Saved.";
 };
 
@@ -525,6 +557,8 @@ document.addEventListener("click", function (e) {
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (a === "mailread") { markRead(+k); return; }
+  if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
   if (a === "open") { var ch = k.charAt(0); if (ch === "t") openTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
@@ -538,6 +572,12 @@ $("setBtn").onclick = function () { $("panel").hidden = false; };
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
 $("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); };
 $("accent").oninput = function (e) { P.accent = e.target.value; persist(); applyTheme(); };
+$("cBg").oninput = function (e) { setCol("bg", e.target.value); };
+$("cCard").oninput = function (e) { setCol("card", e.target.value); };
+$("cFg").oninput = function (e) { setCol("fg", e.target.value); };
+$("cMut").oninput = function (e) { setCol("mut", e.target.value); };
+$("cAlpha").oninput = function (e) { setCol("a", +e.target.value); };
+$("cReset").onclick = function () { if (P.colors) delete P.colors[P.theme]; persist(); applyTheme(); };
 $("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; persist(); applyTheme(); };
 $("wallFile").onchange = function (e) { if (e.target.files[0]) setWall(e.target.files[0]); };
 $("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall"); } catch (e) {} applyWall(); syncWall(true); };
@@ -600,5 +640,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 120000); setInterval(checkUpdate, 300000); loadMailForm();
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm();
 setInterval(tick, 30000);

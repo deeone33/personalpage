@@ -104,3 +104,10 @@ a.lnk:hover{color:var(--ac);text-decoration:underline}
 #upd{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ac);color:var(--acfg);padding:8px 14px;border-radius:99px;z-index:20;display:flex;gap:10px;align-items:center;font-size:14px}
 #upd[hidden]{display:none}
 #upd button{background:transparent;color:inherit;border-color:currentColor}
+*{scrollbar-width:thin;scrollbar-color:rgba(140,147,163,.4) transparent}
+*::-webkit-scrollbar{width:6px;height:6px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:rgba(140,147,163,.35);border-radius:6px}
+*::-webkit-scrollbar-thumb:hover{background:rgba(140,147,163,.65)}
+input[type=range]{accent-color:var(--ac);width:130px}
+.hrs{padding-bottom:8px}
