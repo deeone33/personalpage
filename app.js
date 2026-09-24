@@ -1,4 +1,4 @@
-var VERSION = 17;
+var VERSION = 18;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -117,9 +117,9 @@ function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
-var ALL_IDS = ["weather", "gmail1", "gmail2", "live", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_C = { weather: 3, gmail1: 3, gmail2: 3, live: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
-var COMPACT = ["weather", "gmail1", "gmail2", "live"];
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks"];
+var DEF_C = { weather: 3, mail: 3, live: 3, menu: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() {
   if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
@@ -129,8 +129,15 @@ function LAY() {
   return L;
 }
 function orderIds() {
-  var o = LAY().order.filter(function (x) { return ALL_IDS.indexOf(x) >= 0; });
-  ALL_IDS.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });
+  var raw = LAY().order.slice();
+  var mi = raw.indexOf("gmail1");
+  if (mi < 0) mi = raw.indexOf("gmail2");
+  if (mi >= 0 && raw.indexOf("mail") < 0) raw[mi] = "mail";
+  var o = raw.filter(function (x, i) { return (x === "mail" || ALL_IDS.indexOf(x) >= 0) && raw.indexOf(x) === i; });
+  var wi = o.indexOf("weather");
+  ALL_IDS.forEach(function (x) {
+    if (o.indexOf(x) < 0) { if (x === "mail" || x === "menu") o.splice(wi < 0 ? o.length : wi + 1, 0, x); else o.push(x); }
+  });
   return o;
 }
 function adjust(a, id, d) {
@@ -173,18 +180,16 @@ function render() {
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
   T.weather = tile("weather", esc(homeCity().name), '<div class="mrow">' + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
-  [0, 1].forEach(function (i) {
-    var cfg = P.mail && P.mail[i], m = MAIL[i], id = "gmail" + (i + 1), nm = (cfg && cfg.name) || D.inbox[i].name, body, click = 0;
-    if (!cfg || !cfg.url) body = '<div class="mrow"><span class="mut">Not connected. See Settings, Gmail accounts.</span></div>';
-    else if (!m) body = '<div class="mrow"><span class="mut">Loading (you need to be signed in)...</span></div>';
-    else if (m.error) body = '<div class="mrow"><span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 90)) + "</span></div>";
-    else {
-      var n = mailN(i);
-      body = '<div class="mrow"><b class="big">' + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read</button>' : "") + "</div>";
-      click = "mail:" + i;
-    }
-    T[id] = tile(id, esc(nm), body, click);
-  });
+  T.mail = tile("mail", "Mail", [0, 1].map(function (i) {
+    var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
+    if (!cfg || !cfg.url) val = '<span class="mut">Not connected</span>';
+    else if (!m) val = '<span class="mut">Loading...</span>';
+    else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 34)) + "</span>";
+    else { var n = mailN(i); val = "<b>" + n.txt + "</b> <span class=\"mut\">" + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read</button>' : ""); click = true; }
+    var inner = '<span class="mrn">' + esc(nm) + "</span>" + val;
+    return '<div class="mrow mailrow"' + (click ? ' data-a="mail" data-k="' + i + '" tabindex="0" role="button"' : "") + ">" + inner + "</div>";
+  }).join(""));
+
 
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
@@ -261,6 +266,14 @@ function render() {
     });
   var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>";
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
+  var IC = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  T.menu = tile("menu", "Menu", '<div class="mrow menurow">' +
+    '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
+      (MENU_OPEN === "clock" ? '<div class="menu" role="menu"><button role="menuitem" data-a="clockmenu" data-k="t">Timer</button><button role="menuitem" data-a="clockmenu" data-k="c">Countdown</button><button role="menuitem" data-a="clockmenu" data-k="s">Stopwatch</button></div>' : "") + "</div>" +
+    '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (P.notes && P.notes.length ? "<span>" + P.notes.length + "</span>" : "") + "</button>" +
+    '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
+      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="setpanel">Settings</button></div>' : "") + "</div>" +
+    "</div>");
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
     return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
@@ -653,6 +666,7 @@ function clockText(a) {
 }
 var KIND = { t: "Timer", c: "Countdown", s: "Stopwatch" };
 function renderClocks() {
+  $("clocks").hidden = !alarms().length;
   $("clocks").innerHTML = alarms().map(function (a) {
     return '<div class="clk' + (a.done ? " done" : "") + '"><span class="mut">' + esc(a.label || KIND[a.k]) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
       (a.k !== "c" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸\uFE0E" : "▶\uFE0E") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
@@ -719,19 +733,9 @@ function noteAct(a, k) {
   } else P.notes = (P.notes || []).filter(function (n) { return n.id !== k; });
   persist(); updateNotesBtn(); openNotes();
 }
-function closeMenus() {
-  ["clockMenu", "cogMenu", "filtNews"].forEach(function (id) { var n = $(id); if (n) n.hidden = true; });
-  $("clockBtn").setAttribute("aria-expanded", "false"); $("cogBtn").setAttribute("aria-expanded", "false");
-}
-function toggleMenu(menu, btn) {
-  var open = $(menu).hidden;
-  closeMenus();
-  if (open) { $(menu).hidden = false; $(btn).setAttribute("aria-expanded", "true"); }
-}
-$("clockBtn").onclick = function (e) { e.stopPropagation(); audio(); toggleMenu("clockMenu", "clockBtn"); };
-$("cogBtn").onclick = function (e) { e.stopPropagation(); toggleMenu("cogMenu", "cogBtn"); };
-document.addEventListener("click", closeMenus);
-$("notesBtn").onclick = openNotes;
+var MENU_OPEN = "";
+function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } var f = $("filtNews"); if (f) f.hidden = true; }
+document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".dd")) closeMenus(); });
 
 // ---- Weather icons ----
 function wxIcon(code, day, size) {
@@ -950,13 +954,18 @@ document.addEventListener("click", function (e) {
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
   if (a === "filttoggle") { if (b.checked) delete P.hidden[k]; else P.hidden[k] = true; persist(); render(); return; }
+  if (a === "clockmenu2") { e.stopPropagation(); audio(); MENU_OPEN = MENU_OPEN === "clock" ? "" : "clock"; render(); return; }
+  if (a === "cogmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "cog" ? "" : "cog"; render(); return; }
+  if (a === "opennotes") { openNotes(); return; }
+  if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $("filtNews"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
   if (/^city/.test(a)) { cityAct(a, k); return; }
-  if (a === "clockmenu") { audio(); if (k === "s") startStopwatch(); else openClock(k); return; }
+  if (a === "clockmenu") { audio(); MENU_OPEN = ""; if (k === "s") startStopwatch(); else openClock(k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
   if (a === "clstart") { startClock(k); return; }
   if (/^cl(play|reset|rm)$/.test(a)) { clockAct(a, k); return; }
@@ -974,8 +983,6 @@ document.addEventListener("click", function (e) {
   persist();
   render();
 });
-$("editBtn").onclick = function () { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); $("editBtn").textContent = EDIT ? "Done" : "Edit"; render(); };
-$("setBtn").onclick = function () { $("panel").hidden = false; };
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
 $("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); };
 $("accent").oninput = function (e) { P.accent = e.target.value; persist(); applyTheme(); };

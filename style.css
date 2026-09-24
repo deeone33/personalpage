@@ -191,3 +191,20 @@ body.editing #cogBtn{border-color:var(--ac)}
 .conv select{padding:3px 4px;max-width:64px}
 .conv button{padding:2px 7px}
 .conv b{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mailrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0}
+.mailrow:first-child{padding-top:0}
+.mailrow:last-child{padding-bottom:0}
+.mailrow[data-a]{cursor:pointer}
+.mailrow[data-a]:hover{color:var(--ac)}
+.mrn{color:var(--mut);flex:none;min-width:52px}
+.menurow{justify-content:flex-start;gap:6px}
+.menurow .dd{position:static}
+.menurow .menu{left:0;right:auto;top:calc(100% + 6px)}
+.ib.on{border-color:var(--ac);color:var(--ac)}
+header{align-items:flex-start}
+#clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:9;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(90vw,280px)}
+#clocks[hidden]{display:none}
+.conv b{flex:1 1 auto;min-width:44px;text-align:right;overflow:visible;text-overflow:unset;white-space:nowrap;font-variant-numeric:tabular-nums}
+.conv input[type=number]{flex:none;width:52px}
+.conv select{flex:none;max-width:54px;padding:3px 2px}
+.conv button{flex:none}
