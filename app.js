@@ -1,4 +1,4 @@
-var VERSION = 14;
+var VERSION = 15;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -302,7 +302,7 @@ function closeModal() { $("modal").hidden = true; $("mBody").innerHTML = ""; }
 $("mClose").onclick = closeModal;
 $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
 document.addEventListener("keydown", function (e) {
-  if (e.key === "Escape") closeModal();
+  if (e.key === "Escape") { closeModal(); closeMenus(); }
   if (e.key === "Enter" && e.target.classList && e.target.classList.contains("click")) e.target.click();
 });
 
@@ -440,7 +440,7 @@ var NEWS_SRC = [
   { name: "Reuters", urls: siteUrls("reuters.com") }
 ];
 var TG_SRC = ["ClashReport"];
-var NEWS = [], TGP = [], NERR = "", nBusy = false, NVIA = {}, FNVER = 0;
+var NEWS = [], TGP = [], NERR = "", nBusy = false, NVIA = {}, NWHY = {}, FNVER = 0;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
   nBusy = true;
@@ -450,7 +450,7 @@ function fetchNews() {
     else {
       NEWS = r.data.news || []; TGP = r.data.tg || [];
       var ne = r.data.news_err || {};
-      NVIA = r.data.news_via || {}; FNVER = r.data.ver || 0;
+      NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
       NERR = Object.keys(ne).map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
     }
     renderSources(); render();
@@ -535,7 +535,7 @@ function lastAge(name) {
 }
 function renderSources() {
   $("srcNews").innerHTML = newsSrc().map(function (x, i) {
-    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small></span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
+    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small>' + (NWHY[x.name] ? '<div class="mut sn">Skipped: ' + esc(NWHY[x.name].slice(0, 300)) + "</div>" : "") + '</span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
   }).join("") + (NEWS.length ? '<div class="mut sn">Feeds function: ' + (FNVER ? "version " + FNVER : "old version, redeploy it") + "</div>" : "") || '<div class="mut">No news sources.</div>';
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
@@ -646,19 +646,25 @@ function fmt(ms) {
 function elapsed(a) { return a.acc + (a.st ? Date.now() - a.st : 0); }
 function clockText(a) {
   if (a.done) return a.k === "t" ? "Done " + fmt(a.dur) : "Time's up";
-  return a.k === "t" ? fmt(elapsed(a)) + " / " + fmt(a.dur) : fmt(a.at - Date.now());
+  return a.k === "s" ? fmt(elapsed(a)) : a.k === "t" ? fmt(elapsed(a)) + " / " + fmt(a.dur) : fmt(a.at - Date.now());
 }
+var KIND = { t: "Timer", c: "Countdown", s: "Stopwatch" };
 function renderClocks() {
   $("clocks").innerHTML = alarms().map(function (a) {
-    return '<div class="clk' + (a.done ? " done" : "") + '"><span>' + (a.k === "t" ? "⏱" : "⏳") + "</span><span>" + esc(a.label || (a.k === "t" ? "Timer" : "Countdown")) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
-      (a.k === "t" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸" : "▶") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
+    return '<div class="clk' + (a.done ? " done" : "") + '"><span class="mut">' + esc(a.label || KIND[a.k]) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
+      (a.k !== "c" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸\uFE0E" : "▶\uFE0E") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
       '<button data-a="clrm" data-k="' + a.id + '" aria-label="Remove">✕</button></div>';
   }).join("");
+}
+function startStopwatch() {
+  if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
+  alarms().push({ id: "a" + Date.now().toString(36), k: "s", label: "", acc: 0, st: Date.now(), done: false });
+  persist(); renderClocks();
 }
 function tickClocks() {
   var changed = false;
   alarms().forEach(function (a) {
-    if (!a.done && (a.k === "t" ? a.st && elapsed(a) >= a.dur : Date.now() >= a.at)) {
+    if (!a.done && a.k !== "s" && (a.k === "t" ? a.st && elapsed(a) >= a.dur : Date.now() >= a.at)) {
       a.done = true; if (a.k === "t") { a.acc = a.dur; a.st = 0; }
       changed = true; ring(a.snd); notify(a);
     }
@@ -697,7 +703,7 @@ function startClock(kind) {
   try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
   closeModal(); renderClocks();
 }
-function updateNotesBtn() { $("notesBtn").textContent = P.notes && P.notes.length ? "Notes (" + P.notes.length + ")" : "Notes"; }
+function updateNotesBtn() { $("notesN").textContent = P.notes && P.notes.length ? P.notes.length : ""; }
 function openNotes() {
   var N = (P.notes || []).slice().sort(function (a, b) { return b.ts - a.ts; });
   openModal("Notes (" + N.length + ")", '<textarea id="noteIn" rows="3" placeholder="Write a note..."></textarea><p><button class="pri" data-a="noteadd">Add note</button></p>' +
@@ -710,8 +716,18 @@ function noteAct(a, k) {
   } else P.notes = (P.notes || []).filter(function (n) { return n.id !== k; });
   persist(); updateNotesBtn(); openNotes();
 }
-$("timerBtn").onclick = function () { audio(); openClock("t"); };
-$("cdBtn").onclick = function () { audio(); openClock("c"); };
+function closeMenus() {
+  ["clockMenu", "cogMenu"].forEach(function (id) { $(id).hidden = true; });
+  $("clockBtn").setAttribute("aria-expanded", "false"); $("cogBtn").setAttribute("aria-expanded", "false");
+}
+function toggleMenu(menu, btn) {
+  var open = $(menu).hidden;
+  closeMenus();
+  if (open) { $(menu).hidden = false; $(btn).setAttribute("aria-expanded", "true"); }
+}
+$("clockBtn").onclick = function (e) { e.stopPropagation(); audio(); toggleMenu("clockMenu", "clockBtn"); };
+$("cogBtn").onclick = function (e) { e.stopPropagation(); toggleMenu("cogMenu", "cogBtn"); };
+document.addEventListener("click", closeMenus);
 $("notesBtn").onclick = openNotes;
 
 // ---- Weather icons ----
@@ -886,6 +902,7 @@ document.addEventListener("click", function (e) {
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
   if (/^city/.test(a)) { cityAct(a, k); return; }
+  if (a === "clockmenu") { audio(); if (k === "s") startStopwatch(); else openClock(k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
   if (a === "clstart") { startClock(k); return; }
   if (/^cl(play|reset|rm)$/.test(a)) { clockAct(a, k); return; }
