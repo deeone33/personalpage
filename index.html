@@ -12,10 +12,14 @@
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div></div>
     <div class="acts">
+      <button id="timerBtn">Timer</button>
+      <button id="cdBtn">Countdown</button>
+      <button id="notesBtn">Notes</button>
       <button id="editBtn">Edit</button>
       <button id="setBtn">Settings</button>
     </div>
   </header>
+  <div id="clocks"></div>
   <div id="grid"></div>
   <footer class="mut">Start page · version <span id="ver"></span> · weather, Twitch and stock prices are live once connected; other tiles are sample data<span id="who"></span></footer>
 </main>
@@ -58,6 +62,7 @@
     <b>Colors</b>
     <label>Background <input type="color" id="cBg"></label>
     <label>Boxes <input type="color" id="cCard"></label>
+    <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
     <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
     <label>Text <input type="color" id="cFg"></label>
     <label>Muted text <input type="color" id="cMut"></label>

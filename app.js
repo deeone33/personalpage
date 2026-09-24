@@ -1,4 +1,4 @@
-var VERSION = 12;
+var VERSION = 13;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -70,6 +70,7 @@ function applyTheme() {
   $("themeBtn").textContent = P.theme === "dark" ? "Switch to light" : "Switch to dark";
   $("accent").value = P.accent;
   if (P.dockW) r.style.setProperty("--dock-w", P.dockW + "px");
+  r.style.setProperty("--gfs", P.fs || 1); $("fsAll").value = Math.round((P.fs || 1) * 100);
   var c = cols();
   r.style.setProperty("--bg", c.bg); r.style.setProperty("--fg", c.fg); r.style.setProperty("--mut", c.mut);
   r.style.setProperty("--card", rgba(c.card, c.a / 100)); r.style.setProperty("--solid", c.card);
@@ -123,6 +124,7 @@ var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() {
   if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
   var L = P.layout;
+  if (!L.fs) L.fs = {};
   if (!L.c) { L.c = {}; Object.keys(L.w || {}).forEach(function (k) { L.c[k] = L.w[k] * 3; }); }
   return L;
 }
@@ -135,6 +137,7 @@ function adjust(a, id, d) {
   var L = LAY();
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
   else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
+  else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
 }
@@ -146,22 +149,30 @@ function tile(id, title, body, click, hx) {
   }
   if (EDIT) {
     var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
-    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
+    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + bt("f", -1, "Text −") + bt("f", 1, "Text +") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var head = cp ? h3 : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
-  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '"' + at + ">" + head + t + body + "</div>";
+  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
+function ico(id, logo) {
+  var t = tk(id), h = 0;
+  for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 360;
+  var cr = /^[A-Z0-9]{2,10}USDT?$/.test(t) ? t.replace(/USDT?$/, "").toLowerCase() : "";
+  var src = logo || (cr ? "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/" + cr + ".png" : "");
+  return '<span class="ic" style="--h:' + h + '"><i>' + esc(t.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)) + "</i>" + (src ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" src="' + esc(src) + '" onerror="this.remove()">' : "") + "</span>";
+}
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
-function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + r * 36 + 'px">' + html + "</div>"; }
+function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
+function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + Math.round(r * 36 * fsOf(id)) + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
 function render() {
   var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
-  T.weather = tile("weather", "Tallinn", '<div class="mrow">' + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 30) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
+  T.weather = tile("weather", esc(homeCity().name), '<div class="mrow">' + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
   [0, 1].forEach(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], id = "gmail" + (i + 1), nm = (cfg && cfg.name) || D.inbox[i].name, body, click = 0;
     if (!cfg || !cfg.url) body = '<div class="mrow"><span class="mut">Not connected. See Settings, Gmail accounts.</span></div>';
@@ -237,7 +248,7 @@ function render() {
   T.youtube = tile("youtube", "YouTube", yb);
 
   var SL = P.stocks || D.stocks;
-  var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
+  var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) {
       var SS = (P.sort && P.sort.stocks) || "move", a = x.c, b = y.c;
       if (favFirst(x, y)) return favFirst(x, y);
@@ -249,7 +260,7 @@ function render() {
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
-    return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
+    return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add, 0, ctlS);
 
   $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
@@ -441,7 +452,7 @@ function fetchNews() {
       var ne = r.data.news_err || {};
       NERR = Object.keys(ne).map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
     }
-    render();
+    renderSources(); render();
   });
 }
 
@@ -517,9 +528,13 @@ function delSrc(k) {
   srcChanged();
 }
 function srcChanged() { persist(); NEWS = []; TGP = []; NERR = ""; renderSources(); render(); fetchNews(); }
+function lastAge(name) {
+  var t = 0; NEWS.forEach(function (n) { if (n.s === name && n.ts > t) t = n.ts; });
+  return t ? "latest " + ago(t) + " ago" : "";
+}
 function renderSources() {
   $("srcNews").innerHTML = newsSrc().map(function (x, i) {
-    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(hd(x.urls[0].replace(/^https?:\/\//, ""), 24)) + '</small></span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
+    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small></span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
   }).join("") || '<div class="mut">No news sources.</div>';
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
@@ -599,6 +614,105 @@ $("mailSave").onclick = function () {
   persist(); MAIL = []; render(); fetchMail(); $("mailMsg").textContent = "Saved.";
 };
 
+// ---- Timer, countdown and notes ----
+var AC = null;
+function audio() {
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); } catch (e) {}
+  return AC;
+}
+document.addEventListener("click", function () { audio(); }, { once: true });
+function beep(freq, t0, dur, type) {
+  var ac = audio(); if (!ac) return;
+  var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
+  o.type = type || "sine"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+function ring(kind) {
+  if (kind === "chime") [660, 880, 1320].forEach(function (f, i) { beep(f, i * 0.28, 0.6, "sine"); });
+  else if (kind === "alarm") for (var i = 0; i < 6; i++) beep(i % 2 ? 880 : 1046, i * 0.22, 0.2, "square");
+  else for (var j = 0; j < 3; j++) beep(880, j * 0.3, 0.18, "sine");
+}
+function notify(a) {
+  try { if (window.Notification && Notification.permission === "granted") new Notification((a.label || (a.k === "t" ? "Timer" : "Countdown")) + " is done"); } catch (e) {}
+}
+function alarms() { if (!P.alarms) P.alarms = []; return P.alarms; }
+function fmt(ms) {
+  var s = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), p = function (n) { return n < 10 ? "0" + n : n; };
+  s = s % 60;
+  return (d ? d + "d " : "") + (d || h ? p(h) + ":" : "") + p(m) + ":" + p(s);
+}
+function elapsed(a) { return a.acc + (a.st ? Date.now() - a.st : 0); }
+function clockText(a) {
+  if (a.done) return a.k === "t" ? "Done " + fmt(a.dur) : "Time's up";
+  return a.k === "t" ? fmt(elapsed(a)) + " / " + fmt(a.dur) : fmt(a.at - Date.now());
+}
+function renderClocks() {
+  $("clocks").innerHTML = alarms().map(function (a) {
+    return '<div class="clk' + (a.done ? " done" : "") + '"><span>' + (a.k === "t" ? "⏱" : "⏳") + "</span><span>" + esc(a.label || (a.k === "t" ? "Timer" : "Countdown")) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
+      (a.k === "t" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸" : "▶") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
+      '<button data-a="clrm" data-k="' + a.id + '" aria-label="Remove">✕</button></div>';
+  }).join("");
+}
+function tickClocks() {
+  var changed = false;
+  alarms().forEach(function (a) {
+    if (!a.done && (a.k === "t" ? a.st && elapsed(a) >= a.dur : Date.now() >= a.at)) {
+      a.done = true; if (a.k === "t") { a.acc = a.dur; a.st = 0; }
+      changed = true; ring(a.snd); notify(a);
+    }
+    var n = $("ct" + a.id); if (n) n.textContent = clockText(a);
+  });
+  if (changed) { persist(); renderClocks(); }
+}
+setInterval(tickClocks, 1000);
+function clockAct(a, k) {
+  var list = alarms(), t = list.filter(function (x) { return x.id === k; })[0];
+  if (a === "clplay" && t && !t.done) { audio(); if (t.st) { t.acc += Date.now() - t.st; t.st = 0; } else t.st = Date.now(); }
+  else if (a === "clreset" && t) { t.acc = 0; t.st = 0; t.done = false; }
+  else if (a === "clrm") P.alarms = list.filter(function (x) { return x.id !== k; });
+  persist(); renderClocks();
+}
+function openClock(kind) {
+  var t = kind === "t";
+  openModal(t ? "Timer" : "Countdown", '<p class="mut">' + (t ? "Counts up and rings when it reaches the time you set." : "Counts down to a date and time and rings when it gets there.") + '</p><div class="add"><input type="text" id="clLabel" placeholder="Name (optional)"></div>' +
+    (t ? '<div class="add"><label>Hours <input type="number" id="clH" min="0" max="99" value="0"></label><label>Minutes <input type="number" id="clM" min="0" max="999" value="25"></label><label>Seconds <input type="number" id="clS" min="0" max="59" value="0"></label></div>'
+       : '<div class="add"><label>Ends at <input type="datetime-local" id="clAt"></label></div>') +
+    '<div class="add"><label>Sound <select id="clSnd"><option value="beep">Beep</option><option value="chime">Chime</option><option value="alarm">Alarm</option></select></label><button data-a="cltest">Test sound</button></div><p><button class="pri" data-a="clstart" data-k="' + kind + '">Start</button></p>');
+}
+function startClock(kind) {
+  var a = { id: "a" + Date.now().toString(36), k: kind, label: $("clLabel").value.trim(), snd: $("clSnd").value, done: false };
+  if (kind === "t") {
+    var ms = ((+$("clH").value || 0) * 3600 + (+$("clM").value || 0) * 60 + (+$("clS").value || 0)) * 1000;
+    if (ms < 1000) { alert("Set a time of at least 1 second."); return; }
+    a.dur = ms; a.acc = 0; a.st = Date.now();
+  } else {
+    var at = Date.parse($("clAt").value);
+    if (!at || at <= Date.now()) { alert("Pick a date and time in the future."); return; }
+    a.at = at;
+  }
+  if (alarms().length >= 8) { alert("You can have at most 8 timers and countdowns. Remove one first."); return; }
+  alarms().push(a); persist(); audio();
+  try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+  closeModal(); renderClocks();
+}
+function updateNotesBtn() { $("notesBtn").textContent = P.notes && P.notes.length ? "Notes (" + P.notes.length + ")" : "Notes"; }
+function openNotes() {
+  var N = (P.notes || []).slice().sort(function (a, b) { return b.ts - a.ts; });
+  openModal("Notes (" + N.length + ")", '<textarea id="noteIn" rows="3" placeholder="Write a note..."></textarea><p><button class="pri" data-a="noteadd">Add note</button></p>' +
+    (N.map(function (n) { return '<div class="mi"><div class="r2"><small class="mut">' + when(n.ts) + '</small><button data-a="notedel" data-k="' + n.id + '" aria-label="Delete note">✕</button></div><div class="nt">' + esc(n.t).replace(/\n/g, "<br>") + "</div></div>"; }).join("") || '<p class="mut">No notes yet.</p>'));
+}
+function noteAct(a, k) {
+  if (a === "noteadd") {
+    var v = $("noteIn").value.trim(); if (!v) return;
+    (P.notes = P.notes || []).push({ id: "n" + Date.now().toString(36), t: v, ts: Date.now() });
+  } else P.notes = (P.notes || []).filter(function (n) { return n.id !== k; });
+  persist(); updateNotesBtn(); openNotes();
+}
+$("timerBtn").onclick = function () { audio(); openClock("t"); };
+$("cdBtn").onclick = function () { audio(); openClock("c"); };
+$("notesBtn").onclick = openNotes;
+
 // ---- Weather icons ----
 function wxIcon(code, day, size) {
   var sun = '<circle cx="16" cy="16" r="5"/><path d="M16 4v3M16 25v3M4 16h3M25 16h3M7.5 7.5l2 2M22.5 22.5l2 2M7.5 24.5l2-2M22.5 9.5l2-2"/>';
@@ -670,15 +784,15 @@ function undock(uid) {
 var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
 function wxText(c) { return WC[c] || "Unknown"; }
-function fetchWeather() {
-  fetch("https://api.open-meteo.com/v1/forecast?latitude=59.437&longitude=24.7536&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=Europe%2FTallinn&forecast_days=7")
-    .then(function (r) { return r.json(); })
-    .then(function (j) { if (j && j.current) { WX = j; render(); } })
-    .catch(function () {});
+var WXM = null, CITYRES = [];
+function homeCity() { return P.home || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
+function wxUrl(c) {
+  return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
 }
-function openWeather() {
-  if (!WX) { openModal("Tallinn", '<p class="mut">Weather could not be loaded. Check your connection and reload.</p>'); return; }
-  var c = WX.current, h = WX.hourly, d = WX.daily, now = c.time.slice(0, 13);
+function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
+function fetchWeather() { loadWx(homeCity()).then(function (j) { if (j && j.current) { WX = j; render(); } }).catch(function () {}); }
+function wxHtml(j) {
+  var c = j.current, h = j.hourly, d = j.daily, now = c.time.slice(0, 13);
   var i = h.time.findIndex(function (t) { return t.slice(0, 13) >= now; }); if (i < 0) i = 0;
   var hrs = "";
   for (var n = i; n < i + 12 && n < h.time.length; n++) hrs += '<div class="hr"><b>' + h.time[n].slice(11, 16) + "</b><span>" + Math.round(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
@@ -686,10 +800,57 @@ function openWeather() {
     var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
     return '<div class="row"><span>' + wxIcon(d.weather_code[k], 1, 20) + " " + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + d.precipitation_sum[k].toFixed(1) + " mm · " + Math.round(d.temperature_2m_min[k]) + "° / <b>" + Math.round(d.temperature_2m_max[k]) + "°</b></span></div>";
   }).join("");
-  openModal("Tallinn · " + wxText(c.weather_code),
-    '<div class="big">' + Math.round(c.temperature_2m) + '°</div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
-    "<h3>Next 12 hours (temperature, chance of rain)</h3><div class=\"hrs\">" + hrs + "</div><h3>7 days</h3>" + days +
-    '<p class="mut">Sunrise ' + d.sunrise[0].slice(11, 16) + " · Sunset " + d.sunset[0].slice(11, 16) + " · UV max " + d.uv_index_max[0] + "</p>");
+  return '<div class="mrow"><span class="wi">' + wxIcon(c.weather_code, c.is_day, 34) + '</span><b class="big">' + Math.round(c.temperature_2m) + "°</b><span>" + wxText(c.weather_code) + '</span></div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
+    '<h3>Next 12 hours (temperature, chance of rain)</h3><div class="hrs">' + hrs + "</div><h3>7 days</h3>" + days +
+    '<p class="mut">Sunrise ' + d.sunrise[0].slice(11, 16) + " · Sunset " + d.sunset[0].slice(11, 16) + " · UV max " + d.uv_index_max[0] + "</p>";
+}
+function sameCity(a, b) { return a && b && a.name === b.name && Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01; }
+function cityList() { return [homeCity()].concat(P.cities || []); }
+function cityChips() {
+  return cityList().map(function (c, i) {
+    return '<button data-a="cityview" data-k="' + i + '"' + (WXM && sameCity(WXM.c, c) ? ' class="on"' : "") + ">" + esc(c.name) + (i === 0 ? " ★" : "") + "</button>";
+  }).join("");
+}
+function cityTools(c) {
+  if (sameCity(c, homeCity())) return "";
+  var saved = (P.cities || []).some(function (x) { return sameCity(x, c); });
+  return '<div class="tools"><button data-a="cityhome">Use for the tile</button>' + (saved ? '<button data-a="cityrm">Remove from my cities</button>' : '<button data-a="citysave">Save to my cities</button>') + "</div>";
+}
+function showCity(c, j) {
+  WXM = { c: c, j: j || null };
+  $("cityChips").innerHTML = cityChips();
+  if (j) { $("cityBody").innerHTML = cityTools(c) + wxHtml(j); return; }
+  $("cityBody").innerHTML = '<p class="mut">Loading ' + esc(c.name) + "...</p>";
+  loadWx(c).then(function (x) {
+    if (!WXM || WXM.c !== c) return;
+    WXM.j = x; $("cityBody").innerHTML = x && x.current ? cityTools(c) + wxHtml(x) : '<p class="mut">Could not load the weather.</p>';
+  }).catch(function () { $("cityBody").innerHTML = '<p class="mut">Could not load the weather.</p>'; });
+}
+function openWeather() {
+  openModal("Weather", '<div class="add"><input type="text" id="cityIn" placeholder="Search a city, e.g. Stockholm"><button data-a="citygo">Search</button></div><div id="cityRes"></div><div id="cityChips" class="tools"></div><div id="cityBody"></div>');
+  CITYRES = [];
+  if (WX) showCity(homeCity(), WX); else showCity(homeCity());
+}
+function cityGo() {
+  var q = $("cityIn").value.trim();
+  if (!q) return;
+  $("cityRes").innerHTML = '<p class="mut">Searching...</p>';
+  fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=6&language=en&format=json").then(function (r) { return r.json(); }).then(function (j) {
+    CITYRES = (j.results || []).map(function (x) { return { name: x.name, lat: x.latitude, lon: x.longitude, label: [x.admin1, x.country].filter(Boolean).join(", ") }; });
+    $("cityRes").innerHTML = CITYRES.length ? CITYRES.map(function (c, i) {
+      return '<div class="row"><span>' + esc(c.name) + ' <small class="mut">' + esc(c.label) + '</small></span><button data-a="cityres" data-k="' + i + '">View</button></div>';
+    }).join("") : '<p class="mut">No city found.</p>';
+  }).catch(function () { $("cityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
+}
+document.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.id === "cityIn") cityGo(); });
+function cityAct(a, k) {
+  var cur = WXM && WXM.c;
+  if (a === "citygo") cityGo();
+  else if (a === "cityview") showCity(cityList()[+k]);
+  else if (a === "cityres") { showCity(CITYRES[+k]); $("cityRes").innerHTML = ""; }
+  else if (a === "citysave" && cur) { P.cities = P.cities || []; if (P.cities.length < 8) P.cities.push({ name: cur.name, lat: cur.lat, lon: cur.lon }); persist(); showCity(cur, WXM.j); }
+  else if (a === "cityrm" && cur) { P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); }); persist(); showCity(homeCity(), WX); }
+  else if (a === "cityhome" && cur) { P.home = { name: cur.name, lat: cur.lat, lon: cur.lon }; P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); }); persist(); WX = null; render(); fetchWeather(); showCity(cur, WXM.j); }
 }
 
 // ---- Stocks: details window with TradingView chart, and adding symbols ----
@@ -723,6 +884,11 @@ document.addEventListener("click", function (e) {
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (/^city/.test(a)) { cityAct(a, k); return; }
+  if (a === "cltest") { audio(); ring($("clSnd").value); return; }
+  if (a === "clstart") { startClock(k); return; }
+  if (/^cl(play|reset|rm)$/.test(a)) { clockAct(a, k); return; }
+  if (a === "noteadd" || a === "notedel") { noteAct(a, k); return; }
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
   if (a === "undock") { undock(k); return; }
@@ -746,6 +912,7 @@ $("cCard").oninput = function (e) { setCol("card", e.target.value); };
 $("cFg").oninput = function (e) { setCol("fg", e.target.value); };
 $("cMut").oninput = function (e) { setCol("mut", e.target.value); };
 $("cAlpha").oninput = function (e) { setCol("a", +e.target.value); };
+$("fsAll").oninput = function (e) { P.fs = e.target.value / 100; persist(); applyTheme(); render(); };
 $("cReset").onclick = function () { if (P.colors) delete P.colors[P.theme]; persist(); applyTheme(); };
 $("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; persist(); applyTheme(); };
 $("wallFile").onchange = function (e) { if (e.target.files[0]) setWall(e.target.files[0]); };
@@ -779,7 +946,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); updateNotesBtn(); fetchWeather();
   });
 }
 function auth(fn) {
@@ -809,5 +976,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources();
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks(); updateNotesBtn();
 setInterval(tick, 30000);
