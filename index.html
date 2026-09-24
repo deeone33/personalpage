@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Start page</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head><body>
+<div id="wall"></div>
+<main id="app">
+  <header>
+    <div><div id="day">Day</div><div id="date" class="mut">Date</div></div>
+    <div class="acts">
+      <button id="editBtn">Edit</button>
+      <button id="setBtn">Settings</button>
+    </div>
+  </header>
+  <div id="grid"></div>
+  <footer class="mut">Start page · version <span id="ver"></span> · sample data</footer>
+</main>
+<aside id="panel" hidden>
+  <div class="ph"><b>Settings</b><button id="closeBtn">Close</button></div>
+  <label>Theme <button id="themeBtn"></button></label>
+  <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
+  <label>Wallpaper <span><input type="file" id="wallFile" accept="image/*"> <button id="wallClear">Remove</button></span></label>
+  <div><b>Hidden items</b><div id="hiddenList" class="mut"></div></div>
+</aside>
+<script src="app.js"></script>
+</body></html>
