@@ -42,3 +42,17 @@ footer{margin-top:18px;font-size:12px}
 .acct input[type=email],.acct input[type=password]{width:100%;font:inherit;font-size:14px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px}
 #acctIn{display:flex;justify-content:space-between;align-items:center;gap:8px;word-break:break-all}
 #acctIn[hidden]{display:none}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+#modal[hidden]{display:none}
+.mbox{background:var(--solid);border:1px solid var(--line);border-radius:14px;padding:16px;width:min(720px,100%);max-height:90vh;overflow-y:auto}
+.mbox .ph{margin-bottom:10px}
+.mbox h3{margin:14px 0 6px;font-size:13px;font-weight:600;color:var(--mut)}
+.click{cursor:pointer}.click:hover{border-color:var(--ac)}
+.lnk{background:none;border:0;padding:0;color:var(--fg);cursor:pointer;font:inherit;text-align:left}
+.lnk:hover{color:var(--ac);text-decoration:underline}
+.hrs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.hr{display:flex;flex-direction:column;align-items:center;min-width:56px;padding:6px;border:1px solid var(--line);border-radius:8px}
+.tv{height:420px}
+.add{display:flex;gap:6px;margin-top:8px}
+.add input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+a.btn{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--ac);color:var(--acfg);text-decoration:none;font-size:13px}

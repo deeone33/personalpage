@@ -1,4 +1,4 @@
-var VERSION = 2;
+var VERSION = 3;
 
 // ---- Sample data (real accounts are connected in later versions) ----
 var DATA = {
@@ -82,10 +82,10 @@ function tick() {
 }
 
 // ---- Rows with favorite / hide controls in edit mode ----
-function row(key, main, sub, right) {
+function row(key, main, sub, right, op) {
   var f = P.fav[key];
   var ed = EDIT ? '<button data-a="fav" data-k="' + esc(key) + '" aria-label="Favorite">' + (f ? "★" : "☆") + '</button><button data-a="hide" data-k="' + esc(key) + '" aria-label="Hide">✕</button>' : "";
-  return '<div class="row"><span>' + (f ? '<i class="fv">★</i>' : "") + main + (sub ? " <small>" + esc(sub) + "</small>" : "") +
+  return '<div class="row"><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
     '</span><span class="r">' + right + ed + "</span></div>";
 }
 function shown(key) { return !P.hidden[key]; }
@@ -94,7 +94,9 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 
 function render() {
   var D = DATA, html = "";
-  html += card("", "Tallinn", '<div class="big">' + D.weather.temp + '°</div><span class="mut">' + esc(D.weather.note) + "</span>");
+  var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
+  var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
+  html += '<div class="card click" data-a="weather" tabindex="0" role="button" aria-label="Open Tallinn details"><h3>Tallinn</h3><div class="big">' + t + '°</div><span class="mut">' + esc(note) + "</span></div>";
   D.inbox.forEach(function (m) {
     html += card("", m.name, '<div class="big">' + m.n + '</div><span class="mut">unread</span>');
   });
@@ -115,12 +117,14 @@ function render() {
     return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>" + (P.fav[v.key] ? '<span class="pill ac">new</span>' : ""));
   }).join("") : '<div class="empty">No videos. Restore channels in Settings.</div>');
 
-  var st = D.stocks.map(function (s) { s.key = "s:" + s.id; return s; }).filter(function (s) { return shown(s.key); })
-    .sort(function (a, b) { return favFirst(a, b) || Math.abs(b.c) - Math.abs(a.c); });
-  html += card("w2", "Stocks · biggest moves first", st.length ? st.map(function (s) {
-    var up = s.c >= 0;
-    return row(s.key, "<b>" + s.id + "</b>", s.name, '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + s.c.toFixed(1) + "%</span>");
-  }).join("") : '<div class="empty">No stocks. Restore them in Settings.</div>');
+  var SL = P.stocks || D.stocks;
+  var st = SL.map(function (x) { x.key = "s:" + x.id; return x; }).filter(function (x) { return shown(x.key); })
+    .sort(function (x, y) { return favFirst(x, y) || Math.abs(y.c || 0) - Math.abs(x.c || 0); });
+  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>' : "";
+  html += card("w2", "Stocks · biggest moves first", (st.length ? st.map(function (x) {
+    var c = x.c, up = c >= 0;
+    return row(x.key, "<b>" + esc(x.id) + "</b>", x.name, c == null ? '<span class="mut">—</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
+  }).join("") : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
 
   $("grid").innerHTML = html;
   renderHidden();
@@ -133,11 +137,72 @@ function renderHidden() {
   }).join("") : "Nothing hidden.";
 }
 
+// ---- Details window ----
+function openModal(title, html) { $("mTitle").textContent = title; $("mBody").innerHTML = html; $("modal").hidden = false; }
+function closeModal() { $("modal").hidden = true; $("mBody").innerHTML = ""; }
+$("mClose").onclick = closeModal;
+$("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") closeModal();
+  if (e.key === "Enter" && e.target.classList && e.target.classList.contains("click")) e.target.click();
+});
+
+// ---- Weather (Open-Meteo, no key needed) ----
+var WX = null;
+var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
+function wxText(c) { return WC[c] || "Unknown"; }
+function fetchWeather() {
+  fetch("https://api.open-meteo.com/v1/forecast?latitude=59.437&longitude=24.7536&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=Europe%2FTallinn&forecast_days=7")
+    .then(function (r) { return r.json(); })
+    .then(function (j) { if (j && j.current) { WX = j; render(); } })
+    .catch(function () {});
+}
+function openWeather() {
+  if (!WX) { openModal("Tallinn", '<p class="mut">Weather could not be loaded. Check your connection and reload.</p>'); return; }
+  var c = WX.current, h = WX.hourly, d = WX.daily, now = c.time.slice(0, 13);
+  var i = h.time.findIndex(function (t) { return t.slice(0, 13) >= now; }); if (i < 0) i = 0;
+  var hrs = "";
+  for (var n = i; n < i + 12 && n < h.time.length; n++) hrs += '<div class="hr"><b>' + h.time[n].slice(11, 16) + "</b><span>" + Math.round(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
+  var days = d.time.map(function (t, k) {
+    var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
+    return '<div class="row"><span>' + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + d.precipitation_sum[k].toFixed(1) + " mm · " + Math.round(d.temperature_2m_min[k]) + "° / <b>" + Math.round(d.temperature_2m_max[k]) + "°</b></span></div>";
+  }).join("");
+  openModal("Tallinn · " + wxText(c.weather_code),
+    '<div class="big">' + Math.round(c.temperature_2m) + '°</div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
+    "<h3>Next 12 hours (temperature, chance of rain)</h3><div class=\"hrs\">" + hrs + "</div><h3>7 days</h3>" + days +
+    '<p class="mut">Sunrise ' + d.sunrise[0].slice(11, 16) + " · Sunset " + d.sunset[0].slice(11, 16) + " · UV max " + d.uv_index_max[0] + "</p>");
+}
+
+// ---- Stocks: details window with TradingView chart, and adding symbols ----
+function openStock(id) {
+  openModal(id, '<div id="tv" class="tv"></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(id) + '">Open in TradingView</a></p>');
+  var box = document.createElement("div"); box.className = "tradingview-widget-container"; box.style.height = "100%";
+  var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget"; inner.style.height = "100%";
+  box.appendChild(inner);
+  var sc = document.createElement("script"); sc.async = true;
+  sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+  sc.text = JSON.stringify({ autosize: true, symbol: id, interval: "D", timezone: "Europe/Tallinn", theme: P.theme, style: "1", locale: "en", allow_symbol_change: false, hide_side_toolbar: true });
+  box.appendChild(sc);
+  $("tv").appendChild(box);
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id !== "addStock") return;
+  e.preventDefault();
+  var v = $("stockIn").value.trim().toUpperCase();
+  if (!v) return;
+  if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
+  if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
+  delete P.hidden["s:" + v];
+  persist(); render();
+});
+
 // ---- Events ----
 document.addEventListener("click", function (e) {
-  var b = e.target.closest("button[data-a]");
+  var b = e.target.closest("[data-a]");
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
+  if (a === "weather") { openWeather(); return; }
+  if (a === "open") { openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -207,5 +272,5 @@ function initAuth() {
 }
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth();
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 setInterval(tick, 30000);
