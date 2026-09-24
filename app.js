@@ -1,4 +1,4 @@
-var VERSION = 16;
+var VERSION = 17;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -189,7 +189,7 @@ function render() {
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  T.live = tile("live", "Live now", '<div class="mrow"><b class="big">' + tw.length + '</b><span class="mut">of your follows</span></div>');
+  T.live = tile("live", "Convert", convHtml());
   var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb;
   if (NEWS.length) {
@@ -800,6 +800,53 @@ function undock(uid) {
   syncDock();
 }
 
+// ---- Currency and crypto converter (no key: exchangerate.host mirror + CoinGecko, both called straight from the browser) ----
+var CONV_LIST = [
+  { c: "USD", n: "US Dollar" }, { c: "EUR", n: "Euro" }, { c: "SEK", n: "Swedish krona" }, { c: "RUB", n: "Russian ruble" },
+  { c: "GBP", n: "British pound" }, { c: "BTC", n: "Bitcoin", g: "bitcoin" }, { c: "ETH", n: "Ethereum", g: "ethereum" }, { c: "SOL", n: "Solana", g: "solana" }
+];
+var RATES = {}, RATESerr = "", ratesBusy = false;   // USD value of 1 unit of each currency
+function fetchRates() {
+  if (ratesBusy) return; ratesBusy = true;
+  var crypto = CONV_LIST.filter(function (x) { return x.g; });
+  Promise.all([
+    fetch("https://open.er-api.com/v6/latest/USD").then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + crypto.map(function (x) { return x.g; }).join(",") + "&vs_currencies=usd").then(function (r) { return r.json(); }).catch(function () { return null; }),
+  ]).then(function (r) {
+    ratesBusy = false;
+    var fx = r[0], cg = r[1];
+    if (fx && fx.rates) { RATES.USD = 1; CONV_LIST.forEach(function (x) { if (!x.g && fx.rates[x.c]) RATES[x.c] = 1 / fx.rates[x.c]; }); }
+    if (cg) crypto.forEach(function (x) { if (cg[x.g] && cg[x.g].usd) RATES[x.c] = cg[x.g].usd; });
+    RATESerr = (fx && fx.rates) || Object.keys(RATES).length ? "" : "Rates unavailable right now.";
+    render();
+  }).catch(function () { ratesBusy = false; });
+}
+function conv() { if (!P.conv) P.conv = { amt: 100, from: "USD", to: "EUR" }; return P.conv; }
+function convOpts(cur) { return CONV_LIST.map(function (x) { return '<option value="' + x.c + '"' + (x.c === cur ? " selected" : "") + ">" + x.c + "</option>"; }).join(""); }
+function convHtml() {
+  var c = conv(), out = "—";
+  if (RATES[c.from] && RATES[c.to]) out = fmtNum((c.amt * RATES[c.from]) / RATES[c.to]);
+  return '<div class="mrow conv">' +
+    '<input type="number" id="convAmt" inputmode="decimal" step="any" min="0" value="' + esc(String(c.amt)) + '" aria-label="Amount">' +
+    '<select id="convFrom" aria-label="From currency">' + convOpts(c.from) + "</select>" +
+    '<button data-a="convswap" aria-label="Swap currencies">⇄</button>' +
+    '<select id="convTo" aria-label="To currency">' + convOpts(c.to) + "</select>" +
+    '<b id="convOut" title="' + (RATESerr ? esc(RATESerr) : "") + '">' + out + "</b></div>";
+}
+function fmtNum(n) {
+  var d = Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 1 ? 2 : 6;
+  return n.toLocaleString("en-GB", { maximumFractionDigits: d });
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "convAmt") return;
+  conv().amt = +e.target.value || 0; persist();
+  var n = $("convOut"); if (n) n.textContent = RATES[conv().from] && RATES[conv().to] ? fmtNum((conv().amt * RATES[conv().from]) / RATES[conv().to]) : "—";
+});
+document.addEventListener("change", function (e) {
+  if (e.target.id === "convFrom") { conv().from = e.target.value; persist(); render(); }
+  else if (e.target.id === "convTo") { conv().to = e.target.value; persist(); render(); }
+});
+
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
@@ -903,6 +950,7 @@ document.addEventListener("click", function (e) {
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
   if (a === "filttoggle") { if (b.checked) delete P.hidden[k]; else P.hidden[k] = true; persist(); render(); return; }
+  if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $("filtNews"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
@@ -998,7 +1046,7 @@ function initAuth() {
 }
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000); fetchRates(); setInterval(fetchRates, 300000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks(); updateNotesBtn();
 setInterval(tick, 30000);

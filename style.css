@@ -186,3 +186,8 @@ body.resizing{user-select:none}
 .menu button:hover,.menu button:focus-visible{background:var(--line)}
 body.editing #editBtn{background:var(--line);color:var(--fg);border-color:transparent}
 body.editing #cogBtn{border-color:var(--ac)}
+.conv{flex-wrap:nowrap}
+.conv input[type=number]{width:60px;font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px 6px;min-width:0}
+.conv select{padding:3px 4px;max-width:64px}
+.conv button{padding:2px 7px}
+.conv b{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
