@@ -15,14 +15,26 @@
     </div>
   </header>
   <div id="grid"></div>
-  <footer class="mut">Start page · version <span id="ver"></span> · sample data</footer>
+  <footer class="mut">Start page · version <span id="ver"></span> · sample data<span id="who"></span></footer>
 </main>
 <aside id="panel" hidden>
   <div class="ph"><b>Settings</b><button id="closeBtn">Close</button></div>
+  <div class="acct">
+    <b>Account</b>
+    <div id="acctOut">
+      <input id="email" type="email" placeholder="Email" autocomplete="email">
+      <input id="pass" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
+      <div class="acts"><button id="signIn">Sign in</button><button id="signUp">Create account</button></div>
+    </div>
+    <div id="acctIn" hidden><span id="acctMail"></span><button id="signOut">Sign out</button></div>
+    <div id="acctMsg" class="mut" role="status"></div>
+  </div>
   <label>Theme <button id="themeBtn"></button></label>
   <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
   <label>Wallpaper <span><input type="file" id="wallFile" accept="image/*"> <button id="wallClear">Remove</button></span></label>
   <div><b>Hidden items</b><div id="hiddenList" class="mut"></div></div>
 </aside>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body></html>

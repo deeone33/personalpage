@@ -1,4 +1,4 @@
-var VERSION = 1;
+var VERSION = 2;
 
 // ---- Sample data (real accounts are connected in later versions) ----
 var DATA = {
@@ -141,18 +141,71 @@ document.addEventListener("click", function (e) {
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
-  save("sp_prefs", P);
+  persist();
   render();
 });
 $("editBtn").onclick = function () { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); $("editBtn").textContent = EDIT ? "Done" : "Edit"; render(); };
 $("setBtn").onclick = function () { $("panel").hidden = false; };
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
-$("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "dark"; save("sp_prefs", P); applyTheme(); };
-$("accent").oninput = function (e) { P.accent = e.target.value; save("sp_prefs", P); applyTheme(); };
-$("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; save("sp_prefs", P); applyTheme(); };
+$("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); };
+$("accent").oninput = function (e) { P.accent = e.target.value; persist(); applyTheme(); };
+$("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; persist(); applyTheme(); };
 $("wallFile").onchange = function (e) { if (e.target.files[0]) setWall(e.target.files[0]); };
 $("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall"); } catch (e) {} applyWall(); };
 
+// ---- Account and cloud sync (Supabase) ----
+var sb = null, USER = null, saveTimer;
+try { if (window.supabase && window.SUPABASE_URL) sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
+function setMsg(t) { $("acctMsg").textContent = t || ""; }
+function persist() {
+  save("sp_prefs", P);
+  if (!sb || !USER) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function () {
+    sb.from("user_prefs").upsert({ user_id: USER.id, prefs: P, updated_at: new Date().toISOString() })
+      .then(function (r) { if (r.error) setMsg("Could not save to your account: " + r.error.message); });
+  }, 600);
+}
+function renderAccount() {
+  $("acctOut").hidden = !!USER; $("acctIn").hidden = !USER;
+  $("acctMail").textContent = USER ? USER.email : "";
+  $("who").textContent = USER ? " · signed in as " + USER.email : " · not signed in";
+}
+function onUser(u) {
+  USER = u; renderAccount();
+  if (!u) return;
+  sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
+    if (r.error) { setMsg("Could not load your settings: " + r.error.message); return; }
+    if (r.data && r.data.prefs && r.data.prefs.theme) {
+      P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
+      save("sp_prefs", P); applyTheme(); render();
+    } else { persist(); }
+  });
+}
+function auth(fn) {
+  if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
+  var c = { email: $("email").value.trim(), password: $("pass").value };
+  if (!c.email || !c.password) { setMsg("Enter your email and password."); return; }
+  if (fn === "signUp") c.options = { emailRedirectTo: location.href.split("#")[0] };
+  setMsg("Working...");
+  sb.auth[fn](c).then(function (r) {
+    if (r.error) setMsg(r.error.message);
+    else if (fn === "signUp" && !r.data.session) setMsg("Check your email to confirm your account, then sign in.");
+    else setMsg("");
+  });
+}
+function initAuth() {
+  renderAccount();
+  if (!sb) return;
+  $("signIn").onclick = function () { auth("signInWithPassword"); };
+  $("signUp").onclick = function () { auth("signUp"); };
+  $("signOut").onclick = function () { sb.auth.signOut(); };
+  sb.auth.onAuthStateChange(function (ev, session) {
+    var u = session ? session.user : null;
+    if ((u && u.id) !== (USER && USER.id)) setTimeout(function () { onUser(u); }, 0);
+  });
+}
+
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render();
+applyTheme(); applyWall(); tick(); render(); initAuth();
 setInterval(tick, 30000);
