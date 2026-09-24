@@ -1,4 +1,4 @@
-var VERSION = 4;
+var VERSION = 5;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -116,25 +116,25 @@ function render() {
   html += card("w2 h2", "Top stories · merged from many sources",
     D.news.map(function (s) { return '<div class="row"><span>' + esc(s.t) + '</span><span class="pill ' + (s.n > 3 ? "ac" : "") + '">×' + s.n + "</span></div>"; }).join(""));
 
-  html += card("w2", "Live on Twitch", (tw.length ? tw.map(function (x) {
+  html += card("w2", "Live on Twitch", (tw.length ? '<div class="list">' + tw.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
-  }).join("") : '<div class="empty">Nobody you follow is live.</div>') +
+  }).join("") + "</div>" : '<div class="empty">Nobody you follow is live.</div>') +
     (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'));
 
   var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
-  html += card("w2", "YouTube", yt.length ? yt.map(function (v) {
+  html += card("w2", "YouTube", yt.length ? '<div class="list">' + yt.map(function (v) {
     return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>" + (P.fav[v.key] ? '<span class="pill ac">new</span>' : ""));
-  }).join("") : '<div class="empty">No videos. Restore channels in Settings.</div>');
+  }).join("") + "</div>" : '<div class="empty">No videos. Restore channels in Settings.</div>');
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) { return favFirst(x, y) || Math.abs(y.c || 0) - Math.abs(x.c || 0); });
-  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>' : "";
-  html += card("w2", "Stocks · biggest moves first", (st.length ? st.map(function (x) {
+  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
+  html += card("w2", "Stocks · biggest moves first", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? '<div class="list">' + st.map(function (x) {
     var c = x.c, up = c >= 0;
     return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut">—</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
-  }).join("") : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
+  }).join("") + "</div>" : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
 
   $("grid").innerHTML = html;
   renderHidden();
@@ -184,28 +184,42 @@ function openTwitch(login) {
 }
 
 // ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
-var QUOTES = {}, QLOADED = false;
+var QUOTES = {}, QLOADED = false, QERR = "";
 function tk(id) { return id.indexOf(":") >= 0 ? id.split(":").pop() : id; }
 function fetchQuotes() {
   if (!sb || !USER) return;
   var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
   sb.functions.invoke("quotes", { body: { symbols: list } }).then(function (r) {
-    if (r.error || !r.data) { setMsg("Prices unavailable: " + (r.error ? r.error.message : "no data")); return; }
-    QUOTES = r.data; QLOADED = true; render();
+    if (r.error) QERR = r.error.message;
+    else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
+    else { QERR = ""; QUOTES = r.data; QLOADED = Object.keys(r.data).length > 0; }
+    render();
   });
 }
-document.addEventListener("submit", function (e) {
-  if (e.target.id !== "impStock") return;
-  e.preventDefault();
-  var list = $("impIn").value.split(/[,\n;]+/).map(function (x) { return x.trim().toUpperCase(); })
-    .filter(function (x) { return x && x.indexOf("###") !== 0 && x.indexOf(" ") < 0; });
-  if (!list.length) return;
-  if (!P.stocks) P.stocks = [];
+var SAMPLE_IDS = DATA.stocks.map(function (x) { return x.id; });
+function importSymbols(list) {
+  P.stocks = (P.stocks || []).filter(function (x) { return SAMPLE_IDS.indexOf(x.id) < 0 || list.indexOf(x.id) >= 0; });
   list.forEach(function (v) {
     if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
     delete P.hidden["s:" + v];
   });
   persist(); render(); fetchQuotes();
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id === "impStock") {
+    e.preventDefault();
+    var list = $("impIn").value.split(/[,\n;]+/).map(function (x) { return x.trim().toUpperCase(); })
+      .filter(function (x) { return x && x.indexOf("###") !== 0 && x.indexOf(" ") < 0; });
+    if (list.length) importSymbols(list);
+  }
+  if (e.target.id === "linkStock") {
+    e.preventDefault();
+    if (!sb || !USER) { alert("Sign in first (Settings, then Account)."); return; }
+    sb.functions.invoke("quotes", { body: { url: $("linkIn").value.trim() } }).then(function (r) {
+      if (r.error || !r.data || r.data._err || !r.data.symbols) { alert("Could not read that watchlist: " + ((r.data && r.data._err) || (r.error && r.error.message) || "no data")); return; }
+      importSymbols(r.data.symbols.map(function (x) { return x.toUpperCase(); }));
+    });
+  }
 });
 
 // ---- Weather (Open-Meteo, no key needed) ----

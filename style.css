@@ -60,3 +60,4 @@ a.btn{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--a
 .tw iframe{width:100%;height:100%;border:0;border-radius:8px}
 .imp{align-items:flex-start}
 .imp textarea{flex:1;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.list{max-height:360px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
