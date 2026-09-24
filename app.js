@@ -1,4 +1,4 @@
-var VERSION = 6;
+var VERSION = 7;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -100,9 +100,9 @@ function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
-var ALL_IDS = ["weather", "gmail1", "gmail2", "live", "news", "twitch", "youtube", "stocks"];
-var DEF_W = { news: 2, twitch: 2, youtube: 2, stocks: 2 };
-var LISTS = ["news", "twitch", "youtube", "stocks"];
+var ALL_IDS = ["weather", "gmail1", "gmail2", "live", "news", "telegram", "twitch", "youtube", "stocks"];
+var DEF_W = { news: 2, telegram: 2, twitch: 2, youtube: 2, stocks: 2 };
+var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() { if (!P.layout) P.layout = { order: [], w: {}, rows: {} }; return P.layout; }
 function orderIds() {
   var o = LAY().order.filter(function (x) { return ALL_IDS.indexOf(x) >= 0; });
@@ -113,7 +113,7 @@ function adjust(a, id, d) {
   var L = LAY();
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
   else if (a === "w") L.w[id] = Math.max(1, Math.min(4, (L.w[id] || DEF_W[id] || 1) + d));
-  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" ? 6 : 10)) + d));
+  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
 }
 function tile(id, title, body, click) {
@@ -139,9 +139,25 @@ function render() {
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
   T.live = tile("live", "Live now", '<div class="big">' + tw.length + '</div><span class="mut">of your follows</span>');
-  T.news = tile("news", "Top stories · merged from many sources", lst("news", D.news.map(function (x) {
-    return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
-  }).join(""), 6));
+  var nb;
+  if (NEWS.length) {
+    var nowN = Date.now();
+    var nn = NEWS.filter(function (n) { return shown("n:" + n.s); });
+    nn.sort(function (a, b) { return ((P.fav["n:" + b.s] && nowN - b.ts < 21600000) ? 1 : 0) - ((P.fav["n:" + a.s] && nowN - a.ts < 21600000) ? 1 : 0) || b.ts - a.ts; });
+    nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (nn.length ? lst("news", nn.slice(0, 80).map(function (n) {
+      return row("n:" + n.s, '<a class="lnk" href="' + esc(n.u) + '" target="_blank" rel="noopener">' + esc(n.t) + "</a>", n.s, '<span class="mut">' + ago(n.ts) + "</span>");
+    }).join(""), 6) : '<div class="empty">All news sources hidden. Restore them in Settings.</div>');
+  } else {
+    nb = lst("news", D.news.map(function (x) {
+      return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
+    }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load Aftonbladet, AP and Reuters.") + "</div>";
+  }
+  T.news = tile("news", "News · Aftonbladet, AP, Reuters", nb);
+
+  var tp = TGP.filter(function (g) { return shown("g:" + g.s); });
+  T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
+    return row("g:" + g.s, '<a class="lnk" href="' + esc(g.u) + '" target="_blank" rel="noopener">' + esc(g.t.length > 140 ? g.t.slice(0, 140) + "…" : g.t) + "</a>", g.s, '<span class="mut">' + ago(g.ts) + "</span>");
+  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>");
 
   T.twitch = tile("twitch", "Live on Twitch", (tw.length ? lst("twitch", tw.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
@@ -334,6 +350,30 @@ function loadWall(u) {
   });
 }
 
+// ---- News and Telegram (headlines through the Supabase "feeds" function) ----
+var NEWS_SRC = [
+  { name: "Aftonbladet", urls: ["https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt/", "https://news.google.com/rss/search?q=site:aftonbladet.se&hl=sv&gl=SE&ceid=SE:sv"] },
+  { name: "AP", urls: ["https://news.google.com/rss/search?q=site:apnews.com&hl=en-US&gl=US&ceid=US:en"] },
+  { name: "Reuters", urls: ["https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en"] }
+];
+var TG_SRC = ["ClashReport"];
+var NEWS = [], TGP = [], NERR = "", nBusy = false;
+function fetchNews() {
+  if (!sb || !USER || nBusy) return;
+  nBusy = true;
+  sb.functions.invoke("feeds", { body: { news: NEWS_SRC.map(function (x) { return { id: x.name, urls: x.urls }; }), tg: TG_SRC } }).then(function (r) {
+    nBusy = false;
+    if (r.error || !r.data || r.data._err) NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
+    else {
+      NEWS = r.data.news || []; TGP = r.data.tg || [];
+      var got = {}; NEWS.forEach(function (n) { got[n.s] = 1; });
+      var miss = NEWS_SRC.filter(function (x) { return !got[x.name]; }).map(function (x) { return x.name; });
+      NERR = miss.length ? "no headlines from " + miss.join(", ") : "";
+    }
+    render();
+  });
+}
+
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
@@ -435,7 +475,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews();
   });
 }
 function auth(fn) {
@@ -465,5 +505,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000);
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000);
 setInterval(tick, 30000);

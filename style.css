@@ -72,3 +72,6 @@ label.add{display:flex;justify-content:space-between;align-items:center;gap:8px;
 .list::-webkit-scrollbar-track{background:transparent}
 .list::-webkit-scrollbar-thumb{background:rgba(140,147,163,.35);border-radius:6px}
 .list::-webkit-scrollbar-thumb:hover{background:rgba(140,147,163,.65)}
+a.lnk{color:var(--fg);text-decoration:none}
+a.lnk:hover{color:var(--ac);text-decoration:underline}
+.row>span:first-child{min-width:0}
