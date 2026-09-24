@@ -172,3 +172,7 @@ body.resizing{user-select:none}
 .mbox #cityIn{flex:1}
 .nt{white-space:pre-wrap}
 .acts{flex-wrap:wrap;justify-content:flex-end}
+.compact{display:block;padding:6px 12px 7px}
+.compact>h3{margin:0 0 3px}
+.compact .mrow{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0}
+.compact .tools{margin:0 0 4px}

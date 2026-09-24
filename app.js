@@ -1,4 +1,4 @@
-var VERSION = 13;
+var VERSION = 14;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -440,7 +440,7 @@ var NEWS_SRC = [
   { name: "Reuters", urls: siteUrls("reuters.com") }
 ];
 var TG_SRC = ["ClashReport"];
-var NEWS = [], TGP = [], NERR = "", nBusy = false;
+var NEWS = [], TGP = [], NERR = "", nBusy = false, NVIA = {}, FNVER = 0;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
   nBusy = true;
@@ -450,6 +450,7 @@ function fetchNews() {
     else {
       NEWS = r.data.news || []; TGP = r.data.tg || [];
       var ne = r.data.news_err || {};
+      NVIA = r.data.news_via || {}; FNVER = r.data.ver || 0;
       NERR = Object.keys(ne).map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
     }
     renderSources(); render();
@@ -530,12 +531,12 @@ function delSrc(k) {
 function srcChanged() { persist(); NEWS = []; TGP = []; NERR = ""; renderSources(); render(); fetchNews(); }
 function lastAge(name) {
   var t = 0; NEWS.forEach(function (n) { if (n.s === name && n.ts > t) t = n.ts; });
-  return t ? "latest " + ago(t) + " ago" : "";
+  return t ? "latest " + ago(t) + " ago" + (NVIA[name] ? " · via " + NVIA[name].replace(/api\.|www\./g, "") : "") : "";
 }
 function renderSources() {
   $("srcNews").innerHTML = newsSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small></span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
-  }).join("") || '<div class="mut">No news sources.</div>';
+  }).join("") + (NEWS.length ? '<div class="mut sn">Feeds function: ' + (FNVER ? "version " + FNVER : "old version, redeploy it") + "</div>" : "") || '<div class="mut">No news sources.</div>';
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
   }).join("") || '<div class="mut">No Telegram channels.</div>';
@@ -883,7 +884,7 @@ document.addEventListener("click", function (e) {
   var a = b.dataset.a, k = b.dataset.k;
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
-  if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
   if (/^city/.test(a)) { cityAct(a, k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
   if (a === "clstart") { startClock(k); return; }
