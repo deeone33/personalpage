@@ -1,4 +1,4 @@
-var VERSION = 15;
+var VERSION = 16;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -190,6 +190,7 @@ function render() {
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
   T.live = tile("live", "Live now", '<div class="mrow"><b class="big">' + tw.length + '</b><span class="mut">of your follows</span></div>');
+  var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb;
   if (NEWS.length) {
     var nowN = Date.now();
@@ -200,13 +201,15 @@ function render() {
     nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (NG.length ? lst("news", NG.slice(0, 80).map(function (g) {
       var n = g[0], srcs = g.map(function (x) { return x.s; });
       return row("n:" + n.s, esc(n.t), srcs.join(" · "), '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac">' + srcs.length + " sources</span>" : ""), "a:" + n.u);
-    }).join(""), 6) : '<div class="empty">All news sources hidden. Restore them in Settings.</div>');
+    }).join(""), 6) : '<div class="empty">All news sources hidden. Use Sources below to bring one back.</div>');
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
-    }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load Aftonbladet, AP and Reuters.") + "</div>";
+    }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
-  T.news = tile("news", "News · Aftonbladet, AP, Reuters", nb);
+  var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
+    allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
+  T.news = tile("news", "News", nb, 0, ctlN);
 
   var tp = TGP.filter(function (g) { return shown("g:" + g.s); });
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
@@ -717,7 +720,7 @@ function noteAct(a, k) {
   persist(); updateNotesBtn(); openNotes();
 }
 function closeMenus() {
-  ["clockMenu", "cogMenu"].forEach(function (id) { $(id).hidden = true; });
+  ["clockMenu", "cogMenu", "filtNews"].forEach(function (id) { var n = $(id); if (n) n.hidden = true; });
   $("clockBtn").setAttribute("aria-expanded", "false"); $("cogBtn").setAttribute("aria-expanded", "false");
 }
 function toggleMenu(menu, btn) {
@@ -895,9 +898,12 @@ document.addEventListener("submit", function (e) {
 
 // ---- Events ----
 document.addEventListener("click", function (e) {
+  if (e.target.closest && e.target.closest("#filtNews")) { e.stopPropagation(); }
   var b = e.target.closest("[data-a]");
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
+  if (a === "filttoggle") { if (b.checked) delete P.hidden[k]; else P.hidden[k] = true; persist(); render(); return; }
+  if (a === "filtmenu") { e.stopPropagation(); var m = $("filtNews"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
