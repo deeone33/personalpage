@@ -208,3 +208,25 @@ header{align-items:flex-start}
 .conv input[type=number]{flex:none;width:52px}
 .conv select{flex:none;max-width:54px;padding:3px 2px}
 .conv button{flex:none}
+.card{position:relative}
+.card.menuopen{z-index:30}
+.compact{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 12px;min-height:44px;font-size:calc(13px*var(--fs,1))}
+.compact .mrow{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;flex-wrap:nowrap}
+.compact .big{font-size:calc(18px*var(--fs,1))}
+.compact .mut{font-size:inherit}
+.compact .dh{cursor:grab;color:var(--mut);flex:none}
+.compact .mrow .mut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mrn{color:var(--mut);flex:none;min-width:0;max-width:70px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mailgrid{display:grid;grid-template-columns:1fr 1fr;flex:1 1 0;min-width:0}
+.mailcell{display:flex;align-items:center;gap:6px;min-width:0;padding:0 10px}
+.mailcell:first-child{padding-left:0}
+.mailcell+.mailcell{border-left:1px solid var(--line);padding-right:0}
+.mailcell[data-a]{cursor:pointer}
+.mailcell[data-a]:hover .mrn{color:var(--ac)}
+.mailcell .mut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mailcell button{margin-left:auto;flex:none;padding:0 6px;font-size:12px}
+.menurow{flex:1 1 0;justify-content:flex-start;gap:6px}
+.menurow .dd{position:relative}
+.menurow .dd:last-child .menu{left:auto;right:0}
+.menurow .menu{left:0;right:auto;top:calc(100% + 6px);z-index:31}
+.ib{padding:4px 7px}

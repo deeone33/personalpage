@@ -1,4 +1,4 @@
-var VERSION = 18;
+var VERSION = 19;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -129,15 +129,13 @@ function LAY() {
   return L;
 }
 function orderIds() {
-  var raw = LAY().order.slice();
-  var mi = raw.indexOf("gmail1");
-  if (mi < 0) mi = raw.indexOf("gmail2");
-  if (mi >= 0 && raw.indexOf("mail") < 0) raw[mi] = "mail";
-  var o = raw.filter(function (x, i) { return (x === "mail" || ALL_IDS.indexOf(x) >= 0) && raw.indexOf(x) === i; });
-  var wi = o.indexOf("weather");
-  ALL_IDS.forEach(function (x) {
-    if (o.indexOf(x) < 0) { if (x === "mail" || x === "menu") o.splice(wi < 0 ? o.length : wi + 1, 0, x); else o.push(x); }
-  });
+  var L = LAY(), raw = L.order.slice(), TOP = ["weather", "mail", "live", "menu"];
+  if (L.v !== 2) {
+    raw = TOP.concat(raw.filter(function (x) { return TOP.indexOf(x) < 0 && x !== "gmail1" && x !== "gmail2"; }));
+    L.order = raw; L.v = 2; persist();
+  }
+  var o = raw.filter(function (x, i) { return ALL_IDS.indexOf(x) >= 0 && raw.indexOf(x) === i; });
+  ALL_IDS.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });
   return o;
 }
 function adjust(a, id, d) {
@@ -159,8 +157,8 @@ function tile(id, title, body, click, hx) {
     t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + bt("f", -1, "Text −") + bt("f", 1, "Text +") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
-  var head = cp ? h3 : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
-  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
+  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
+  return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
 function ico(id, logo) {
@@ -179,22 +177,21 @@ function render() {
   var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
-  T.weather = tile("weather", esc(homeCity().name), '<div class="mrow">' + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
-  T.mail = tile("mail", "Mail", [0, 1].map(function (i) {
+  T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
+  T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
     if (!cfg || !cfg.url) val = '<span class="mut">Not connected</span>';
     else if (!m) val = '<span class="mut">Loading...</span>';
-    else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 34)) + "</span>";
-    else { var n = mailN(i); val = "<b>" + n.txt + "</b> <span class=\"mut\">" + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read</button>' : ""); click = true; }
-    var inner = '<span class="mrn">' + esc(nm) + "</span>" + val;
-    return '<div class="mrow mailrow"' + (click ? ' data-a="mail" data-k="' + i + '" tabindex="0" role="button"' : "") + ">" + inner + "</div>";
-  }).join(""));
+    else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">Error</span>';
+    else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
+    return '<div class="mailcell"' + (click ? ' data-a="mail" data-k="' + i + '" tabindex="0" role="button"' : "") + '><span class="mrn">' + esc(nm) + "</span>" + val + "</div>";
+  }).join("") + "</div>");
 
 
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  T.live = tile("live", "Convert", convHtml());
+  T.live = tile("live", "", convHtml());
   var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb;
   if (NEWS.length) {
@@ -267,7 +264,7 @@ function render() {
   var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>";
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
   var IC = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
-  T.menu = tile("menu", "Menu", '<div class="mrow menurow">' +
+  T.menu = tile("menu", "", '<div class="mrow menurow">' +
     '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
       (MENU_OPEN === "clock" ? '<div class="menu" role="menu"><button role="menuitem" data-a="clockmenu" data-k="t">Timer</button><button role="menuitem" data-a="clockmenu" data-k="c">Countdown</button><button role="menuitem" data-a="clockmenu" data-k="s">Stopwatch</button></div>' : "") + "</div>" +
     '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (P.notes && P.notes.length ? "<span>" + P.notes.length + "</span>" : "") + "</button>" +
