@@ -1,4 +1,12 @@
-var VERSION = 3;
+var VERSION = 4;
+
+// ---- Twitch login return (runs first, before Supabase reads the URL) ----
+(function () {
+  var h = location.hash || "", m = h.match(/access_token=([^&]+)/);
+  if (h.indexOf("state=twitch") < 0 || !m) return;
+  try { localStorage.setItem("sp_twitch", m[1]); } catch (e) {}
+  history.replaceState(null, "", location.pathname + location.search);
+})();
 
 // ---- Sample data (real accounts are connected in later versions) ----
 var DATA = {
@@ -100,7 +108,7 @@ function render() {
   D.inbox.forEach(function (m) {
     html += card("", m.name, '<div class="big">' + m.n + '</div><span class="mut">unread</span>');
   });
-  var tw = D.twitch.filter(function (s) { return s.live && shown("t:" + s.id); })
+  var tw = (TWC ? TW : D.twitch).filter(function (s) { return s.live && shown("t:" + s.id); })
     .map(function (s) { s.key = "t:" + s.id; return s; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
   html += card("", "Live now", '<div class="big">' + tw.length + '</div><span class="mut">of your follows</span>');
@@ -108,9 +116,11 @@ function render() {
   html += card("w2 h2", "Top stories · merged from many sources",
     D.news.map(function (s) { return '<div class="row"><span>' + esc(s.t) + '</span><span class="pill ' + (s.n > 3 ? "ac" : "") + '">×' + s.n + "</span></div>"; }).join(""));
 
-  html += card("w2", "Live on Twitch", tw.length ? tw.map(function (s) {
-    return row(s.key, '<span class="dot"></span>' + esc(s.id), s.sub, '<span class="mut">' + (s.v / 1000).toFixed(1) + "k</span>");
-  }).join("") : '<div class="empty">Nobody you follow is live.</div>');
+  html += card("w2", "Live on Twitch", (tw.length ? tw.map(function (x) {
+    var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
+    return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
+  }).join("") : '<div class="empty">Nobody you follow is live.</div>') +
+    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'));
 
   var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
   html += card("w2", "YouTube", yt.length ? yt.map(function (v) {
@@ -118,12 +128,12 @@ function render() {
   }).join("") : '<div class="empty">No videos. Restore channels in Settings.</div>');
 
   var SL = P.stocks || D.stocks;
-  var st = SL.map(function (x) { x.key = "s:" + x.id; return x; }).filter(function (x) { return shown(x.key); })
+  var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) { return favFirst(x, y) || Math.abs(y.c || 0) - Math.abs(x.c || 0); });
-  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>' : "";
+  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>' : "";
   html += card("w2", "Stocks · biggest moves first", (st.length ? st.map(function (x) {
     var c = x.c, up = c >= 0;
-    return row(x.key, "<b>" + esc(x.id) + "</b>", x.name, c == null ? '<span class="mut">—</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
+    return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut">—</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
   }).join("") : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
 
   $("grid").innerHTML = html;
@@ -145,6 +155,57 @@ $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); }
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") closeModal();
   if (e.key === "Enter" && e.target.classList && e.target.classList.contains("click")) e.target.click();
+});
+
+// ---- Twitch (browser login, needs only the Client ID) ----
+var TW = null, TWC = false;
+function twToken() { try { return localStorage.getItem("sp_twitch"); } catch (e) { return null; } }
+function twBtn() { $("twBtn").textContent = twToken() ? "Disconnect" : "Connect"; }
+function twConnect() {
+  location.href = "https://id.twitch.tv/oauth2/authorize?client_id=" + TWITCH_CLIENT_ID + "&redirect_uri=" + encodeURIComponent(TWITCH_REDIRECT) + "&response_type=token&scope=user:read:follows&state=twitch";
+}
+function twDisconnect() { try { localStorage.removeItem("sp_twitch"); } catch (e) {} TW = null; TWC = false; twBtn(); render(); }
+function twGet(path, tok) {
+  return fetch("https://api.twitch.tv/helix/" + path, { headers: { Authorization: "Bearer " + tok, "Client-Id": TWITCH_CLIENT_ID } })
+    .then(function (r) { if (r.status === 401) throw new Error("expired"); return r.json(); });
+}
+function fetchTwitch() {
+  var tok = twToken(); twBtn();
+  if (!tok || !window.TWITCH_CLIENT_ID) return;
+  twGet("users", tok).then(function (u) { return twGet("streams/followed?first=100&user_id=" + u.data[0].id, tok); })
+    .then(function (j) {
+      TWC = true;
+      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1 }; });
+      render();
+    }).catch(function (e) { if (e.message === "expired") twDisconnect(); });
+}
+function openTwitch(login) {
+  openModal(login, '<div class="tw"><iframe allow="autoplay; fullscreen" allowfullscreen src="https://player.twitch.tv/?channel=' + encodeURIComponent(login) + "&parent=" + location.hostname + '&muted=true"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.twitch.tv/' + encodeURIComponent(login) + '">Open on Twitch</a></p>');
+}
+
+// ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
+var QUOTES = {}, QLOADED = false;
+function tk(id) { return id.indexOf(":") >= 0 ? id.split(":").pop() : id; }
+function fetchQuotes() {
+  if (!sb || !USER) return;
+  var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
+  sb.functions.invoke("quotes", { body: { symbols: list } }).then(function (r) {
+    if (r.error || !r.data) { setMsg("Prices unavailable: " + (r.error ? r.error.message : "no data")); return; }
+    QUOTES = r.data; QLOADED = true; render();
+  });
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id !== "impStock") return;
+  e.preventDefault();
+  var list = $("impIn").value.split(/[,\n;]+/).map(function (x) { return x.trim().toUpperCase(); })
+    .filter(function (x) { return x && x.indexOf("###") !== 0 && x.indexOf(" ") < 0; });
+  if (!list.length) return;
+  if (!P.stocks) P.stocks = [];
+  list.forEach(function (v) {
+    if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
+    delete P.hidden["s:" + v];
+  });
+  persist(); render(); fetchQuotes();
 });
 
 // ---- Weather (Open-Meteo, no key needed) ----
@@ -193,7 +254,7 @@ document.addEventListener("submit", function (e) {
   if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
   if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
   delete P.hidden["s:" + v];
-  persist(); render();
+  persist(); render(); fetchQuotes();
 });
 
 // ---- Events ----
@@ -202,7 +263,8 @@ document.addEventListener("click", function (e) {
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
   if (a === "weather") { openWeather(); return; }
-  if (a === "open") { openStock(k.slice(2)); return; }
+  if (a === "twConnect") { twConnect(); return; }
+  if (a === "open") { if (k.charAt(0) === "t") openTwitch(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -245,6 +307,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
+    fetchQuotes();
   });
 }
 function auth(fn) {
@@ -273,4 +336,6 @@ function initAuth() {
 
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
+$("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 120000);
 setInterval(tick, 30000);
