@@ -1,4 +1,4 @@
-var VERSION = 9;
+var VERSION = 10;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -150,6 +150,7 @@ function tile(id, title, body, click) {
   return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '"' + at +
     "><h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>" + t + body + "</div>";
 }
+function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + r * 36 + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
@@ -196,7 +197,15 @@ function render() {
     return row("g:" + g.s, esc(hd(g.t, 90)), g.s, '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u);
   }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>");
 
-  T.twitch = tile("twitch", "Live on Twitch", (tw.length ? lst("twitch", tw.map(function (x) {
+  var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
+  tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
+  var tcat = P.tcat && cats[P.tcat] ? P.tcat : "";
+  var twv = (tcat ? tw.filter(function (x) { return (x.sub || "?") === tcat; }) : tw.slice()).sort(function (a, b) {
+    return favFirst(a, b) || (TS === "name" ? String(a.name || a.id).toLowerCase().localeCompare(String(b.name || b.id).toLowerCase()) : TS === "cat" ? String(a.sub || "").localeCompare(String(b.sub || "")) || b.v - a.v : b.v - a.v);
+  });
+  var ctlT = '<div class="ctl"><label>Sort <select data-s="sort:twitch">' + opts([["viewers", "Viewers"], ["name", "Name"], ["cat", "Category"]], TS) + '</select></label><label>Category <select data-s="tcat"><option value="">All categories</option>' +
+    Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select></label></div>";
+  T.twitch = tile("twitch", "Live on Twitch", ctlT + (twv.length ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
   }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
@@ -224,9 +233,16 @@ function render() {
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
-    .sort(function (x, y) { return favFirst(x, y) || Math.abs(y.c || 0) - Math.abs(x.c || 0); });
+    .sort(function (x, y) {
+      var SS = (P.sort && P.sort.stocks) || "move", a = x.c, b = y.c;
+      if (favFirst(x, y)) return favFirst(x, y);
+      if (SS === "name") return x.id.localeCompare(y.id);
+      if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
+      return SS === "up" ? b - a : SS === "down" ? a - b : Math.abs(b) - Math.abs(a);
+    });
+  var ctlS = '<div class="ctl"><label>Sort <select data-s="sort:stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select></label></div>";
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
-  T.stocks = tile("stocks", "Stocks · biggest moves first", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
+  T.stocks = tile("stocks", "Stocks", ctlS + (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
     return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
@@ -298,7 +314,7 @@ function fetchTwitch() {
     }).catch(function (e) { if (e.message === "expired") twDisconnect(); });
 }
 function openTwitch(login) {
-  openModal(login, '<div class="tw"><iframe allow="autoplay; fullscreen" allowfullscreen src="https://player.twitch.tv/?channel=' + encodeURIComponent(login) + "&parent=" + location.hostname + '&muted=true"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.twitch.tv/' + encodeURIComponent(login) + '">Open on Twitch</a></p>');
+  openModal(login, '<div class="tw"><iframe allow="autoplay; fullscreen" allowfullscreen src="https://player.twitch.tv/?channel=' + encodeURIComponent(login) + "&parent=" + location.hostname + '&muted=true"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.twitch.tv/' + encodeURIComponent(login) + '">Open on Twitch</a> <button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button></p>');
 }
 
 // ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
@@ -359,9 +375,16 @@ function fetchYT() {
   });
 }
 function openYT(id) {
-  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a></p>');
+  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock on the left</button></p>');
 }
 document.addEventListener("change", function (e) {
+  var ds = e.target.dataset && e.target.dataset.s;
+  if (ds) {
+    P.sort = P.sort || {};
+    var q = ds.split(":");
+    if (q[0] === "sort") P.sort[q[1]] = e.target.value; else if (q[0] === "tcat") P.tcat = e.target.value;
+    persist(); render(); return;
+  }
   if (e.target.id !== "ytFile" || !e.target.files[0]) return;
   var fr = new FileReader();
   fr.onload = function () {
@@ -451,7 +474,7 @@ function markRead(i) {
   var c = P.mail && P.mail[i];
   if (!c) return;
   c.seen = Math.floor(Date.now() / 1000);
-  if (MAIL[i]) { MAIL[i].fresh = 0; MAIL[i].items = []; }
+  if (MAIL[i]) MAIL[i].fresh = 0;
   persist(); closeModal(); render(); fetchMail();
 }
 function showAllMail(i) { var c = P.mail && P.mail[i]; if (!c) return; delete c.seen; persist(); closeModal(); MAIL[i] = null; render(); fetchMail(); }
@@ -459,12 +482,15 @@ function openMail(i) {
   var m = MAIL[i];
   if (!m || m.error) return;
   var nm = (P.mail[i] && P.mail[i].name) || "Gmail", n = mailN(i), seen = P.mail[i] && P.mail[i].seen;
-  var rows = (m.items || []).map(function (x) {
-    return '<div class="mi"><div class="r2"><b>' + esc((x.from || "").replace(/<.*>/, "").trim() || x.from) + '</b><small class="mut">' + ago(x.ts) + "</small></div><div>" + esc(x.subject || "(no subject)") +
+  var items = (m.items || []).slice().sort(function (a, b) { return b.ts - a.ts; }).slice(0, 20);
+  var rows = items.map(function (x) {
+    var isNew = seen && x.ts > seen * 1000;
+    return '<div class="mi"><div class="r2"><b>' + esc((x.from || "").replace(/<.*>/, "").trim() || x.from) + (isNew ? ' <span class="pill ac">new</span>' : "") + '</b><small class="mut">' + ago(x.ts) + "</small></div><div>" + esc(x.subject || "(no subject)") +
       '</div><div class="mut sn">' + esc(x.snippet) + '</div><a class="btn" target="_blank" rel="noopener" href="' + esc(x.link) + '">Open in Gmail</a></div>';
   }).join("");
   var ctl = '<div class="tools">' + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read (on this site only)</button>' : "") + (seen ? '<button data-a="mailall" data-k="' + i + '">Show all unread again</button>' : "") + "</div>";
-  openModal(nm + " · " + n.txt + " " + n.lab, ctl + (rows || '<p class="mut">Nothing new.</p>'));
+  var note = seen && n.n === 0 ? '<p class="mut">Nothing new since you pressed Mark read. Your latest unread mail:</p>' : "";
+  openModal(nm + " · " + n.txt + " " + n.lab, ctl + note + (rows || '<p class="mut">No unread mail.</p>'));
 }
 function loadMailForm() {
   var M = P.mail || [];
@@ -499,6 +525,31 @@ function checkUpdate() {
   }).catch(function () {});
 }
 $("updBtn").onclick = function () { location.reload(); };
+
+// ---- Docked players: keep watching on the left while you use the rest of the site ----
+var DOCK = [], dockUid = 0;
+function syncDock() { $("dock").hidden = !DOCK.length; document.body.classList.toggle("docked", DOCK.length > 0); }
+function dockAdd(k) {
+  var kind = k.charAt(0), id = k.slice(2);
+  if (DOCK.some(function (d) { return d.kind === kind && d.id === id; })) { closeModal(); return; }
+  if (DOCK.length >= 3) { alert("The dock is full (3 players). Close one first."); return; }
+  var title = id;
+  if (kind === "v") { var v = YTV.filter(function (x) { return x.id === id; })[0]; if (v) title = v.t; }
+  var d = { kind: kind, id: id, uid: ++dockUid };
+  DOCK.push(d);
+  var src = kind === "t" ? "https://player.twitch.tv/?channel=" + encodeURIComponent(id) + "&parent=" + location.hostname + "&muted=true"
+    : "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1";
+  var w = document.createElement("div");
+  w.className = "dk"; w.id = "dk" + d.uid;
+  w.innerHTML = '<div class="dkh"><b>' + esc(hd(title, 40)) + '</b><button data-a="undock" data-k="' + d.uid + '" aria-label="Close player">✕</button></div><div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div>';
+  $("dock").appendChild(w);
+  syncDock(); closeModal();
+}
+function undock(uid) {
+  DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
+  var n = $("dk" + uid); if (n) n.remove();
+  syncDock();
+}
 
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
@@ -557,6 +608,8 @@ document.addEventListener("click", function (e) {
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (a === "dock") { dockAdd(k); return; }
+  if (a === "undock") { undock(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
