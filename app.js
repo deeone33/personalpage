@@ -1,4 +1,4 @@
-var VERSION = 5;
+var VERSION = 6;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -74,7 +74,7 @@ function setWall(file) {
       c.width = im.width * s; c.height = im.height * s;
       c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
       try { localStorage.setItem("sp_wall", c.toDataURL("image/jpeg", 0.75)); } catch (e) { alert("That image is too large to save. Try a smaller one."); }
-      applyWall();
+      applyWall(); syncWall(false);
     };
     im.src = fr.result;
   };
@@ -93,52 +93,113 @@ function tick() {
 function row(key, main, sub, right, op) {
   var f = P.fav[key];
   var ed = EDIT ? '<button data-a="fav" data-k="' + esc(key) + '" aria-label="Favorite">' + (f ? "★" : "☆") + '</button><button data-a="hide" data-k="' + esc(key) + '" aria-label="Hide">✕</button>' : "";
-  return '<div class="row"><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
+  return '<div class="row"><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
     '</span><span class="r">' + right + ed + "</span></div>";
 }
 function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
+var ALL_IDS = ["weather", "gmail1", "gmail2", "live", "news", "twitch", "youtube", "stocks"];
+var DEF_W = { news: 2, twitch: 2, youtube: 2, stocks: 2 };
+var LISTS = ["news", "twitch", "youtube", "stocks"];
+function LAY() { if (!P.layout) P.layout = { order: [], w: {}, rows: {} }; return P.layout; }
+function orderIds() {
+  var o = LAY().order.filter(function (x) { return ALL_IDS.indexOf(x) >= 0; });
+  ALL_IDS.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });
+  return o;
+}
+function adjust(a, id, d) {
+  var L = LAY();
+  if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
+  else if (a === "w") L.w[id] = Math.max(1, Math.min(4, (L.w[id] || DEF_W[id] || 1) + d));
+  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" ? 6 : 10)) + d));
+  persist(); render();
+}
+function tile(id, title, body, click) {
+  var w = LAY().w[id] || DEF_W[id] || 1, t = "";
+  if (EDIT) {
+    var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
+    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
+  }
+  return '<div class="card w' + w + (click ? " click" : "") + '" data-id="' + id + '"' + (click ? ' data-a="weather" tabindex="0" role="button" aria-label="Open Tallinn details"' : "") +
+    "><h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>" + t + body + "</div>";
+}
+function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + r * 36 + 'px">' + html + "</div>"; }
+function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
+
 function render() {
-  var D = DATA, html = "";
+  var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
-  html += '<div class="card click" data-a="weather" tabindex="0" role="button" aria-label="Open Tallinn details"><h3>Tallinn</h3><div class="big">' + t + '°</div><span class="mut">' + esc(note) + "</span></div>";
-  D.inbox.forEach(function (m) {
-    html += card("", m.name, '<div class="big">' + m.n + '</div><span class="mut">unread</span>');
-  });
-  var tw = (TWC ? TW : D.twitch).filter(function (s) { return s.live && shown("t:" + s.id); })
-    .map(function (s) { s.key = "t:" + s.id; return s; })
+  T.weather = tile("weather", "Tallinn", '<div class="big">' + t + '°</div><span class="mut">' + esc(note) + "</span>", 1);
+  D.inbox.forEach(function (m) { T[m.id] = tile(m.id, m.name, '<div class="big">' + m.n + '</div><span class="mut">unread</span>'); });
+
+  var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
+    .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  html += card("", "Live now", '<div class="big">' + tw.length + '</div><span class="mut">of your follows</span>');
+  T.live = tile("live", "Live now", '<div class="big">' + tw.length + '</div><span class="mut">of your follows</span>');
+  T.news = tile("news", "Top stories · merged from many sources", lst("news", D.news.map(function (x) {
+    return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
+  }).join(""), 6));
 
-  html += card("w2 h2", "Top stories · merged from many sources",
-    D.news.map(function (s) { return '<div class="row"><span>' + esc(s.t) + '</span><span class="pill ' + (s.n > 3 ? "ac" : "") + '">×' + s.n + "</span></div>"; }).join(""));
-
-  html += card("w2", "Live on Twitch", (tw.length ? '<div class="list">' + tw.map(function (x) {
+  T.twitch = tile("twitch", "Live on Twitch", (tw.length ? lst("twitch", tw.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
-  }).join("") + "</div>" : '<div class="empty">Nobody you follow is live.</div>') +
+  }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
     (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'));
 
-  var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
-  html += card("w2", "YouTube", yt.length ? '<div class="list">' + yt.map(function (v) {
-    return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>" + (P.fav[v.key] ? '<span class="pill ac">new</span>' : ""));
-  }).join("") + "</div>" : '<div class="empty">No videos. Restore channels in Settings.</div>');
+  var yb;
+  if (P.yt && P.yt.ch && P.yt.ch.length) {
+    var now = Date.now();
+    var vids = YTV.map(function (v) { return { id: v.id, t: v.t, n: v.n, ts: v.ts, key: "y:" + v.n, isNew: now - v.ts < 172800000 }; })
+      .filter(function (v) { return shown(v.key); });
+    vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
+    yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") + (vids.length ? lst("youtube", vids.map(function (v) {
+      return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), "v:" + v.id);
+    }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : "Loading videos (you need to be signed in)...") + "</div>");
+  } else {
+    var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
+    yb = lst("youtube", yt.map(function (v) { return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>"); }).join("")) +
+      '<div class="empty">Sample videos. In Edit mode, import your subscriptions.csv from Google Takeout.</div>';
+  }
+  if (EDIT) yb += '<label class="add">Import subscriptions.csv <input type="file" id="ytFile" accept=".csv,text/csv"></label>';
+  T.youtube = tile("youtube", "YouTube", yb);
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) { return favFirst(x, y) || Math.abs(y.c || 0) - Math.abs(x.c || 0); });
   var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
-  html += card("w2", "Stocks · biggest moves first", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? '<div class="list">' + st.map(function (x) {
+  T.stocks = tile("stocks", "Stocks · biggest moves first", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
-    return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut">—</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
-  }).join("") + "</div>" : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
+    return row(x.key, "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
+  }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add);
 
-  $("grid").innerHTML = html;
+  $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
   renderHidden();
 }
+
+// Drag to rearrange: grab a box by its title in Edit mode
+var DRAG = null;
+$("grid").addEventListener("dragstart", function (e) {
+  var c = e.target.closest && e.target.closest("[data-id]");
+  if (!EDIT || !c) return;
+  DRAG = c.dataset.id; e.dataTransfer.effectAllowed = "move";
+  try { e.dataTransfer.setData("text/plain", DRAG); } catch (x) {}
+});
+$("grid").addEventListener("dragover", function (e) { if (DRAG) e.preventDefault(); });
+$("grid").addEventListener("dragend", function () { DRAG = null; });
+$("grid").addEventListener("drop", function (e) {
+  var c = e.target.closest("[data-id]");
+  if (!DRAG || !c) return;
+  e.preventDefault();
+  var o = orderIds(), from = DRAG, to = c.dataset.id;
+  DRAG = null;
+  var i = o.indexOf(from), j = o.indexOf(to);
+  if (i < 0 || j < 0 || i === j) return;
+  o.splice(i, 1); o.splice(j, 0, from);
+  LAY().order = o; persist(); render();
+});
 
 function renderHidden() {
   var keys = Object.keys(P.hidden).filter(function (k) { return P.hidden[k]; });
@@ -159,12 +220,12 @@ document.addEventListener("keydown", function (e) {
 
 // ---- Twitch (browser login, needs only the Client ID) ----
 var TW = null, TWC = false;
-function twToken() { try { return localStorage.getItem("sp_twitch"); } catch (e) { return null; } }
+function twToken() { try { var t = localStorage.getItem("sp_twitch"); if (t) return t; } catch (e) {} return P.tw || null; }
 function twBtn() { $("twBtn").textContent = twToken() ? "Disconnect" : "Connect"; }
 function twConnect() {
   location.href = "https://id.twitch.tv/oauth2/authorize?client_id=" + TWITCH_CLIENT_ID + "&redirect_uri=" + encodeURIComponent(TWITCH_REDIRECT) + "&response_type=token&scope=user:read:follows&state=twitch";
 }
-function twDisconnect() { try { localStorage.removeItem("sp_twitch"); } catch (e) {} TW = null; TWC = false; twBtn(); render(); }
+function twDisconnect() { try { localStorage.removeItem("sp_twitch"); } catch (e) {} delete P.tw; persist(); TW = null; TWC = false; twBtn(); render(); }
 function twGet(path, tok) {
   return fetch("https://api.twitch.tv/helix/" + path, { headers: { Authorization: "Bearer " + tok, "Client-Id": TWITCH_CLIENT_ID } })
     .then(function (r) { if (r.status === 401) throw new Error("expired"); return r.json(); });
@@ -172,6 +233,7 @@ function twGet(path, tok) {
 function fetchTwitch() {
   var tok = twToken(); twBtn();
   if (!tok || !window.TWITCH_CLIENT_ID) return;
+  if (P.tw !== tok) { P.tw = tok; persist(); }
   twGet("users", tok).then(function (u) { return twGet("streams/followed?first=100&user_id=" + u.data[0].id, tok); })
     .then(function (j) {
       TWC = true;
@@ -186,13 +248,17 @@ function openTwitch(login) {
 // ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
 var QUOTES = {}, QLOADED = false, QERR = "";
 function tk(id) { return id.indexOf(":") >= 0 ? id.split(":").pop() : id; }
-function fetchQuotes() {
-  if (!sb || !USER) return;
+var qBusy = false, qLast = 0;
+function fetchQuotes(force) {
+  if (!sb || !USER || qBusy) return;
+  if (!force && Date.now() - qLast < 45000) return;
+  qBusy = true; qLast = Date.now();
   var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
   sb.functions.invoke("quotes", { body: { symbols: list } }).then(function (r) {
+    qBusy = false;
     if (r.error) QERR = r.error.message;
     else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
-    else { QERR = ""; QUOTES = r.data; QLOADED = Object.keys(r.data).length > 0; }
+    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; }
     render();
   });
 }
@@ -203,7 +269,7 @@ function importSymbols(list) {
     if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
     delete P.hidden["s:" + v];
   });
-  persist(); render(); fetchQuotes();
+  persist(); render(); fetchQuotes(true);
 }
 document.addEventListener("submit", function (e) {
   if (e.target.id === "impStock") {
@@ -221,6 +287,52 @@ document.addEventListener("submit", function (e) {
     });
   }
 });
+
+// ---- YouTube (Takeout subscriptions.csv + channel feeds through a Supabase function) ----
+var YTV = [], YTERR = "", ytBusy = false;
+function fetchYT() {
+  if (!sb || !USER || !P.yt || !P.yt.ch || !P.yt.ch.length || ytBusy) return;
+  var chs = P.yt.ch.filter(function (c) { return shown("y:" + c.t); })
+    .sort(function (a, b) { return (P.fav["y:" + b.t] ? 1 : 0) - (P.fav["y:" + a.t] ? 1 : 0); }).slice(0, 60);
+  ytBusy = true;
+  sb.functions.invoke("feeds", { body: { yt: chs.map(function (c) { return c.id; }) } }).then(function (r) {
+    ytBusy = false;
+    if (r.error || !r.data || r.data._err) YTERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
+    else { YTERR = ""; YTV = r.data.videos || []; }
+    render();
+  });
+}
+function openYT(id) {
+  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a></p>');
+}
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "ytFile" || !e.target.files[0]) return;
+  var fr = new FileReader();
+  fr.onload = function () {
+    var ch = [];
+    String(fr.result).split(/\r?\n/).forEach(function (line) {
+      var c = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+      if (c.length >= 3 && /^UC[\w-]{20,}$/.test(c[0].trim())) ch.push({ id: c[0].trim(), t: c.slice(2).join(",").trim().replace(/^"|"$/g, "").replace(/""/g, '"') });
+    });
+    if (!ch.length) { alert("No channels found. Use the subscriptions.csv file from Google Takeout."); return; }
+    P.yt = { ch: ch }; persist(); render(); fetchYT();
+  };
+  fr.readAsText(e.target.files[0]);
+});
+
+// ---- Wallpaper follows your account ----
+function syncWall(clear) {
+  if (!sb || !USER) return;
+  var w = null; try { w = localStorage.getItem("sp_wall"); } catch (e) {}
+  if (clear || !w) sb.from("user_wallpaper").delete().eq("user_id", USER.id).then(function () {});
+  else sb.from("user_wallpaper").upsert({ user_id: USER.id, data: w, updated_at: new Date().toISOString() }).then(function () {});
+}
+function loadWall(u) {
+  sb.from("user_wallpaper").select("data").eq("user_id", u.id).maybeSingle().then(function (r) {
+    if (r.data && r.data.data) { try { localStorage.setItem("sp_wall", r.data.data); } catch (e) {} applyWall(); }
+    else { var w = null; try { w = localStorage.getItem("sp_wall"); } catch (e) {} if (w) syncWall(false); }
+  });
+}
 
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
@@ -268,7 +380,7 @@ document.addEventListener("submit", function (e) {
   if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
   if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
   delete P.hidden["s:" + v];
-  persist(); render(); fetchQuotes();
+  persist(); render(); fetchQuotes(true);
 });
 
 // ---- Events ----
@@ -278,7 +390,8 @@ document.addEventListener("click", function (e) {
   var a = b.dataset.a, k = b.dataset.k;
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
-  if (a === "open") { if (k.charAt(0) === "t") openTwitch(k.slice(2)); else openStock(k.slice(2)); return; }
+  if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (a === "open") { var ch = k.charAt(0); if (ch === "t") openTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -292,7 +405,7 @@ $("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "
 $("accent").oninput = function (e) { P.accent = e.target.value; persist(); applyTheme(); };
 $("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; persist(); applyTheme(); };
 $("wallFile").onchange = function (e) { if (e.target.files[0]) setWall(e.target.files[0]); };
-$("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall"); } catch (e) {} applyWall(); };
+$("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall"); } catch (e) {} applyWall(); syncWall(true); };
 
 // ---- Account and cloud sync (Supabase) ----
 var sb = null, USER = null, saveTimer;
@@ -315,13 +428,14 @@ function renderAccount() {
 function onUser(u) {
   USER = u; renderAccount();
   if (!u) return;
+  loadWall(u);
   sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
     if (r.error) { setMsg("Could not load your settings: " + r.error.message); return; }
     if (r.data && r.data.prefs && r.data.prefs.theme) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes();
+    fetchQuotes(); fetchTwitch(); fetchYT();
   });
 }
 function auth(fn) {
@@ -351,5 +465,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 120000);
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000);
 setInterval(tick, 30000);
