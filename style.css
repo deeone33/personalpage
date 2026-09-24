@@ -135,3 +135,6 @@ body.docked #dockGrip{display:block}
 body.resizing iframe{pointer-events:none}
 body.resizing{user-select:none}
 @media(max-width:820px){#dock{position:static;width:auto}body.docked{padding-left:0}body.docked #dockGrip{display:none}}
+.acct .row button{padding:1px 8px}
+.acct .add{display:flex;gap:6px;flex-wrap:wrap}
+.acct .add input{flex:1 1 90px;min-width:0}

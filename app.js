@@ -1,4 +1,4 @@
-var VERSION = 11;
+var VERSION = 12;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -183,9 +183,12 @@ function render() {
   if (NEWS.length) {
     var nowN = Date.now();
     var nn = NEWS.filter(function (n) { return shown("n:" + n.s); });
-    nn.sort(function (a, b) { return ((P.fav["n:" + b.s] && nowN - b.ts < 21600000) ? 1 : 0) - ((P.fav["n:" + a.s] && nowN - a.ts < 21600000) ? 1 : 0) || b.ts - a.ts; });
-    nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (nn.length ? lst("news", nn.slice(0, 80).map(function (n) {
-      return row("n:" + n.s, esc(n.t), n.s, '<span class="mut">' + ago(n.ts) + "</span>", "a:" + n.u);
+    NG = groupNews(nn);
+    var favG = function (g) { return g.some(function (n) { return P.fav["n:" + n.s] && nowN - n.ts < 21600000; }) ? 1 : 0; };
+    NG.sort(function (a, b) { return favG(b) - favG(a) || b[0].ts - a[0].ts; });
+    nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (NG.length ? lst("news", NG.slice(0, 80).map(function (g) {
+      var n = g[0], srcs = g.map(function (x) { return x.s; });
+      return row("n:" + n.s, esc(n.t), srcs.join(" · "), '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac">' + srcs.length + " sources</span>" : ""), "a:" + n.u);
     }).join(""), 6) : '<div class="empty">All news sources hidden. Restore them in Settings.</div>');
   } else {
     nb = lst("news", D.news.map(function (x) {
@@ -417,17 +420,20 @@ function loadWall(u) {
 
 // ---- News and Telegram (headlines through the Supabase "feeds" function) ----
 var GN = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US:en&q=site:";
+function siteUrls(d) {
+  return [GN + d + "+when:1d", "https://www.bing.com/news/search?format=rss&qft=sortbydate%3D%221%22&q=site%3A" + d, "https://news.search.yahoo.com/rss?p=site%3A" + d];
+}
 var NEWS_SRC = [
-  { name: "Aftonbladet", urls: ["https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt/", "https://news.google.com/rss/search?q=site:aftonbladet.se&hl=sv&gl=SE&ceid=SE:sv"] },
-  { name: "AP", urls: [GN + "apnews.com", "https://www.bing.com/news/search?format=rss&q=site%3Aapnews.com", "https://news.search.yahoo.com/rss?p=site%3Aapnews.com"] },
-  { name: "Reuters", urls: [GN + "reuters.com", "https://www.bing.com/news/search?format=rss&q=site%3Areuters.com", "https://news.search.yahoo.com/rss?p=site%3Areuters.com"] }
+  { name: "Aftonbladet", urls: ["https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt/", "https://news.google.com/rss/search?q=site:aftonbladet.se+when:1d&hl=sv&gl=SE&ceid=SE:sv"] },
+  { name: "AP", urls: siteUrls("apnews.com") },
+  { name: "Reuters", urls: siteUrls("reuters.com") }
 ];
 var TG_SRC = ["ClashReport"];
 var NEWS = [], TGP = [], NERR = "", nBusy = false;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
   nBusy = true;
-  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: NEWS_SRC.map(function (x) { return { id: x.name, urls: x.urls }; }), tg: TG_SRC } }).then(function (r) {
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: newsSrc().map(function (x) { return { id: x.name, urls: x.urls }; }), tg: tgSrc() } }).then(function (r) {
     nBusy = false;
     if (r.error || !r.data || r.data._err) NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
     else {
@@ -439,14 +445,104 @@ function fetchNews() {
   });
 }
 
+// ---- Same story from different sources (plain word matching, no AI) ----
+var NG = [];
+var STOP = {};
+("that this with from have will been were about after their there which would could says said into over more than what when they your also just amid " +
+ "och att som det för med har inte den till att ett var sig från vid men han hon eller kan ska efter under över mot mellan sedan blir blev finns fick").split(" ").forEach(function (w) { STOP[w] = 1; });
+function tokz(t) {
+  var s = t.replace(/\s[-|–—]\s[^-|–—]{2,40}$/, ""), set = [], strong = {};
+  s.split(/[^\p{L}\p{N}]+/u).forEach(function (w, i) {
+    if (!w) return;
+    var lw = w.toLowerCase();
+    if ((lw.length < 4 && !/^\d{2,}$/.test(lw)) || STOP[lw]) return;
+    set.push(lw);
+    if (/\d/.test(w) || (i > 0 && w.charAt(0) !== lw.charAt(0))) strong[lw] = 1;
+  });
+  return { set: set, strong: strong };
+}
+function groupNews(items) {
+  var tk = items.map(function (n) { return tokz(n.t); }), par = items.map(function (_, i) { return i; }), gs = items.map(function (n) { var o = {}; o[n.s] = 1; return o; });
+  function find(x) { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; }
+  for (var i = 0; i < items.length; i++) for (var j = i + 1; j < items.length; j++) {
+    if (items[i].s === items[j].s || Math.abs(items[i].ts - items[j].ts) > 64800000) continue;
+    var A = tk[i], B = tk[j], sh = 0, strongSh = 0;
+    A.set.forEach(function (w) { if (B.set.indexOf(w) >= 0) { sh++; if (A.strong[w] || B.strong[w]) strongSh++; } });
+    if (sh < 3 || strongSh < 1 || sh / Math.min(A.set.length, B.set.length) < 0.5) continue;
+    var ra = find(i), rb = find(j);
+    if (ra === rb || Object.keys(gs[ra]).some(function (k) { return gs[rb][k]; })) continue;   // never two headlines from one source in a group
+    par[ra] = rb; Object.keys(gs[ra]).forEach(function (k) { gs[rb][k] = 1; });
+  }
+  var by = {};
+  items.forEach(function (n, i) { var r = find(i); (by[r] = by[r] || []).push(n); });
+  return Object.keys(by).map(function (k) { return by[k].sort(function (a, b) { return b.ts - a.ts; }); });
+}
+
+// ---- Your own sources (Settings) ----
+function newsSrc() { return P.news || NEWS_SRC; }
+function tgSrc() { return P.tg || TG_SRC; }
+function ownSrc() {
+  if (!P.news) P.news = JSON.parse(JSON.stringify(NEWS_SRC));
+  if (!P.tg) P.tg = TG_SRC.slice();
+}
+function srcMsg(t) { $("srcMsg").textContent = t || ""; }
+function feedUrls(u) {
+  if (/^https:\/\//i.test(u)) {
+    try { var h = new URL(u); return h.pathname.length > 1 || h.search ? [u] : siteUrls(h.hostname.replace(/^www\./, "")); } catch (e) { return null; }
+  }
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(u) ? siteUrls(u.toLowerCase().replace(/^www\./, "")) : null;
+}
+function addNewsSrc(name, addr) {
+  var urls = feedUrls(addr);
+  if (!urls) { srcMsg("Enter a feed address starting with https:// or a website like reuters.com"); return false; }
+  ownSrc();
+  if (P.news.length >= 12) { srcMsg("That is the maximum (12 news sources)."); return false; }
+  var nm = name || addr.replace(/^https?:\/\//i, "").replace(/^www\./, "").split("/")[0];
+  if (P.news.some(function (x) { return x.name.toLowerCase() === nm.toLowerCase(); })) { srcMsg("You already have a source called " + nm + "."); return false; }
+  P.news.push({ name: nm, urls: urls });
+  srcMsg("Added " + nm + "."); return true;
+}
+function addTgSrc(v) {
+  var m = v.trim().match(/(?:t\.me\/(?:s\/)?)?@?([A-Za-z0-9_]{4,32})\/?$/);
+  if (!m) { srcMsg("Enter a channel name like ClashReport, or a t.me link."); return false; }
+  ownSrc();
+  if (P.tg.length >= 8) { srcMsg("That is the maximum (8 channels)."); return false; }
+  if (P.tg.some(function (x) { return x.toLowerCase() === m[1].toLowerCase(); })) { srcMsg("Already added."); return false; }
+  P.tg.push(m[1]); srcMsg("Added " + m[1] + "."); return true;
+}
+function delSrc(k) {
+  var p = k.split(":"), i = +p[1];
+  ownSrc();
+  if (p[0] === "n") P.news.splice(i, 1); else P.tg.splice(i, 1);
+  srcChanged();
+}
+function srcChanged() { persist(); NEWS = []; TGP = []; NERR = ""; renderSources(); render(); fetchNews(); }
+function renderSources() {
+  $("srcNews").innerHTML = newsSrc().map(function (x, i) {
+    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(hd(x.urls[0].replace(/^https?:\/\//, ""), 24)) + '</small></span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
+  }).join("") || '<div class="mut">No news sources.</div>';
+  $("srcTg").innerHTML = tgSrc().map(function (x, i) {
+    return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
+  }).join("") || '<div class="mut">No Telegram channels.</div>';
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id === "addNews") { e.preventDefault(); if (addNewsSrc($("newsName").value.trim(), $("newsUrl").value.trim())) { $("newsName").value = ""; $("newsUrl").value = ""; srcChanged(); } }
+  if (e.target.id === "addTg") { e.preventDefault(); if (addTgSrc($("tgIn").value)) { $("tgIn").value = ""; srcChanged(); } }
+});
+$("srcReset").onclick = function () { delete P.news; delete P.tg; srcMsg("Back to the default sources."); srcChanged(); };
+
 // ---- Details windows for news, Telegram and Gmail ----
 function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: "Europe/Tallinn", dateStyle: "medium", timeStyle: "short" }); }
 function openNews(u) {
-  var n = NEWS.filter(function (x) { return x.u === u; })[0];
+  var g = NG.filter(function (x) { return x.some(function (n) { return n.u === u; }); })[0];
+  var n = g ? g.filter(function (x) { return x.u === u; })[0] : NEWS.filter(function (x) { return x.u === u; })[0];
   if (!n) return;
+  var more = g && g.length > 1 ? "<h3>" + g.length + " sources report this</h3>" + g.map(function (x) {
+    return '<div class="mi"><a target="_blank" rel="noopener" href="' + esc(x.u) + '">' + esc(x.t) + '</a><small class="mut">' + esc(x.s) + " · " + when(x.ts) + "</small></div>";
+  }).join("") : "";
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
     (n.img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" src="' + esc(n.img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
-    '<p><a class="btn" target="_blank" rel="noopener" href="' + esc(n.u) + '">Read the full article</a></p>');
+    '<p><a class="btn" target="_blank" rel="noopener" href="' + esc(n.u) + '">Read the full article</a></p>' + more);
 }
 function openTG(u) {
   var g = TGP.filter(function (x) { return x.u === u; })[0];
@@ -627,6 +723,7 @@ document.addEventListener("click", function (e) {
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
+  if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
   if (a === "undock") { undock(k); return; }
   if (a === "mailread") { markRead(+k); return; }
@@ -682,7 +779,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources();
   });
 }
 function auth(fn) {
@@ -712,5 +809,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm();
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources();
 setInterval(tick, 30000);
