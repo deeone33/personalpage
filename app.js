@@ -1,4 +1,4 @@
-var VERSION = 19;
+var VERSION = 20;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -270,6 +270,8 @@ function render() {
     '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (P.notes && P.notes.length ? "<span>" + P.notes.length + "</span>" : "") + "</button>" +
     '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
       (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="setpanel">Settings</button></div>' : "") + "</div>" +
+    '<div class="dd"><button data-a="acctmenu2" class="ib' + (USER ? " on" : "") + '" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
+      (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
@@ -663,12 +665,24 @@ function clockText(a) {
 }
 var KIND = { t: "Timer", c: "Countdown", s: "Stopwatch" };
 function renderClocks() {
-  $("clocks").hidden = !alarms().length;
   $("clocks").innerHTML = alarms().map(function (a) {
     return '<div class="clk' + (a.done ? " done" : "") + '"><span class="mut">' + esc(a.label || KIND[a.k]) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
       (a.k !== "c" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸\uFE0E" : "▶\uFE0E") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
       '<button data-a="clrm" data-k="' + a.id + '" aria-label="Remove">✕</button></div>';
   }).join("");
+  positionClocks();
+}
+function positionClocks() {
+  var box = $("clocks"), chips = box.children, slots = ["mail", "live", "menu"].map(function (id) { return document.querySelector('[data-id="' + id + '"]'); }).filter(Boolean);
+  box.hidden = !chips.length;
+  if (!slots.length) return;
+  for (var i = 0; i < chips.length; i++) {
+    var slot = slots[i % slots.length], row = Math.floor(i / slots.length), chip = chips[i];
+    if (!slot) continue;
+    var r = slot.getBoundingClientRect(), h = chip.offsetHeight || 34;
+    chip.style.left = Math.round(r.left) + "px"; chip.style.width = Math.round(r.width) + "px";
+    chip.style.top = Math.round(r.top - (row + 1) * (h + 6)) + "px";
+  }
 }
 function startStopwatch() {
   if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
@@ -687,6 +701,7 @@ function tickClocks() {
   if (changed) { persist(); renderClocks(); }
 }
 setInterval(tickClocks, 1000);
+window.addEventListener("resize", positionClocks); window.addEventListener("scroll", positionClocks, true);
 function clockAct(a, k) {
   var list = alarms(), t = list.filter(function (x) { return x.id === k; })[0];
   if (a === "clplay" && t && !t.done) { audio(); if (t.st) { t.acc += Date.now() - t.st; t.st = 0; } else t.st = Date.now(); }
@@ -828,7 +843,7 @@ function convHtml() {
   var c = conv(), out = "—";
   if (RATES[c.from] && RATES[c.to]) out = fmtNum((c.amt * RATES[c.from]) / RATES[c.to]);
   return '<div class="mrow conv">' +
-    '<input type="number" id="convAmt" inputmode="decimal" step="any" min="0" value="' + esc(String(c.amt)) + '" aria-label="Amount">' +
+    '<input type="text" id="convAmt" inputmode="decimal" value="' + esc(String(c.amt)) + '" aria-label="Amount">' +
     '<select id="convFrom" aria-label="From currency">' + convOpts(c.from) + "</select>" +
     '<button data-a="convswap" aria-label="Swap currencies">⇄</button>' +
     '<select id="convTo" aria-label="To currency">' + convOpts(c.to) + "</select>" +
@@ -840,7 +855,7 @@ function fmtNum(n) {
 }
 document.addEventListener("input", function (e) {
   if (e.target.id !== "convAmt") return;
-  conv().amt = +e.target.value || 0; persist();
+  conv().amt = parseFloat(e.target.value.replace(",", ".")) || 0; persist();
   var n = $("convOut"); if (n) n.textContent = RATES[conv().from] && RATES[conv().to] ? fmtNum((conv().amt * RATES[conv().from]) / RATES[conv().to]) : "—";
 });
 document.addEventListener("change", function (e) {
@@ -954,6 +969,10 @@ document.addEventListener("click", function (e) {
   if (a === "clockmenu2") { e.stopPropagation(); audio(); MENU_OPEN = MENU_OPEN === "clock" ? "" : "clock"; render(); return; }
   if (a === "cogmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "cog" ? "" : "cog"; render(); return; }
   if (a === "opennotes") { openNotes(); return; }
+  if (a === "acctmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
+  if (a === "signin") { auth("signInWithPassword"); return; }
+  if (a === "signup") { auth("signUp"); return; }
+  if (a === "signout") { sb.auth.signOut(); MENU_OPEN = ""; return; }
   if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
@@ -997,7 +1016,8 @@ $("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall");
 // ---- Account and cloud sync (Supabase) ----
 var sb = null, USER = null, saveTimer;
 try { if (window.supabase && window.SUPABASE_URL) sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
-function setMsg(t) { $("acctMsg").textContent = t || ""; }
+var ACCTMSG = "";
+function setMsg(t) { ACCTMSG = t || ""; render(); }
 function persist() {
   save("sp_prefs", P);
   if (!sb || !USER) return;
@@ -1008,12 +1028,10 @@ function persist() {
   }, 600);
 }
 function renderAccount() {
-  $("acctOut").hidden = !!USER; $("acctIn").hidden = !USER;
-  $("acctMail").textContent = USER ? USER.email : "";
   $("who").textContent = USER ? " · signed in as " + USER.email : " · not signed in";
 }
 function onUser(u) {
-  USER = u; renderAccount();
+  USER = u; renderAccount(); render();
   if (!u) return;
   loadWall(u);
   sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
@@ -1027,7 +1045,7 @@ function onUser(u) {
 }
 function auth(fn) {
   if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
-  var c = { email: $("email").value.trim(), password: $("pass").value };
+  var c = { email: $("acctEmail").value.trim(), password: $("acctPass").value };
   if (!c.email || !c.password) { setMsg("Enter your email and password."); return; }
   if (fn === "signUp") c.options = { emailRedirectTo: location.href.split("#")[0] };
   setMsg("Working...");
@@ -1040,13 +1058,14 @@ function auth(fn) {
 function initAuth() {
   renderAccount();
   if (!sb) return;
-  $("signIn").onclick = function () { auth("signInWithPassword"); };
-  $("signUp").onclick = function () { auth("signUp"); };
-  $("signOut").onclick = function () { sb.auth.signOut(); };
   sb.auth.onAuthStateChange(function (ev, session) {
     var u = session ? session.user : null;
     if ((u && u.id) !== (USER && USER.id)) setTimeout(function () { onUser(u); }, 0);
   });
+}
+function acctHtml() {
+  if (USER) return '<div class="acctpop"><div>' + esc(USER.email) + '</div><button data-a="signout">Sign out</button></div>';
+  return '<div class="acctpop"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create account</button></div>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
 }
 
 $("ver").textContent = VERSION;

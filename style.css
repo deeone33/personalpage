@@ -230,3 +230,8 @@ header{align-items:flex-start}
 .menurow .dd:last-child .menu{left:auto;right:0}
 .menurow .menu{left:0;right:auto;top:calc(100% + 6px);z-index:31}
 .ib{padding:4px 7px}
+.acctpop{display:flex;flex-direction:column;gap:6px;padding:10px;min-width:190px}
+.acctpop input{font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.acctpop .acts{display:flex;gap:6px}
+.conv input[type=text]#convAmt{width:70px;-moz-appearance:textfield}
+.conv input[type=text]#convAmt::-webkit-inner-spin-button,.conv input[type=text]#convAmt::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
