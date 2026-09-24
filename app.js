@@ -1,4 +1,4 @@
-var VERSION = "7.1";
+var VERSION = 8;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -101,9 +101,15 @@ function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0)
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
 var ALL_IDS = ["weather", "gmail1", "gmail2", "live", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_W = { news: 2, telegram: 2, twitch: 2, youtube: 2, stocks: 2 };
+var DEF_C = { weather: 3, gmail1: 3, gmail2: 3, live: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var COMPACT = ["weather", "gmail1", "gmail2", "live"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
-function LAY() { if (!P.layout) P.layout = { order: [], w: {}, rows: {} }; return P.layout; }
+function LAY() {
+  if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
+  var L = P.layout;
+  if (!L.c) { L.c = {}; Object.keys(L.w || {}).forEach(function (k) { L.c[k] = L.w[k] * 3; }); }
+  return L;
+}
 function orderIds() {
   var o = LAY().order.filter(function (x) { return ALL_IDS.indexOf(x) >= 0; });
   ALL_IDS.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });
@@ -112,19 +118,24 @@ function orderIds() {
 function adjust(a, id, d) {
   var L = LAY();
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
-  else if (a === "w") L.w[id] = Math.max(1, Math.min(4, (L.w[id] || DEF_W[id] || 1) + d));
+  else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
 }
 function tile(id, title, body, click) {
-  var w = LAY().w[id] || DEF_W[id] || 1, t = "";
+  var c = LAY().c[id] || DEF_C[id] || 3, t = "", at = "", cp = COMPACT.indexOf(id) >= 0;
+  if (click) {
+    var pr = typeof click === "string" ? click.split(":") : ["weather"];
+    at = ' data-a="' + pr[0] + '"' + (pr[1] != null ? ' data-k="' + pr[1] + '"' : "") + ' tabindex="0" role="button"';
+  }
   if (EDIT) {
     var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
     t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
   }
-  return '<div class="card w' + w + (click ? " click" : "") + '" data-id="' + id + '"' + (click ? ' data-a="weather" tabindex="0" role="button" aria-label="Open Tallinn details"' : "") +
+  return '<div class="card c' + c + (cp ? " compact" : "") + (click ? " click" : "") + '" data-id="' + id + '"' + at +
     "><h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>" + t + body + "</div>";
 }
+function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + r * 36 + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
@@ -132,20 +143,27 @@ function render() {
   var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
-  T.weather = tile("weather", "Tallinn", '<div class="big">' + t + '°</div><span class="mut">' + esc(note) + "</span>", 1);
-  D.inbox.forEach(function (m) { T[m.id] = tile(m.id, m.name, '<div class="big">' + m.n + '</div><span class="mut">unread</span>'); });
+  T.weather = tile("weather", "Tallinn", '<div class="mrow">' + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 30) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
+  [0, 1].forEach(function (i) {
+    var cfg = P.mail && P.mail[i], m = MAIL[i], id = "gmail" + (i + 1), nm = (cfg && cfg.name) || D.inbox[i].name, body, click = 0;
+    if (!cfg || !cfg.url) body = '<div class="mrow"><span class="mut">Not connected. See Settings, Gmail accounts.</span></div>';
+    else if (!m) body = '<div class="mrow"><span class="mut">Loading (you need to be signed in)...</span></div>';
+    else if (m.error) body = '<div class="mrow"><span class="mut" title="' + esc(m.error) + '">' + esc(m.error.slice(0, 70)) + "</span></div>";
+    else { body = '<div class="mrow"><b class="big">' + m.unread + '</b><span class="mut">unread</span></div>'; click = "mail:" + i; }
+    T[id] = tile(id, esc(nm), body, click);
+  });
 
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  T.live = tile("live", "Live now", '<div class="big">' + tw.length + '</div><span class="mut">of your follows</span>');
+  T.live = tile("live", "Live now", '<div class="mrow"><b class="big">' + tw.length + '</b><span class="mut">of your follows</span></div>');
   var nb;
   if (NEWS.length) {
     var nowN = Date.now();
     var nn = NEWS.filter(function (n) { return shown("n:" + n.s); });
     nn.sort(function (a, b) { return ((P.fav["n:" + b.s] && nowN - b.ts < 21600000) ? 1 : 0) - ((P.fav["n:" + a.s] && nowN - a.ts < 21600000) ? 1 : 0) || b.ts - a.ts; });
     nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (nn.length ? lst("news", nn.slice(0, 80).map(function (n) {
-      return row("n:" + n.s, '<a class="lnk" href="' + esc(n.u) + '" target="_blank" rel="noopener">' + esc(n.t) + "</a>", n.s, '<span class="mut">' + ago(n.ts) + "</span>");
+      return row("n:" + n.s, esc(n.t), n.s, '<span class="mut">' + ago(n.ts) + "</span>", "a:" + n.u);
     }).join(""), 6) : '<div class="empty">All news sources hidden. Restore them in Settings.</div>');
   } else {
     nb = lst("news", D.news.map(function (x) {
@@ -156,7 +174,7 @@ function render() {
 
   var tp = TGP.filter(function (g) { return shown("g:" + g.s); });
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
-    return row("g:" + g.s, '<a class="lnk" href="' + esc(g.u) + '" target="_blank" rel="noopener">' + esc(g.t.length > 140 ? g.t.slice(0, 140) + "…" : g.t) + "</a>", g.s, '<span class="mut">' + ago(g.ts) + "</span>");
+    return row("g:" + g.s, esc(hd(g.t, 90)), g.s, '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u);
   }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>");
 
   T.twitch = tile("twitch", "Live on Twitch", (tw.length ? lst("twitch", tw.map(function (x) {
@@ -169,7 +187,10 @@ function render() {
   if (P.yt && P.yt.ch && P.yt.ch.length) {
     var now = Date.now();
     var vids = YTV.map(function (v) { return { id: v.id, t: v.t, n: v.n, ts: v.ts, key: "y:" + v.n, isNew: now - v.ts < 172800000 }; })
-      .filter(function (v) { return shown(v.key); });
+      .filter(function (v) { return shown(v.key) && now - v.ts < 2592000000; })
+      .sort(function (a, b) { return b.ts - a.ts; });
+    var per = {};
+    vids = vids.filter(function (v) { per[v.n] = (per[v.n] || 0) + 1; return per[v.n] <= 2; });
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
     yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") + (vids.length ? lst("youtube", vids.map(function (v) {
       return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), "v:" + v.id);
@@ -351,10 +372,11 @@ function loadWall(u) {
 }
 
 // ---- News and Telegram (headlines through the Supabase "feeds" function) ----
+var GN = "https://news.google.com/rss/search?hl=en-US&gl=US&ceid=US:en&q=site:";
 var NEWS_SRC = [
   { name: "Aftonbladet", urls: ["https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt/", "https://news.google.com/rss/search?q=site:aftonbladet.se&hl=sv&gl=SE&ceid=SE:sv"] },
-  { name: "AP", urls: ["https://news.google.com/rss/search?q=site:apnews.com&hl=en-US&gl=US&ceid=US:en"] },
-  { name: "Reuters", urls: ["https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en"] }
+  { name: "AP", urls: [GN + "apnews.com", "https://www.bing.com/news/search?format=rss&q=site%3Aapnews.com", "https://news.search.yahoo.com/rss?p=site%3Aapnews.com"] },
+  { name: "Reuters", urls: [GN + "reuters.com", "https://www.bing.com/news/search?format=rss&q=site%3Areuters.com", "https://news.search.yahoo.com/rss?p=site%3Areuters.com"] }
 ];
 var TG_SRC = ["ClashReport"];
 var NEWS = [], TGP = [], NERR = "", nBusy = false;
@@ -366,20 +388,92 @@ function fetchNews() {
     if (r.error || !r.data || r.data._err) NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
     else {
       NEWS = r.data.news || []; TGP = r.data.tg || [];
-      var got = {}; NEWS.forEach(function (n) { got[n.s] = 1; });
-      var miss = NEWS_SRC.filter(function (x) { return !got[x.name]; }).map(function (x) { return x.name; });
-      NERR = miss.length ? "no headlines from " + miss.join(", ") : "";
+      var ne = r.data.news_err || {};
+      NERR = Object.keys(ne).map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
     }
     render();
   });
 }
+
+// ---- Details windows for news, Telegram and Gmail ----
+function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: "Europe/Tallinn", dateStyle: "medium", timeStyle: "short" }); }
+function openNews(u) {
+  var n = NEWS.filter(function (x) { return x.u === u; })[0];
+  if (!n) return;
+  openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
+    (n.img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" src="' + esc(n.img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
+    '<p><a class="btn" target="_blank" rel="noopener" href="' + esc(n.u) + '">Read the full article</a></p>');
+}
+function openTG(u) {
+  var g = TGP.filter(function (x) { return x.u === u; })[0];
+  if (!g) return;
+  var media = g.vid ? '<video class="mvid" controls playsinline preload="metadata"' + (g.th ? ' poster="' + esc(g.th) + '"' : "") + ' src="' + esc(g.vid) + '"></video>'
+    : (g.img || g.th) ? '<img class="mimg" referrerpolicy="no-referrer" alt="" src="' + esc(g.img || g.th) + '">' : "";
+  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + "<p>" + esc(g.tx || g.t).replace(/\n/g, "<br>") + '</p><p><a class="btn" target="_blank" rel="noopener" href="' + esc(g.u) + '">Open on Telegram</a></p>');
+}
+var MAIL = [], mBusy = false;
+function fetchMail() {
+  if (!sb || !USER || !P.mail || mBusy) return;
+  var list = P.mail.map(function (c, i) { return c && c.url && c.t ? { i: i, url: c.url, t: c.t } : null; }).filter(Boolean);
+  if (!list.length) return;
+  mBusy = true;
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: list } }).then(function (r) {
+    mBusy = false;
+    if (r.error || !r.data || !r.data.mail) list.forEach(function (c) { MAIL[c.i] = { error: (r.error && r.error.message) || "no data" }; });
+    else r.data.mail.forEach(function (m, k) { MAIL[list[k].i] = m; });
+    render();
+  });
+}
+function openMail(i) {
+  var m = MAIL[i];
+  if (!m || m.error) return;
+  var nm = (P.mail[i] && P.mail[i].name) || "Gmail";
+  var rows = (m.items || []).map(function (x) {
+    return '<div class="mi"><div class="r2"><b>' + esc((x.from || "").replace(/<.*>/, "").trim() || x.from) + '</b><small class="mut">' + ago(x.ts) + "</small></div><div>" + esc(x.subject || "(no subject)") +
+      '</div><div class="mut sn">' + esc(x.snippet) + '</div><a class="btn" target="_blank" rel="noopener" href="' + esc(x.link) + '">Open in Gmail</a></div>';
+  }).join("");
+  openModal(nm + " · " + m.unread + " unread", rows || '<p class="mut">No unread mail.</p>');
+}
+function loadMailForm() {
+  var M = P.mail || [];
+  [0, 1].forEach(function (i) { var c = M[i] || {}; $("mn" + i).value = c.name || ""; $("mu" + i).value = c.url || ""; $("mt" + i).value = c.t || ""; });
+}
+$("mailSave").onclick = function () {
+  P.mail = [0, 1].map(function (i) { return { name: $("mn" + i).value.trim(), url: $("mu" + i).value.trim(), t: $("mt" + i).value.trim() }; });
+  persist(); MAIL = []; render(); fetchMail(); $("mailMsg").textContent = "Saved.";
+};
+
+// ---- Weather icons ----
+function wxIcon(code, day, size) {
+  var sun = '<circle cx="16" cy="16" r="5"/><path d="M16 4v3M16 25v3M4 16h3M25 16h3M7.5 7.5l2 2M22.5 22.5l2 2M7.5 24.5l2-2M22.5 9.5l2-2"/>';
+  var moon = '<path d="M24 20a9 9 0 1 1-11-13 7 7 0 0 0 11 13z"/>';
+  var cloud = '<path d="M9 22a5 5 0 0 1 0-10 7 7 0 0 1 13.5-1.5A5 5 0 0 1 23 22z"/>';
+  var g;
+  if (code === 0) g = day ? sun : moon;
+  else if (code <= 2) g = '<g transform="translate(-5 -6) scale(.65)">' + (day ? sun : moon) + "</g>" + '<g transform="translate(3 3) scale(.85)">' + cloud + "</g>";
+  else if (code === 3) g = cloud;
+  else if (code === 45 || code === 48) g = cloud + '<path d="M8 26h16M11 29h10"/>';
+  else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) g = cloud + '<path d="M11 25l-1.5 4M16 25l-1.5 4M21 25l-1.5 4"/>';
+  else if ((code >= 71 && code <= 77) || code === 85 || code === 86) g = cloud + '<path d="M11 26h.01M16 28h.01M21 26h.01M13.5 29h.01M18.5 26h.01"/>';
+  else g = cloud + '<path d="M17 21l-4 5h4l-2 5"/>';
+  return '<svg viewBox="0 0 32 32" width="' + (size || 24) + '" height="' + (size || 24) + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + g + "</svg>";
+}
+
+// ---- Tells you when a new version of the site has been uploaded ----
+function checkUpdate() {
+  fetch("app.js?ts=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.text(); }).then(function (t) {
+    var m = t.match(/var VERSION = ([^;]+);/);
+    if (m && m[1].replace(/"/g, "") !== String(VERSION)) $("upd").hidden = false;
+  }).catch(function () {});
+}
+$("updBtn").onclick = function () { location.reload(); };
 
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
 function wxText(c) { return WC[c] || "Unknown"; }
 function fetchWeather() {
-  fetch("https://api.open-meteo.com/v1/forecast?latitude=59.437&longitude=24.7536&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=Europe%2FTallinn&forecast_days=7")
+  fetch("https://api.open-meteo.com/v1/forecast?latitude=59.437&longitude=24.7536&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=Europe%2FTallinn&forecast_days=7")
     .then(function (r) { return r.json(); })
     .then(function (j) { if (j && j.current) { WX = j; render(); } })
     .catch(function () {});
@@ -392,7 +486,7 @@ function openWeather() {
   for (var n = i; n < i + 12 && n < h.time.length; n++) hrs += '<div class="hr"><b>' + h.time[n].slice(11, 16) + "</b><span>" + Math.round(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
   var days = d.time.map(function (t, k) {
     var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
-    return '<div class="row"><span>' + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + d.precipitation_sum[k].toFixed(1) + " mm · " + Math.round(d.temperature_2m_min[k]) + "° / <b>" + Math.round(d.temperature_2m_max[k]) + "°</b></span></div>";
+    return '<div class="row"><span>' + wxIcon(d.weather_code[k], 1, 20) + " " + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + d.precipitation_sum[k].toFixed(1) + " mm · " + Math.round(d.temperature_2m_min[k]) + "° / <b>" + Math.round(d.temperature_2m_max[k]) + "°</b></span></div>";
   }).join("");
   openModal("Tallinn · " + wxText(c.weather_code),
     '<div class="big">' + Math.round(c.temperature_2m) + '°</div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
@@ -431,7 +525,8 @@ document.addEventListener("click", function (e) {
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
-  if (a === "open") { var ch = k.charAt(0); if (ch === "t") openTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else openStock(k.slice(2)); return; }
+  if (a === "mail") { openMail(+k); return; }
+  if (a === "open") { var ch = k.charAt(0); if (ch === "t") openTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -475,7 +570,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm();
   });
 }
 function auth(fn) {
@@ -505,5 +600,5 @@ function initAuth() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000);
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 120000); setInterval(checkUpdate, 300000); loadMailForm();
 setInterval(tick, 30000);
