@@ -1,4 +1,4 @@
-var VERSION = 7;
+var VERSION = "7.1";
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -311,7 +311,7 @@ function fetchYT() {
   var chs = P.yt.ch.filter(function (c) { return shown("y:" + c.t); })
     .sort(function (a, b) { return (P.fav["y:" + b.t] ? 1 : 0) - (P.fav["y:" + a.t] ? 1 : 0); }).slice(0, 60);
   ytBusy = true;
-  sb.functions.invoke("feeds", { body: { yt: chs.map(function (c) { return c.id; }) } }).then(function (r) {
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { yt: chs.map(function (c) { return c.id; }) } }).then(function (r) {
     ytBusy = false;
     if (r.error || !r.data || r.data._err) YTERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
     else { YTERR = ""; YTV = r.data.videos || []; }
@@ -361,7 +361,7 @@ var NEWS = [], TGP = [], NERR = "", nBusy = false;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
   nBusy = true;
-  sb.functions.invoke("feeds", { body: { news: NEWS_SRC.map(function (x) { return { id: x.name, urls: x.urls }; }), tg: TG_SRC } }).then(function (r) {
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: NEWS_SRC.map(function (x) { return { id: x.name, urls: x.urls }; }), tg: TG_SRC } }).then(function (r) {
     nBusy = false;
     if (r.error || !r.data || r.data._err) NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
     else {
