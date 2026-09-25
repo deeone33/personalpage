@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="style.css">
 </head><body>
 <div id="wall"></div>
-<div id="wallDragOverlay" hidden><span>Drag to move the wallpaper. Press "Done" in Settings when finished.</span></div>
+<div id="wallDragOverlay" hidden><div class="wdrow"><span>Drag to move the wallpaper.</span><button id="wallDoneBtn">Done</button></div></div>
 <aside id="dock" hidden aria-label="Docked players"></aside>
 <div id="dockGrip" title="Drag to resize the players"></div>
 <main id="app">
@@ -35,9 +35,19 @@
 
   <div class="setgrp">
     <h4>Wallpaper</h4>
-    <label>Image <span><input type="file" id="wallFile" accept="image/*"> <button id="wallClear">Remove</button></span></label>
-    <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option></select></label>
+    <label>Image <span><label class="filebtn" for="wallFile">Choose image</label><input type="file" id="wallFile" accept="image/*" class="vis-hidden"> <button id="wallClear">Remove</button></span></label>
+    <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
     <div class="mut sn">Press Reposition, then drag the screen to move the image. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
+  </div>
+
+  <div class="setgrp">
+    <h4>Account</h4>
+    <div id="pwSignedIn">
+      <label>New password <input type="password" id="pwNew" placeholder="6+ characters" autocomplete="new-password"></label>
+      <button id="pwSave">Update password</button>
+      <div id="pwMsg" class="mut sn" role="status"></div>
+    </div>
+    <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
   </div>
 
   <div class="setgrp">
@@ -76,6 +86,21 @@
     </div>
     <button id="srcReset">Back to default sources</button>
     <div id="srcMsg" class="mut" role="status"></div>
+  </div>
+
+  <div class="setgrp">
+    <h4>Stocks</h4>
+    <div class="sub">
+      <form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>
+      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
+      <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
+    </div>
+  </div>
+
+  <div class="setgrp">
+    <h4>YouTube</h4>
+    <label>Subscriptions <span><label class="filebtn" for="ytFile">Choose subscriptions.csv</label><input type="file" id="ytFile" accept=".csv,text/csv" class="vis-hidden"></span></label>
+    <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
   </div>
 
   <div class="setgrp">

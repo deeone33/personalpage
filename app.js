@@ -1,4 +1,4 @@
-var VERSION = 35;
+var VERSION = 36;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -82,10 +82,10 @@ function applyWall() {
   var w = null;
   try { w = localStorage.getItem("sp_wall"); } catch (e) {}
   $("wall").style.backgroundImage = w ? "url(" + w + ")" : "none";
-  var pos = wallPos();
-  $("wall").style.backgroundSize = (P.wallFit === "contain" ? "contain" : "cover");
+  var pos = wallPos(), fit = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
+  $("wall").style.backgroundSize = fit;
   $("wall").style.backgroundPosition = pos.x + "% " + pos.y + "%";
-  var sel = $("wallFit"); if (sel) sel.value = P.wallFit === "contain" ? "contain" : "cover";
+  var sel = $("wallFit"); if (sel) sel.value = fit;
 }
 function wallPos() { return (P.wallPos && typeof P.wallPos.x === "number") ? P.wallPos : { x: 50, y: 50 }; }
 var REPOS = false, reposStart = null;
@@ -97,6 +97,7 @@ function toggleRepos() {
 (function () {
   var ov = $("wallDragOverlay");
   ov.addEventListener("pointerdown", function (e) {
+    if (e.target.closest && e.target.closest("#wallDoneBtn")) return;
     reposStart = { x: e.clientX, y: e.clientY, pos: wallPos() };
     try { ov.setPointerCapture(e.pointerId); } catch (ex) {}
   });
@@ -110,6 +111,17 @@ function toggleRepos() {
   ov.addEventListener("pointerup", endDrag); ov.addEventListener("pointercancel", endDrag);
 })();
 $("wallReposBtn").onclick = toggleRepos;
+$("wallDoneBtn").onclick = function (e) { e.stopPropagation(); if (REPOS) toggleRepos(); };
+$("pwSave").onclick = function () {
+  if (!sb || !USER) return;
+  var v = $("pwNew").value;
+  if (v.length < 6) { $("pwMsg").textContent = "Use at least 6 characters."; return; }
+  $("pwMsg").textContent = "Working...";
+  sb.auth.updateUser({ password: v }).then(function (r) {
+    $("pwMsg").textContent = r.error ? r.error.message : "Password updated.";
+    if (!r.error) $("pwNew").value = "";
+  });
+};
 $("wallFit").onchange = function (e) { P.wallFit = e.target.value; persist(); applyWall(); };
 $("wallReset").onclick = function () { P.wallPos = { x: 50, y: 50 }; persist(); applyWall(); };
 $("volSlider").oninput = function (e) { P.vol = +e.target.value; persist(); };
@@ -287,9 +299,8 @@ function render() {
   } else {
     var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
     yb = lst("youtube", yt.map(function (v) { return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>"); }).join("")) +
-      '<div class="empty">Sample videos. In Edit mode, import your subscriptions.csv from Google Takeout.</div>';
+      '<div class="empty">Sample videos. Sign in, then import your subscriptions.csv from Google Takeout in Settings.</div>';
   }
-  if (EDIT) yb += '<label class="add">Import subscriptions.csv <input type="file" id="ytFile" accept=".csv,text/csv"></label>';
   T.youtube = tile("youtube", "YouTube", yb);
 
   var SL = P.stocks || D.stocks;
@@ -302,7 +313,6 @@ function render() {
       return SS === "up" ? b - a : SS === "down" ? a - b : Math.abs(b) - Math.abs(a);
     });
   var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>";
-  var add = EDIT ? '<form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form><form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form><form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>' : "";
   var IC = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
   T.menu = tile("menu", "", '<div class="mrow menurow">' +
     '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
@@ -316,7 +326,7 @@ function render() {
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0;
     return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
-  }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add, 0, ctlS);
+  }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
   var pp = pairPct();
   var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
@@ -1012,6 +1022,12 @@ function cityGo() {
     }).join("") : '<p class="mut">No city found.</p>';
   }).catch(function () { $("cityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
 }
+var searchTimers = {};
+function debounced(id, fn) { clearTimeout(searchTimers[id]); searchTimers[id] = setTimeout(fn, 300); }
+document.addEventListener("input", function (e) {
+  if (e.target.id === "cityIn" && e.target.value.trim().length >= 2) debounced("cityIn", cityGo);
+  else if (e.target.id === "locIn" && e.target.value.trim().length >= 2) debounced("locIn", locGo);
+});
 document.addEventListener("keydown", function (e) {
   if (e.key === "Enter") {
     if (e.target.id === "cityIn") cityGo();
@@ -1102,6 +1118,16 @@ document.addEventListener("click", function (e) {
   if (a === "acctmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "signin") { auth("signInWithPassword"); return; }
   if (a === "signup") { auth("signUp"); return; }
+  if (a === "forgotpw") {
+    if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
+    var email = $("acctEmail").value.trim();
+    if (!email) { setMsg("Enter your email above, then press Forgot password again."); return; }
+    setMsg("Sending reset email...");
+    sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split("#")[0] }).then(function (r) {
+      setMsg(r.error ? r.error.message : "Check your email for a reset link.");
+    });
+    return;
+  }
   if (a === "signout") {
     if (sb) sb.auth.signOut();
     try { localStorage.removeItem("sp_prefs"); localStorage.removeItem("sp_wall"); localStorage.removeItem("sp_twitch"); } catch (ex) {}
@@ -1169,6 +1195,8 @@ function persist() {
 }
 function renderAccount() {
   $("who").textContent = USER ? " · signed in as " + USER.email : " · not signed in";
+  $("pwSignedIn").hidden = !USER;
+  $("pwSignedOut").hidden = !!USER;
 }
 function onUser(u) {
   USER = u; renderAccount(); render();
@@ -1205,7 +1233,7 @@ function initAuth() {
 }
 function acctHtml() {
   if (USER) return '<div class="menu acctpop" role="menu"><div class="mut sn">' + esc(USER.email) + '</div><button role="menuitem" data-a="signout">Sign out</button></div>';
-  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
+  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div><button class="lnk2" data-a="forgotpw">Forgot password?</button>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
 }
 
 $("ver").textContent = VERSION;
