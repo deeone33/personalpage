@@ -1,4 +1,4 @@
-var VERSION = 38;
+var VERSION = 39;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -319,7 +319,7 @@ function render() {
       (MENU_OPEN === "clock" ? '<div class="menu" role="menu"><button role="menuitem" data-a="clockmenu" data-k="t">Timer</button><button role="menuitem" data-a="clockmenu" data-k="c">Countdown</button><button role="menuitem" data-a="clockmenu" data-k="s">Stopwatch</button></div>' : "") + "</div>" +
     '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (P.notes && P.notes.length ? "<span>" + P.notes.length + "</span>" : "") + "</button>" +
     '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
-      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="setpanel">Settings</button></div>' : "") + "</div>" +
+      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
@@ -1141,6 +1141,8 @@ document.addEventListener("click", function (e) {
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
+  if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
+  if (a === "helpjump") { var sec = $("help-" + k); if (sec) sec.scrollIntoView({ block: "start" }); return; }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
@@ -1230,6 +1232,46 @@ function initAuth() {
     var u = session ? session.user : null;
     if ((u && u.id) !== (USER && USER.id)) setTimeout(function () { onUser(u); }, 0);
   });
+}
+function openHelp() {
+  var toc = [
+    ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
+    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["convert", "Currency converter"],
+    ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
+    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["account", "Account &amp; privacy"]
+  ];
+  var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
+    toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
+
+  html += '<h3 id="help-signin">Signing in</h3><p>Everything except the sample content needs an account. Click the person icon in the menu box, then Sign in or Create account. Once you\'re signed in, your layout, colors, sources, stocks and connections save to your account and follow you to any device. Signing out clears the copy saved in that browser, so a shared computer is left clean.</p>';
+
+  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>These are two separate settings. The <b>weather tile</b> has its own city: click the tile, search, and press "Use for the tile". The <b>Location</b> setting (Settings &rarr; Location &amp; alarms &rarr; Change) only controls the place name and timezone shown next to the date and time at the top &mdash; it does not change the weather. Both searches suggest cities as you type, from 2 letters.</p>';
+
+  html += '<h3 id="help-mail">Mail (Gmail)</h3><p>Each inbox needs a small script deployed once, per Google account, since there is no simple sign-in option without Google reviewing the app first (see the note at the end of this section).</p><ol><li>Go to script.google.com, signed in as the Gmail account you want to show, and start a new project.</li><li>Paste in the code from <code>gmail-apps-script.gs</code> (ask if you need it re-sent).</li><li>Deploy &rarr; New deployment &rarr; Web app. Execute as <b>Me</b>, access <b>Anyone</b>.</li><li>Open the web app address once in your browser to get a one-time token &mdash; copy it immediately, it is not shown again.</li><li>In Settings &rarr; Connections, paste a name, the address and the token, then Save.</li></ol><p class="mut">This is the clunkiest part of the setup. A one-click "Sign in with Google" is possible, but Google treats Gmail access as sensitive and limits an unverified app to 100 people with weekly re-approval &mdash; a bigger project for later if this grows past a small group.</p>';
+
+  html += '<h3 id="help-stocks">Stocks</h3><p>Settings &rarr; Stocks: add one symbol at a time (e.g. <code>NASDAQ:NVDA</code>), paste a TradingView export, or paste a link to a shared TradingView watchlist. Sort by biggest mover, most up, most down or name from the tile itself. Prices come from free sources, so a few unusual tickers may show "n/a" &mdash; clicking one still opens a live chart.</p>';
+
+  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Settings &rarr; News &amp; Telegram sources: add a feed address, or just a website like <code>reuters.com</code> and it searches that site\'s news. Telegram channels take a name or a t.me link. Both tiles have a Sources button to temporarily hide one without removing it. Matching headlines from different sources merge into one row with a source count.</p>';
+
+  html += '<h3 id="help-twitch">Twitch</h3><p>Settings &rarr; Connections &rarr; Twitch &rarr; Connect, and approve access to your follows. The tile then shows who is live, sortable by viewers, name or category, with a category filter. Click a streamer to watch inside the page, or dock it to the side so it keeps playing while you use the rest of the site.</p>';
+
+  html += '<h3 id="help-youtube">YouTube</h3><p>There is no official way to read your personal recommendations, so this shows new uploads from your subscriptions instead. Export subscriptions.csv from Google Takeout, then choose it in Settings &rarr; YouTube. It keeps the last 30 days and at most 2 videos per channel.</p>';
+
+  html += '<h3 id="help-convert">Currency converter</h3><p>Type an amount, pick the two currencies (including a few major cryptocurrencies), and use the swap button to flip them. This one works even signed out, since it talks to its price sources directly rather than through the shared account.</p>';
+
+  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>The clock icon in the menu box offers all three. A timer or countdown rings repeatedly until you press Stop or remove it, so it will not go unnoticed. Set the volume in Settings &rarr; Location &amp; alarms.</p>';
+
+  html += '<h3 id="help-notes">Notes</h3><p>The notepad icon keeps a simple dated list &mdash; add, review, or delete. They stay until you remove them.</p>';
+
+  html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Settings &rarr; Wallpaper: choose an image, then pick Fill, Fit or Original size. Press Reposition to drag it into place, then Done.</p>';
+
+  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p>Settings &rarr; Appearance covers theme, accent and every color individually, plus overall text size. Press Edit (cogwheel menu) to rearrange: drag a box by its title, use the arrow buttons to reorder, the W&minus;/W+ buttons to resize, T&minus;/T+ for that box\'s own text size, and H&minus;/H+ for a list\'s visible rows. Convert and Menu share a drag handle between them instead.</p>';
+
+  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or YouTube video and press "Dock on the left" &mdash; up to 3 at once, resizable by dragging the edge of the dock, while you keep reading everything else.</p>';
+
+  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Settings &rarr; Account lets you change your password once signed in. "Forgot password?" on the sign-in popover emails a reset link. Your data is private to your account; nobody else who uses this page can see it.</p>';
+
+  openModal("Help", html);
 }
 function acctHtml() {
   if (USER) return '<div class="menu acctpop" role="menu"><div class="mut sn">' + esc(USER.email) + '</div><button role="menuitem" data-a="signout">Sign out</button></div>';
