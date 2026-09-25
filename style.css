@@ -240,3 +240,9 @@ header{align-items:flex-start}
 .acctpop .acts button{flex:1;text-align:center;background:var(--ac);color:var(--acfg);border-color:var(--ac);padding:5px 6px;border-radius:7px;font-size:12px;font-weight:600}
 .acctpop>.mut{padding:2px 2px 0;font-size:12px}
 .acctpop>button{text-align:center;background:var(--ac);color:var(--acfg);border-color:var(--ac);padding:5px 6px;border-radius:7px;font-size:12px;font-weight:600}
+.pairwrap{grid-column:span 6;display:flex;gap:0;align-items:stretch;min-width:0}
+.pairwrap>.card{min-width:0}
+.paird{flex:0 0 18px;align-self:stretch;background:transparent;border:0;border-radius:8px;color:var(--mut);cursor:ew-resize;touch-action:none;font-size:14px;letter-spacing:-2px}
+.paird:hover,.paird:focus-visible{color:var(--ac);background:var(--card)}
+body.resizing{user-select:none}
+@media(max-width:820px){.pairwrap{grid-column:auto;flex-wrap:wrap}.pairwrap>.card,.pairwrap .paird{flex-basis:100% !important}.paird{display:none}}

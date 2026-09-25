@@ -1,4 +1,4 @@
-var VERSION = 25;
+var VERSION = 26;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -141,13 +141,7 @@ function orderIds() {
 function adjust(a, id, d) {
   var L = LAY();
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
-  else if (a === "w") {
-    if (id === "live" || id === "menu") {
-      var other = id === "live" ? "menu" : "live", tot = (L.c.live || DEF_C.live) + (L.c.menu || DEF_C.menu);
-      L.c[id] = Math.max(1, Math.min(tot - 1, (L.c[id] || DEF_C[id]) + d));
-      L.c[other] = tot - L.c[id];
-    } else L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
-  }
+  else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
   else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
@@ -160,7 +154,8 @@ function tile(id, title, body, click, hx) {
   }
   if (EDIT) {
     var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
-    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + bt("w", -1, "Narrower") + bt("w", 1, "Wider") + bt("f", -1, "Text −") + bt("f", 1, "Text +") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
+    var noW = id === "live" || id === "menu";
+    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + (noW ? "" : bt("w", -1, "Narrower") + bt("w", 1, "Wider")) + bt("f", -1, "Text −") + bt("f", 1, "Text +") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
@@ -176,6 +171,7 @@ function ico(id, logo) {
 }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
+function pairPct() { var p = P.layout && P.layout.pairPct; return p == null ? 65 : p; }
 function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + Math.round(r * 36 * fsOf(id)) + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
@@ -283,6 +279,14 @@ function render() {
     var c = x.c, up = c >= 0;
     return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add, 0, ctlS);
+
+  var pp = pairPct();
+  var liveBox = T.live.replace('style="--fs:', 'style="flex:0 0 calc(' + pp + '% - 9px);--fs:');
+  var menuBox = T.menu.replace('style="--fs:', 'style="flex:0 0 calc(' + (100 - pp) + '% - 9px);--fs:');
+  T.live = '<div class="pairwrap">' + liveBox +
+    (EDIT ? '<button class="paird" data-a="paird" title="Drag to resize" aria-label="Resize Convert and Menu" role="separator" aria-orientation="vertical" tabindex="0">⋮</button>' : "") +
+    menuBox + "</div>";
+  T.menu = "";
 
   $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
   renderHidden();
@@ -923,9 +927,17 @@ function cityGo() {
   }).catch(function () { $("cityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
 }
 document.addEventListener("keydown", function (e) {
-  if (e.key !== "Enter") return;
-  if (e.target.id === "cityIn") cityGo();
-  else if (e.target.id === "acctEmail" || e.target.id === "acctPass") auth("signInWithPassword");
+  if (e.key === "Enter") {
+    if (e.target.id === "cityIn") cityGo();
+    else if (e.target.id === "acctEmail" || e.target.id === "acctPass") auth("signInWithPassword");
+    return;
+  }
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && e.target.closest && e.target.closest('[data-a="paird"]')) {
+    e.preventDefault();
+    P.layout = P.layout || {};
+    P.layout.pairPct = Math.max(20, Math.min(80, pairPct() + (e.key === "ArrowLeft" ? -2 : 2)));
+    persist(); render();
+  }
 });
 function cityAct(a, k) {
   var cur = WXM && WXM.c;
@@ -958,6 +970,30 @@ document.addEventListener("submit", function (e) {
   if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
   delete P.hidden["s:" + v];
   persist(); render(); fetchQuotes(true);
+});
+
+document.addEventListener("pointerdown", function (e) {
+  var g = e.target.closest && e.target.closest('[data-a="paird"]');
+  if (!g) return;
+  e.preventDefault();
+  var wrap = g.closest(".pairwrap");
+  if (!wrap) return;
+  var cards = wrap.querySelectorAll(":scope > .card");
+  if (cards.length < 2) return;
+  var r = wrap.getBoundingClientRect(), pct = pairPct();
+  document.body.classList.add("resizing");
+  function mv(ev) {
+    var x = ev.clientX - r.left;
+    pct = Math.max(20, Math.min(80, Math.round((x / r.width) * 100)));
+    cards[0].style.flex = "0 0 calc(" + pct + "% - 9px)";
+    cards[1].style.flex = "0 0 calc(" + (100 - pct) + "% - 9px)";
+  }
+  function up() {
+    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+    document.body.classList.remove("resizing");
+    P.layout = P.layout || {}; P.layout.pairPct = pct; persist(); render();
+  }
+  window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
 });
 
 // ---- Events ----
