@@ -1,4 +1,4 @@
-var VERSION = 21;
+var VERSION = 22;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -118,7 +118,7 @@ function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0)
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_C = { weather: 3, mail: 3, live: 3, menu: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() {
@@ -224,9 +224,9 @@ function render() {
   var twv = (tcat ? tw.filter(function (x) { return (x.sub || "?") === tcat; }) : tw.slice()).sort(function (a, b) {
     return favFirst(a, b) || (TS === "name" ? String(a.name || a.id).toLowerCase().localeCompare(String(b.name || b.id).toLowerCase()) : TS === "cat" ? String(a.sub || "").localeCompare(String(b.sub || "")) || b.v - a.v : b.v - a.v);
   });
-  var ctlT = '<select data-s="sort:twitch" aria-label="Sort streams">' + opts([["viewers", "Viewers"], ["name", "Name"], ["cat", "Category"]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
+  var ctlT = '<select data-s="sort:twitch" aria-label="Sort streams">' + opts([["viewers", "Views"], ["name", "Name"], ["cat", "Cat."]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
     Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select>";
-  T.twitch = tile("twitch", "Live on Twitch", (twv.length ? lst("twitch", twv.map(function (x) {
+  T.twitch = tile("twitch", "Twitch", (twv.length ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
   }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
@@ -734,7 +734,6 @@ function startClock(kind) {
   try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
   closeModal(); renderClocks();
 }
-function updateNotesBtn() { $("notesN").textContent = P.notes && P.notes.length ? P.notes.length : ""; }
 function openNotes() {
   var N = (P.notes || []).slice().sort(function (a, b) { return b.ts - a.ts; });
   openModal("Notes (" + N.length + ")", '<textarea id="noteIn" rows="3" placeholder="Write a note..."></textarea><p><button class="pri" data-a="noteadd">Add note</button></p>' +
@@ -745,7 +744,7 @@ function noteAct(a, k) {
     var v = $("noteIn").value.trim(); if (!v) return;
     (P.notes = P.notes || []).push({ id: "n" + Date.now().toString(36), t: v, ts: Date.now() });
   } else P.notes = (P.notes || []).filter(function (n) { return n.id !== k; });
-  persist(); updateNotesBtn(); openNotes();
+  persist(); render(); openNotes();
 }
 var MENU_OPEN = "";
 function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } var f = $("filtNews"); if (f) f.hidden = true; }
@@ -1042,7 +1041,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); updateNotesBtn(); fetchWeather();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); fetchWeather();
   });
 }
 function auth(fn) {
@@ -1073,5 +1072,5 @@ function acctHtml() {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000); fetchRates(); setInterval(fetchRates, 300000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks(); updateNotesBtn();
+fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks();
 setInterval(tick, 30000);

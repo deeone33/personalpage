@@ -204,7 +204,6 @@ body.editing #cogBtn{border-color:var(--ac)}
 header{align-items:flex-start}
 #clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:9;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(90vw,280px)}
 #clocks[hidden]{display:none}
-.conv{overflow:hidden}
 .conv input{font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 6px;flex:none;width:56px;min-width:0}
 .conv input[type=number]{-moz-appearance:textfield}
 .conv input[type=number]::-webkit-inner-spin-button,.conv input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -233,6 +232,10 @@ header{align-items:flex-start}
 .menurow .dd:last-child .menu{left:auto;right:0}
 .menurow .menu{left:0;right:auto;top:calc(100% + 6px);z-index:31}
 .ib{padding:4px 7px}
-.acctpop{min-width:190px}
-.acctpop input{width:100%}
+.acctpop{min-width:210px;gap:8px;padding:12px}
+.acctpop input{width:100%;font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;box-sizing:border-box}
+.acctpop input:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
 .acctpop .acts{display:flex;gap:6px}
+.acctpop .acts button{flex:1;text-align:center;background:var(--ac);color:var(--acfg);border-color:var(--ac);padding:7px 8px;border-radius:8px;font-weight:600}
+.acctpop>.mut{padding:2px 2px 0}
+.acctpop>button{text-align:center;background:var(--ac);color:var(--acfg);border-color:var(--ac);padding:7px 8px;border-radius:8px;font-weight:600}
