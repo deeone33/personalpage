@@ -197,12 +197,13 @@ body.editing #cogBtn{border-color:var(--ac)}
 .mailrow[data-a]{cursor:pointer}
 .mailrow[data-a]:hover{color:var(--ac)}
 .mrn{color:var(--mut);flex:none;min-width:52px}
-.menurow{justify-content:center;gap:6px}
+.menurow{justify-content:center;gap:6px;flex-wrap:wrap}
 .menurow .dd{position:static}
 .menurow .menu{left:0;right:auto;top:calc(100% + 6px)}
 .ib.on{border-color:var(--ac);color:var(--ac)}
 header{align-items:flex-start}
-#clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:9;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(90vw,280px)}
+#clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;z-index:9;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;pointer-events:none}
+#clocks .clk{pointer-events:auto}
 #clocks[hidden]{display:none}
 .conv input{font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 6px;flex:none;width:56px;min-width:0}
 .conv input[type=number]{-moz-appearance:textfield}

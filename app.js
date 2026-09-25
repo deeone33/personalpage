@@ -1,4 +1,4 @@
-var VERSION = 24;
+var VERSION = 25;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -141,7 +141,13 @@ function orderIds() {
 function adjust(a, id, d) {
   var L = LAY();
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
-  else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
+  else if (a === "w") {
+    if (id === "live" || id === "menu") {
+      var other = id === "live" ? "menu" : "live", tot = (L.c.live || DEF_C.live) + (L.c.menu || DEF_C.menu);
+      L.c[id] = Math.max(1, Math.min(tot - 1, (L.c[id] || DEF_C[id]) + d));
+      L.c[other] = tot - L.c[id];
+    } else L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
+  }
   else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
   persist(); render();
@@ -673,18 +679,7 @@ function renderClocks() {
   positionClocks();
 }
 function positionClocks() {
-  var box = $("clocks"), chips = box.children, slots = ["mail", "live", "menu"].map(function (id) { return document.querySelector('[data-id="' + id + '"]'); }).filter(Boolean);
-  box.hidden = !chips.length;
-  if (!slots.length) return;
-  for (var i = 0; i < chips.length; i++) {
-    var slot = slots[i % slots.length], row = Math.floor(i / slots.length), chip = chips[i];
-    if (!slot) continue;
-    var r = slot.getBoundingClientRect(), h = chip.offsetHeight || 34;
-    chip.style.position = "fixed";
-    chip.style.top = Math.round(r.top - (row + 1) * (h + 6)) + "px";
-    var w = chip.offsetWidth || 120, left = Math.round(r.left + r.width / 2 - w / 2);
-    chip.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + "px";
-  }
+  $("clocks").hidden = !alarms().length;
 }
 function startStopwatch() {
   if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
@@ -927,7 +922,11 @@ function cityGo() {
     }).join("") : '<p class="mut">No city found.</p>';
   }).catch(function () { $("cityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
 }
-document.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.id === "cityIn") cityGo(); });
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "cityIn") cityGo();
+  else if (e.target.id === "acctEmail" || e.target.id === "acctPass") auth("signInWithPassword");
+});
 function cityAct(a, k) {
   var cur = WXM && WXM.c;
   if (a === "citygo") cityGo();
@@ -1067,7 +1066,7 @@ function initAuth() {
 }
 function acctHtml() {
   if (USER) return '<div class="menu acctpop" role="menu"><div class="mut sn">' + esc(USER.email) + '</div><button role="menuitem" data-a="signout">Sign out</button></div>';
-  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create account</button></div>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
+  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
 }
 
 $("ver").textContent = VERSION;
