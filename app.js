@@ -1,4 +1,4 @@
-var VERSION = 39;
+var VERSION = 40;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -1143,6 +1143,13 @@ document.addEventListener("click", function (e) {
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
   if (a === "helpjump") { var sec = $("help-" + k); if (sec) sec.scrollIntoView({ block: "start" }); return; }
+  if (a === "copycode") {
+    var code = $("gsCode").textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(function () {
+      b.textContent = "Copied!"; setTimeout(function () { b.textContent = "Copy the code"; }, 2000);
+    }).catch(function () { alert("Could not copy automatically. Select the text below and copy it manually (Ctrl+C or Cmd+C)."); });
+    return;
+  }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
@@ -1243,33 +1250,72 @@ function openHelp() {
   var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
     toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Everything except the sample content needs an account. Click the person icon in the menu box, then Sign in or Create account. Once you\'re signed in, your layout, colors, sources, stocks and connections save to your account and follow you to any device. Signing out clears the copy saved in that browser, so a shared computer is left clean.</p>';
+  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon (top right area of the site, in the row of small icons). Enter an email and password and press <b>Create account</b>. Once you\'re signed in, everything you set up is saved and will still be there next time, on any device.</p>';
 
-  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>These are two separate settings. The <b>weather tile</b> has its own city: click the tile, search, and press "Use for the tile". The <b>Location</b> setting (Settings &rarr; Location &amp; alarms &rarr; Change) only controls the place name and timezone shown next to the date and time at the top &mdash; it does not change the weather. Both searches suggest cities as you type, from 2 letters.</p>';
+  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Location &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other.</p>';
 
-  html += '<h3 id="help-mail">Mail (Gmail)</h3><p>Each inbox needs a small script deployed once, per Google account, since there is no simple sign-in option without Google reviewing the app first (see the note at the end of this section).</p><ol><li>Go to script.google.com, signed in as the Gmail account you want to show, and start a new project.</li><li>Paste in the code from <code>gmail-apps-script.gs</code> (ask if you need it re-sent).</li><li>Deploy &rarr; New deployment &rarr; Web app. Execute as <b>Me</b>, access <b>Anyone</b>.</li><li>Open the web app address once in your browser to get a one-time token &mdash; copy it immediately, it is not shown again.</li><li>In Settings &rarr; Connections, paste a name, the address and the token, then Save.</li></ol><p class="mut">This is the clunkiest part of the setup. A one-click "Sign in with Google" is possible, but Google treats Gmail access as sensitive and limits an unverified app to 100 people with weekly re-approval &mdash; a bigger project for later if this grows past a small group.</p>';
+  html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
+    '<ol>' +
+    '<li>Go to <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> and make sure you are signed in as the Gmail account you want to show (top right corner of the page).</li>' +
+    '<li>Click <b>New project</b> (top left).</li>' +
+    '<li>You will see some sample code already in the box. Click inside that box, press Ctrl+A (or Cmd+A on a Mac) to select everything, then press Delete.</li>' +
+    '<li>Click the button below to copy the correct code, then click inside the empty box and paste it (Ctrl+V or Cmd+V).</li>' +
+    '</ol>' +
+    '<div class="codebox"><button class="lnk2 copybtn" data-a="copycode">Copy the code</button><pre id="gsCode">' + '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n' + '</pre></div>' +
+    '<ol start="5">' +
+    '<li>Near the top of the script.google.com page, click the untitled project name and rename it to something like "Mail for my start page", then press Enter.</li>' +
+    '<li>Press Ctrl+S (or Cmd+S) to save.</li>' +
+    '<li>Click the blue <b>Deploy</b> button (top right), then <b>New deployment</b>.</li>' +
+    '<li>Click the small gear/pencil icon next to "Select type" and choose <b>Web app</b>.</li>' +
+    '<li>Set <b>Execute as</b> to <b>Me</b>, and <b>Who has access</b> to <b>Anyone</b>. This must say Anyone, not "Anyone with a Google account".</li>' +
+    '<li>Click <b>Deploy</b>.</li>' +
+    '<li>Google will ask you to authorize the script. Click <b>Authorize access</b>, choose your account. If you see a warning that says the app isn\'t verified, click <b>Advanced</b>, then <b>Go to (unsafe)</b>, then <b>Allow</b>. This warning is normal &mdash; it is your own private script, seen only by you.</li>' +
+    '<li>You will now see a <b>Web app URL</b> ending in <code>/exec</code>. Click <b>Copy</b> next to it.</li>' +
+    '<li>Paste that address into a new browser tab and press Enter. The page will show some text containing a <b>token</b> &mdash; a long code in quotes. Copy that token now; it is only shown this one time. If you ever lose it, there are reset instructions inside the code itself.</li>' +
+    '<li>Go back to this site, open <b>Settings</b> (cogwheel icon) &rarr; <b>Connections</b> &rarr; <b>Gmail accounts</b>. Paste in a name (e.g. "Personal"), the web app address, and the token, then press <b>Save Gmail accounts</b>.</li>' +
+    '<li>Wait about a minute and your unread count will appear on the site.</li>' +
+    '</ol><p class="mut">To add a second inbox, repeat all of the steps above while signed in to that other Gmail account.</p>';
 
-  html += '<h3 id="help-stocks">Stocks</h3><p>Settings &rarr; Stocks: add one symbol at a time (e.g. <code>NASDAQ:NVDA</code>), paste a TradingView export, or paste a link to a shared TradingView watchlist. Sort by biggest mover, most up, most down or name from the tile itself. Prices come from free sources, so a few unusual tickers may show "n/a" &mdash; clicking one still opens a live chart.</p>';
+  html += '<h3 id="help-stocks">Stocks</h3><p>Open <b>Settings</b> &rarr; <b>Stocks</b>. There are three ways to add stocks or crypto:</p><ol>' +
+    '<li><b>Add one at a time:</b> type a symbol like <code>NASDAQ:NVDA</code> and press Add.</li>' +
+    '<li><b>Import a list:</b> paste a comma-separated list of symbols and press Import.</li>' +
+    '<li><b>Import your TradingView watchlist:</b><ol type="a">' +
+    '<li>Go to <a href="https://www.tradingview.com" target="_blank" rel="noopener">tradingview.com</a> and open any chart while signed in.</li>' +
+    '<li>Your watchlist is the panel on the right side of the screen.</li>' +
+    '<li>Click the <b>•••</b> (three dots) at the top of that watchlist panel.</li>' +
+    '<li>Choose <b>Advanced view</b> (or <b>Share</b>), then turn on link sharing if it is not already on.</li>' +
+    '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
+    '<li>Paste that link into the "shared TradingView watchlist link" box on this site and press Import.</li>' +
+    '</ol></li></ol>';
 
-  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Settings &rarr; News &amp; Telegram sources: add a feed address, or just a website like <code>reuters.com</code> and it searches that site\'s news. Telegram channels take a name or a t.me link. Both tiles have a Sources button to temporarily hide one without removing it. Matching headlines from different sources merge into one row with a source count.</p>';
+  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News &amp; Telegram sources</b>.</p><ul><li><b>To add a news source:</b> type a website like <code>reuters.com</code> in the box (a name is optional) and press Add.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>';
 
-  html += '<h3 id="help-twitch">Twitch</h3><p>Settings &rarr; Connections &rarr; Twitch &rarr; Connect, and approve access to your follows. The tile then shows who is live, sortable by viewers, name or category, with a category filter. Click a streamer to watch inside the page, or dock it to the side so it keeps playing while you use the rest of the site.</p>';
+  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Connections</b> &rarr; press <b>Connect</b> next to Twitch, log in if asked, and approve access. The tile will then show who you follow that is currently live. Click a name to watch inside the page.</p>';
 
-  html += '<h3 id="help-youtube">YouTube</h3><p>There is no official way to read your personal recommendations, so this shows new uploads from your subscriptions instead. Export subscriptions.csv from Google Takeout, then choose it in Settings &rarr; YouTube. It keeps the last 30 days and at most 2 videos per channel.</p>';
+  html += '<h3 id="help-youtube">YouTube</h3><p>This shows new uploads from channels you subscribe to (YouTube does not allow websites to read your personal recommended feed, so this is the closest available option).</p><ol>' +
+    '<li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> while signed in to your YouTube account.</li>' +
+    '<li>Click <b>Deselect all</b> (near the top).</li>' +
+    '<li>Scroll down, find <b>YouTube and YouTube Music</b>, and tick its checkbox.</li>' +
+    '<li>Click the button on that same row that says <b>All YouTube data included</b>. Untick everything, then tick only <b>subscriptions</b>.</li>' +
+    '<li>Click <b>Next step</b>, then <b>Create export</b>.</li>' +
+    '<li>Wait for an email from Google (usually a few minutes) and click the download link inside it.</li>' +
+    '<li>Open the downloaded file. Inside it, find a file named <code>subscriptions.csv</code> (it will be inside a "YouTube and YouTube Music" folder).</li>' +
+    '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
+    '</ol>';
 
-  html += '<h3 id="help-convert">Currency converter</h3><p>Type an amount, pick the two currencies (including a few major cryptocurrencies), and use the swap button to flip them. This one works even signed out, since it talks to its price sources directly rather than through the shared account.</p>';
+  html += '<h3 id="help-convert">Currency converter</h3><p>Type an amount, choose the two currencies (a few major cryptocurrencies are included), and use the ⇄ button to swap them. This works even if you are not signed in.</p>';
 
-  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>The clock icon in the menu box offers all three. A timer or countdown rings repeatedly until you press Stop or remove it, so it will not go unnoticed. Set the volume in Settings &rarr; Location &amp; alarms.</p>';
+  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Location &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
 
-  html += '<h3 id="help-notes">Notes</h3><p>The notepad icon keeps a simple dated list &mdash; add, review, or delete. They stay until you remove them.</p>';
+  html += '<h3 id="help-notes">Notes</h3><p>Click the notepad icon to write, read or delete short notes. They are saved until you delete them.</p>';
 
-  html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Settings &rarr; Wallpaper: choose an image, then pick Fill, Fit or Original size. Press Reposition to drag it into place, then Done.</p>';
+  html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
 
-  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p>Settings &rarr; Appearance covers theme, accent and every color individually, plus overall text size. Press Edit (cogwheel menu) to rearrange: drag a box by its title, use the arrow buttons to reorder, the W&minus;/W+ buttons to resize, T&minus;/T+ for that box\'s own text size, and H&minus;/H+ for a list\'s visible rows. Convert and Menu share a drag handle between them instead.</p>';
+  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, and overall text size.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish.</p>';
 
-  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or YouTube video and press "Dock on the left" &mdash; up to 3 at once, resizable by dragging the edge of the dock, while you keep reading everything else.</p>';
+  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it.</p>';
 
-  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Settings &rarr; Account lets you change your password once signed in. "Forgot password?" on the sign-in popover emails a reset link. Your data is private to your account; nobody else who uses this page can see it.</p>';
+  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Open <b>Settings</b> &rarr; <b>Account</b> to set a new password once you are signed in. If you forget your password, click the person icon, then <b>Forgot password?</b>, and a reset link will be emailed to you. Everything you set up is private to your own account &mdash; nobody else using this site can see it.</p>';
 
   openModal("Help", html);
 }
