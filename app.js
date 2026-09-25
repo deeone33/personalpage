@@ -1,4 +1,4 @@
-var VERSION = 23;
+var VERSION = 24;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -118,7 +118,7 @@ function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0)
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_C = { weather: 3, mail: 3, live: 3, menu: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() {
