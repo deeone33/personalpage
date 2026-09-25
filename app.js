@@ -1,4 +1,4 @@
-var VERSION = 30;
+var VERSION = 31;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -683,7 +683,10 @@ function renderClocks() {
   positionClocks();
 }
 function positionClocks() {
-  $("clocks").hidden = !alarms().length;
+  var box = $("clocks");
+  box.hidden = !alarms().length;
+  var mail = document.querySelector('[data-id="mail"]');
+  box.style.left = (mail ? Math.round(mail.getBoundingClientRect().left) : 16) + "px";
 }
 function startStopwatch() {
   if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
@@ -703,7 +706,7 @@ function tickClocks() {
   if (changed) { persist(); renderClocks(); }
 }
 setInterval(tickClocks, 1000);
-window.addEventListener("resize", positionClocks); window.addEventListener("scroll", positionClocks, true);
+window.addEventListener("resize", positionClocks);
 function clockAct(a, k) {
   var list = alarms(), t = list.filter(function (x) { return x.id === k; })[0];
   if (a === "clplay" && t && !t.done) { audio(); if (t.st) { t.acc += Date.now() - t.st; t.st = 0; } else t.st = Date.now(); }
