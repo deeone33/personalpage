@@ -1,4 +1,4 @@
-var VERSION = 40;
+var VERSION = 42;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -132,8 +132,23 @@ function setWall(file) {
     im.onload = function () {
       var s = Math.min(1, 1600 / im.width), c = document.createElement("canvas");
       c.width = im.width * s; c.height = im.height * s;
-      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
-      try { localStorage.setItem("sp_wall", c.toDataURL("image/jpeg", 0.75)); } catch (e) { alert("That image is too large to save. Try a smaller one."); }
+      var ctx = c.getContext("2d");
+      ctx.drawImage(im, 0, 0, c.width, c.height);
+      var hasAlpha = /\.(png|gif|webp)$/i.test(file.name || "") || file.type === "image/png" || file.type === "image/webp" || file.type === "image/gif";
+      if (hasAlpha) {
+        // Only keep it transparent (as PNG) if it actually has any see-through pixels; a JPEG-style photo saved as
+        // .png would otherwise always end up larger than it needs to be for no visual benefit.
+        try {
+          var d = ctx.getImageData(0, 0, c.width, c.height).data;
+          hasAlpha = false;
+          for (var i = 3; i < d.length; i += 4 * 37) { if (d[i] < 255) { hasAlpha = true; break; } }
+        } catch (e) { /* keep the extension-based guess if this fails */ }
+      }
+      var data = hasAlpha ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.75);
+      try { localStorage.setItem("sp_wall", data); } catch (e) {
+        if (hasAlpha) { try { localStorage.setItem("sp_wall", c.toDataURL("image/jpeg", 0.75)); alert("That image was too large to keep its transparency, so it was saved as a solid background instead."); } catch (e2) { alert("That image is too large to save. Try a smaller one."); return; } }
+        else { alert("That image is too large to save. Try a smaller one."); return; }
+      }
       P.wallPos = { x: 50, y: 50 };
       applyWall(); syncWall(false);
     };
