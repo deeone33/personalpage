@@ -1,4 +1,4 @@
-var VERSION = 36;
+var VERSION = 37;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -1194,7 +1194,7 @@ function persist() {
   }, 600);
 }
 function renderAccount() {
-  $("who").textContent = USER ? " · signed in as " + USER.email : " · not signed in";
+  $("who").textContent = USER ? "signed in as " + USER.email : "not signed in";
   $("pwSignedIn").hidden = !USER;
   $("pwSignedOut").hidden = !!USER;
 }
