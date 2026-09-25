@@ -1,4 +1,4 @@
-var VERSION = 27;
+var VERSION = 28;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -281,8 +281,8 @@ function render() {
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>') + add, 0, ctlS);
 
   var pp = pairPct();
-  var liveBox = T.live.replace('style="--fs:', 'style="flex:0 0 calc(' + pp + '% - 9px);--fs:');
-  var menuBox = T.menu.replace('style="--fs:', 'style="flex:0 0 calc(' + (100 - pp) + '% - 9px);--fs:');
+  var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
+  var menuBox = T.menu.replace('style="--fs:', 'style="flex:' + (100 - pp) + ' 1 0%;--fs:');
   T.live = '<div class="pairwrap">' + liveBox +
     (EDIT ? '<button class="paird" data-a="paird" title="Drag to resize" aria-label="Resize Convert and Menu" role="separator" aria-orientation="vertical" tabindex="0">⋮</button>' : "") +
     menuBox + "</div>";
@@ -985,8 +985,8 @@ document.addEventListener("pointerdown", function (e) {
   function mv(ev) {
     var x = ev.clientX - r.left;
     pct = Math.max(20, Math.min(80, Math.round((x / r.width) * 100)));
-    cards[0].style.flex = "0 0 calc(" + pct + "% - 9px)";
-    cards[1].style.flex = "0 0 calc(" + (100 - pct) + "% - 9px)";
+    cards[0].style.flex = pct + " 1 0%";
+    cards[1].style.flex = (100 - pct) + " 1 0%";
   }
   function up() {
     window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
