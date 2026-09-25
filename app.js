@@ -1,4 +1,4 @@
-var VERSION = 31;
+var VERSION = 32;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -685,8 +685,9 @@ function renderClocks() {
 function positionClocks() {
   var box = $("clocks");
   box.hidden = !alarms().length;
-  var mail = document.querySelector('[data-id="mail"]');
+  var mail = document.querySelector('[data-id="mail"]'), dateEl = $("date");
   box.style.left = (mail ? Math.round(mail.getBoundingClientRect().left) : 16) + "px";
+  box.style.top = (dateEl ? Math.round(dateEl.getBoundingClientRect().top) : 14) + "px";
 }
 function startStopwatch() {
   if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
