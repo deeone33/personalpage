@@ -1,4 +1,4 @@
-var VERSION = 28;
+var VERSION = 30;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {

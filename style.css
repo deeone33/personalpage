@@ -169,7 +169,7 @@ body.resizing{user-select:none}
 .mbox .add input[type=number]{width:72px}
 .mbox #cityIn{flex:1}
 .nt{white-space:pre-wrap}
-.acts{flex-wrap:wrap;justify-content:flex-end}
+.acts{flex-wrap:wrap;justify-content:flex-start}
 .compact{display:block;padding:6px 12px 7px}
 .compact>h3{margin:0 0 3px}
 .compact .mrow{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0}
@@ -195,12 +195,9 @@ body.editing #cogBtn{border-color:var(--ac)}
 .mailrow[data-a]{cursor:pointer}
 .mailrow[data-a]:hover{color:var(--ac)}
 .mrn{color:var(--mut);flex:none;min-width:52px}
-.menurow{justify-content:center;gap:6px;flex-wrap:wrap}
-.menurow .dd{position:static}
-.menurow .menu{left:0;right:auto;top:calc(100% + 6px)}
 .ib.on{border-color:var(--ac);color:var(--ac)}
 header{align-items:flex-start}
-#clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;z-index:9;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;pointer-events:none}
+#clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;z-index:9;display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;pointer-events:none}
 #clocks .clk{pointer-events:auto}
 #clocks[hidden]{display:none}
 .conv input{font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 6px;flex:none;width:56px;min-width:0}
@@ -226,7 +223,7 @@ header{align-items:flex-start}
 .mailcell[data-a]:hover .mrn{color:var(--ac)}
 .mailcell .mut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .mailcell button{margin-left:auto;flex:none;padding:0 6px;font-size:12px}
-.menurow{flex:1 1 0;justify-content:flex-start;gap:6px}
+.menurow{flex:1 1 0;justify-content:center;gap:6px;flex-wrap:wrap}
 .menurow .dd{position:relative}
 .menurow .dd:last-child .menu{left:auto;right:0}
 .menurow .menu{left:0;right:auto;top:calc(100% + 6px);z-index:31}
