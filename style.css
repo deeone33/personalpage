@@ -204,9 +204,12 @@ body.editing #cogBtn{border-color:var(--ac)}
 header{align-items:flex-start}
 #clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));right:16px;z-index:9;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(90vw,280px)}
 #clocks[hidden]{display:none}
-.conv b{flex:1 1 auto;min-width:44px;text-align:right;overflow:visible;text-overflow:unset;white-space:nowrap;font-variant-numeric:tabular-nums}
-.conv input[type=number]{flex:none;width:52px}
-.conv select{flex:none;max-width:54px;padding:3px 2px}
+.conv{overflow:hidden}
+.conv input{font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 6px;flex:none;width:56px;min-width:0}
+.conv input[type=number]{-moz-appearance:textfield}
+.conv input[type=number]::-webkit-inner-spin-button,.conv input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.conv b{flex:1 1 auto;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.conv select{flex:none;max-width:52px;padding:3px 2px}
 .conv button{flex:none}
 .card{position:relative}
 .card.menuopen{z-index:30}
@@ -230,8 +233,6 @@ header{align-items:flex-start}
 .menurow .dd:last-child .menu{left:auto;right:0}
 .menurow .menu{left:0;right:auto;top:calc(100% + 6px);z-index:31}
 .ib{padding:4px 7px}
-.acctpop{display:flex;flex-direction:column;gap:6px;padding:10px;min-width:190px}
-.acctpop input{font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.acctpop{min-width:190px}
+.acctpop input{width:100%}
 .acctpop .acts{display:flex;gap:6px}
-.conv input[type=text]#convAmt{width:70px;-moz-appearance:textfield}
-.conv input[type=text]#convAmt::-webkit-inner-spin-button,.conv input[type=text]#convAmt::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
