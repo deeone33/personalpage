@@ -18,42 +18,69 @@
 </main>
 <aside id="panel" hidden>
   <div class="ph"><b>Settings</b><button id="closeBtn">Close</button></div>
-  <div class="acct">
-    <b>Gmail accounts</b>
-    <input type="text" id="mn0" placeholder="Name, e.g. Personal">
-    <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-    <input type="text" id="mt0" placeholder="Token">
-    <input type="text" id="mn1" placeholder="Name, e.g. Work">
-    <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-    <input type="text" id="mt1" placeholder="Token">
-    <button id="mailSave">Save Gmail accounts</button>
-    <div id="mailMsg" class="mut" role="status"></div>
+
+  <div class="setgrp">
+    <h4>Appearance</h4>
+    <label>Theme <button id="themeBtn"></button></label>
+    <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
+    <label>Background <input type="color" id="cBg"></label>
+    <label>Boxes <input type="color" id="cCard"></label>
+    <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
+    <label>Text color <input type="color" id="cFg"></label>
+    <label>Muted text <input type="color" id="cMut"></label>
+    <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
+    <button id="cReset">Reset colors</button>
   </div>
-  <div class="acct">
-    <b>News sources</b>
-    <div id="srcNews"></div>
-    <form id="addNews" class="add"><input type="text" id="newsName" placeholder="Name (optional)"><input type="text" id="newsUrl" placeholder="Feed address or website"><button>Add</button></form>
-    <b>Telegram channels</b>
-    <div id="srcTg"></div>
-    <form id="addTg" class="add"><input type="text" id="tgIn" placeholder="Channel name or t.me link"><button>Add</button></form>
+
+  <div class="setgrp">
+    <h4>Wallpaper</h4>
+    <label>Image <span><input type="file" id="wallFile" accept="image/*"> <button id="wallClear">Remove</button></span></label>
+    <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option></select></label>
+    <div class="mut sn">In Edit mode, drag anywhere on the background to reposition it. <button id="wallReset">Reset position</button></div>
+  </div>
+
+  <div class="setgrp">
+    <h4>Location &amp; alarms</h4>
+    <label>Location <button data-a="opensettingsloc">Change (sets weather &amp; clock)</button></label>
+    <label>Alarm volume <input type="range" id="volSlider" min="0" max="100"></label>
+  </div>
+
+  <div class="setgrp">
+    <h4>Connections</h4>
+    <label>Twitch <button id="twBtn"></button></label>
+    <div class="sub">
+      <b>Gmail accounts</b>
+      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
+      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
+      <input type="text" id="mt0" placeholder="Token">
+      <input type="text" id="mn1" placeholder="Name, e.g. Work">
+      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
+      <input type="text" id="mt1" placeholder="Token">
+      <button id="mailSave">Save Gmail accounts</button>
+      <div id="mailMsg" class="mut" role="status"></div>
+    </div>
+  </div>
+
+  <div class="setgrp">
+    <h4>News &amp; Telegram sources</h4>
+    <div class="sub">
+      <b>News</b>
+      <div id="srcNews"></div>
+      <form id="addNews" class="add"><input type="text" id="newsName" placeholder="Name (optional)"><input type="text" id="newsUrl" placeholder="Feed address or website"><button>Add</button></form>
+    </div>
+    <div class="sub">
+      <b>Telegram</b>
+      <div id="srcTg"></div>
+      <form id="addTg" class="add"><input type="text" id="tgIn" placeholder="Channel name or t.me link"><button>Add</button></form>
+    </div>
     <button id="srcReset">Back to default sources</button>
     <div id="srcMsg" class="mut" role="status"></div>
   </div>
-  <label>Theme <button id="themeBtn"></button></label>
-  <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
-  <div class="acct">
-    <b>Colors</b>
-    <label>Background <input type="color" id="cBg"></label>
-    <label>Boxes <input type="color" id="cCard"></label>
-    <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
-    <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
-    <label>Text <input type="color" id="cFg"></label>
-    <label>Muted text <input type="color" id="cMut"></label>
-    <button id="cReset">Reset colors</button>
+
+  <div class="setgrp">
+    <h4>Hidden items</h4>
+    <div id="hiddenList" class="mut"></div>
   </div>
-  <label>Wallpaper <span><input type="file" id="wallFile" accept="image/*"> <button id="wallClear">Remove</button></span></label>
-  <label>Twitch <button id="twBtn"></button></label>
-  <div><b>Hidden items</b><div id="hiddenList" class="mut"></div></div>
 </aside>
 <div id="upd" hidden>A new version is available <button id="updBtn">Reload</button></div>
 <div id="modal" hidden><div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle"><div class="ph"><b id="mTitle"></b><button id="mClose">Close</button></div><div id="mBody"></div></div></div>

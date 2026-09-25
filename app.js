@@ -1,4 +1,4 @@
-var VERSION = 32;
+var VERSION = 34;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -76,12 +76,38 @@ function applyTheme() {
   r.style.setProperty("--card", rgba(c.card, c.a / 100)); r.style.setProperty("--solid", c.card);
   r.style.setProperty("--line", rgba(c.fg, 0.14));
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
+  $("volSlider").value = P.vol == null ? 70 : P.vol;
 }
 function applyWall() {
   var w = null;
   try { w = localStorage.getItem("sp_wall"); } catch (e) {}
   $("wall").style.backgroundImage = w ? "url(" + w + ")" : "none";
+  var pos = wallPos();
+  $("wall").style.backgroundSize = (P.wallFit === "contain" ? "contain" : "cover");
+  $("wall").style.backgroundPosition = pos.x + "% " + pos.y + "%";
+  var sel = $("wallFit"); if (sel) sel.value = P.wallFit === "contain" ? "contain" : "cover";
 }
+function wallPos() { return (P.wallPos && typeof P.wallPos.x === "number") ? P.wallPos : { x: 50, y: 50 }; }
+(function () {
+  var el = $("wall"), dragging = false, start = null;
+  el.addEventListener("pointerdown", function (e) {
+    if (!EDIT) return;
+    dragging = true; start = { x: e.clientX, y: e.clientY, pos: wallPos() };
+    el.style.cursor = "grabbing";
+    try { el.setPointerCapture(e.pointerId); } catch (ex) {}
+  });
+  el.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var dx = ((e.clientX - start.x) / window.innerWidth) * 100, dy = ((e.clientY - start.y) / window.innerHeight) * 100;
+    P.wallPos = { x: Math.max(0, Math.min(100, start.pos.x + dx)), y: Math.max(0, Math.min(100, start.pos.y + dy)) };
+    el.style.backgroundPosition = P.wallPos.x + "% " + P.wallPos.y + "%";
+  });
+  function endDrag() { if (!dragging) return; dragging = false; el.style.cursor = ""; persist(); syncWall(false); }
+  el.addEventListener("pointerup", endDrag); el.addEventListener("pointercancel", endDrag);
+})();
+$("wallFit").onchange = function (e) { P.wallFit = e.target.value; persist(); applyWall(); };
+$("wallReset").onclick = function () { P.wallPos = { x: 50, y: 50 }; persist(); applyWall(); };
+$("volSlider").oninput = function (e) { P.vol = +e.target.value; persist(); };
 function setWall(file) {
   var fr = new FileReader();
   fr.onload = function () {
@@ -91,6 +117,7 @@ function setWall(file) {
       c.width = im.width * s; c.height = im.height * s;
       c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
       try { localStorage.setItem("sp_wall", c.toDataURL("image/jpeg", 0.75)); } catch (e) { alert("That image is too large to save. Try a smaller one."); }
+      P.wallPos = { x: 50, y: 50 };
       applyWall(); syncWall(false);
     };
     im.src = fr.result;
@@ -100,7 +127,7 @@ function setWall(file) {
 
 // ---- Date and day (Tallinn time) ----
 function tick() {
-  var d = new Date(), tz = { timeZone: "Europe/Tallinn" };
+  var d = new Date(), tz = { timeZone: TZ };
   $("day").textContent = d.toLocaleDateString("en-GB", Object.assign({ weekday: "long" }, tz));
   $("date").textContent = d.toLocaleDateString("en-GB", Object.assign({ day: "numeric", month: "long", year: "numeric" }, tz)) +
     " · " + d.toLocaleTimeString("en-GB", Object.assign({ hour: "2-digit", minute: "2-digit" }, tz)) + " · Tallinn";
@@ -153,9 +180,12 @@ function tile(id, title, body, click, hx) {
     at = ' data-a="' + pr[0] + '"' + (pr[1] != null ? ' data-k="' + pr[1] + '"' : "") + ' tabindex="0" role="button"';
   }
   if (EDIT) {
-    var bt = function (act, d, label) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '">' + label + "</button>"; };
+    var bt = function (act, d, glyph, ttl) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '" title="' + ttl + '" aria-label="' + ttl + '">' + glyph + "</button>"; };
     var noW = id === "live" || id === "menu";
-    t = '<div class="tools">' + bt("mv", -1, "◀ Earlier") + bt("mv", 1, "Later ▶") + (noW ? "" : bt("w", -1, "Narrower") + bt("w", 1, "Wider")) + bt("f", -1, "Text −") + bt("f", 1, "Text +") + (LISTS.indexOf(id) >= 0 ? bt("h", -1, "Shorter") + bt("h", 1, "Taller") : "") + "</div>";
+    t = '<div class="tools">' + bt("mv", -1, "◀", "Move earlier") + bt("mv", 1, "▶", "Move later") +
+      (noW ? "" : bt("w", -1, "W−", "Narrower") + bt("w", 1, "W+", "Wider")) +
+      bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text") +
+      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
@@ -172,7 +202,7 @@ function ico(id, logo) {
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
 function pairPct() { var p = P.layout && P.layout.pairPct; return p == null ? 65 : p; }
-function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" style="max-height:' + Math.round(r * 36 * fsOf(id)) + 'px">' + html + "</div>"; }
+function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" data-list="' + id + '" style="max-height:' + Math.round(r * 36 * fsOf(id)) + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
 function render() {
@@ -215,10 +245,13 @@ function render() {
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.news = tile("news", "News", nb, 0, ctlN);
 
+  var allTg = tgSrc();
   var tp = TGP.filter(function (g) { return shown("g:" + g.s); });
+  var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
+    allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
     return row("g:" + g.s, esc(hd(g.t, 90)), g.s, '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u);
-  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>");
+  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -288,7 +321,10 @@ function render() {
     menuBox + "</div>";
   T.menu = "";
 
+  var scrolls = {};
+  $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { scrolls[n.dataset.list] = n.scrollTop; });
   $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
+  $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { if (scrolls[n.dataset.list]) n.scrollTop = scrolls[n.dataset.list]; });
   renderHidden();
 }
 
@@ -524,14 +560,14 @@ function ownSrc() {
 }
 function srcMsg(t) { $("srcMsg").textContent = t || ""; }
 function feedUrls(u) {
-  if (/^https:\/\//i.test(u)) {
+  if (/^https?:\/\//i.test(u)) {
     try { var h = new URL(u); return h.pathname.length > 1 || h.search ? [u] : siteUrls(h.hostname.replace(/^www\./, "")); } catch (e) { return null; }
   }
   return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(u) ? siteUrls(u.toLowerCase().replace(/^www\./, "")) : null;
 }
 function addNewsSrc(name, addr) {
   var urls = feedUrls(addr);
-  if (!urls) { srcMsg("Enter a feed address starting with https:// or a website like reuters.com"); return false; }
+  if (!urls) { srcMsg("Could not use that address. Enter a feed address (starting with http:// or https://) or a website like reuters.com"); return false; }
   ownSrc();
   if (P.news.length >= 12) { srcMsg("That is the maximum (12 news sources)."); return false; }
   var nm = name || addr.replace(/^https?:\/\//i, "").replace(/^www\./, "").split("/")[0];
@@ -573,7 +609,7 @@ document.addEventListener("submit", function (e) {
 $("srcReset").onclick = function () { delete P.news; delete P.tg; srcMsg("Back to the default sources."); srcChanged(); };
 
 // ---- Details windows for news, Telegram and Gmail ----
-function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: "Europe/Tallinn", dateStyle: "medium", timeStyle: "short" }); }
+function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" }); }
 function openNews(u) {
   var g = NG.filter(function (x) { return x.some(function (n) { return n.u === u; }); })[0];
   var n = g ? g.filter(function (x) { return x.u === u; })[0] : NEWS.filter(function (x) { return x.u === u; })[0];
@@ -649,16 +685,20 @@ function audio() {
 document.addEventListener("click", function () { audio(); }, { once: true });
 function beep(freq, t0, dur, type) {
   var ac = audio(); if (!ac) return;
-  var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0;
+  var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0, peak = 0.25 * vol();
   o.type = type || "sine"; o.frequency.value = freq;
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.05);
 }
+function vol() { return (P.vol == null ? 70 : P.vol) / 100; }
 function ring(kind) {
   if (kind === "chime") [660, 880, 1320].forEach(function (f, i) { beep(f, i * 0.28, 0.6, "sine"); });
   else if (kind === "alarm") for (var i = 0; i < 6; i++) beep(i % 2 ? 880 : 1046, i * 0.22, 0.2, "square");
   else for (var j = 0; j < 3; j++) beep(880, j * 0.3, 0.18, "sine");
 }
+var RINGING = {};
+function startRinging(a) { ring(a.snd); stopRinging(a.id); RINGING[a.id] = setInterval(function () { ring(a.snd); }, 2600); }
+function stopRinging(id) { if (RINGING[id]) { clearInterval(RINGING[id]); delete RINGING[id]; } }
 function notify(a) {
   try { if (window.Notification && Notification.permission === "granted") new Notification((a.label || (a.k === "t" ? "Timer" : "Countdown")) + " is done"); } catch (e) {}
 }
@@ -677,6 +717,7 @@ var KIND = { t: "Timer", c: "Countdown", s: "Stopwatch" };
 function renderClocks() {
   $("clocks").innerHTML = alarms().map(function (a) {
     return '<div class="clk' + (a.done ? " done" : "") + '"><span class="mut">' + esc(a.label || KIND[a.k]) + '</span><b id="ct' + a.id + '">' + clockText(a) + "</b>" +
+      (a.done && RINGING[a.id] ? '<button data-a="clstop" data-k="' + a.id + '">Stop</button>' : "") +
       (a.k !== "c" && !a.done ? '<button data-a="clplay" data-k="' + a.id + '" aria-label="Start or pause">' + (a.st ? "⏸\uFE0E" : "▶\uFE0E") + '</button><button data-a="clreset" data-k="' + a.id + '" aria-label="Reset">↺</button>' : "") +
       '<button data-a="clrm" data-k="' + a.id + '" aria-label="Remove">✕</button></div>';
   }).join("");
@@ -700,7 +741,7 @@ function tickClocks() {
   alarms().forEach(function (a) {
     if (!a.done && a.k !== "s" && (a.k === "t" ? a.st && elapsed(a) >= a.dur : Date.now() >= a.at)) {
       a.done = true; if (a.k === "t") { a.acc = a.dur; a.st = 0; }
-      changed = true; ring(a.snd); notify(a);
+      changed = true; startRinging(a); notify(a);
     }
     var n = $("ct" + a.id); if (n) n.textContent = clockText(a);
   });
@@ -712,12 +753,13 @@ function clockAct(a, k) {
   var list = alarms(), t = list.filter(function (x) { return x.id === k; })[0];
   if (a === "clplay" && t && !t.done) { audio(); if (t.st) { t.acc += Date.now() - t.st; t.st = 0; } else t.st = Date.now(); }
   else if (a === "clreset" && t) { t.acc = 0; t.st = 0; t.done = false; }
-  else if (a === "clrm") P.alarms = list.filter(function (x) { return x.id !== k; });
+  else if (a === "clstop") { stopRinging(k); }
+  else if (a === "clrm") { stopRinging(k); P.alarms = list.filter(function (x) { return x.id !== k; }); }
   persist(); renderClocks();
 }
 function openClock(kind) {
   var t = kind === "t";
-  openModal(t ? "Timer" : "Countdown", '<p class="mut">' + (t ? "Counts up and rings when it reaches the time you set." : "Counts down to a date and time and rings when it gets there.") + '</p><div class="add"><input type="text" id="clLabel" placeholder="Name (optional)"></div>' +
+  openModal(t ? "Timer" : "Countdown", '<p class="mut">' + (t ? "Counts up and rings when it reaches the time you set. It keeps ringing every few seconds until you press Stop or remove it." : "Counts down to a date and time and rings when it gets there. It keeps ringing every few seconds until you press Stop or remove it.") + '</p><div class="add"><input type="text" id="clLabel" placeholder="Name (optional)"></div>' +
     (t ? '<div class="add"><label>Hours <input type="number" id="clH" min="0" max="99" value="0"></label><label>Minutes <input type="number" id="clM" min="0" max="999" value="25"></label><label>Seconds <input type="number" id="clS" min="0" max="59" value="0"></label></div>'
        : '<div class="add"><label>Ends at <input type="datetime-local" id="clAt"></label></div>') +
     '<div class="add"><label>Sound <select id="clSnd"><option value="beep">Beep</option><option value="chime">Chime</option><option value="alarm">Alarm</option></select></label><button data-a="cltest">Test sound</button></div><p><button class="pri" data-a="clstart" data-k="' + kind + '">Start</button></p>');
@@ -751,7 +793,7 @@ function noteAct(a, k) {
   persist(); render(); openNotes();
 }
 var MENU_OPEN = "";
-function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } var f = $("filtNews"); if (f) f.hidden = true; }
+function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } var f = $("filtNews"); if (f) f.hidden = true; var g = $("filttg"); if (g) g.hidden = true; }
 document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".dd")) closeMenus(); });
 
 // ---- Weather icons ----
@@ -874,11 +916,16 @@ var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45:
 function wxText(c) { return WC[c] || "Unknown"; }
 var WXM = null, CITYRES = [];
 function homeCity() { return P.home || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
+var TZ = "Europe/Tallinn";
 function wxUrl(c) {
   return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
 }
 function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
-function fetchWeather() { loadWx(homeCity()).then(function (j) { if (j && j.current) { WX = j; render(); } }).catch(function () {}); }
+function fetchWeather() {
+  loadWx(homeCity()).then(function (j) {
+    if (j && j.current) { WX = j; if (j.timezone) { TZ = j.timezone; tick(); } render(); }
+  }).catch(function () {});
+}
 function wxHtml(j) {
   var c = j.current, h = j.hourly, d = j.daily, now = c.time.slice(0, 13);
   var i = h.time.findIndex(function (t) { return t.slice(0, 13) >= now; }); if (i < 0) i = 0;
@@ -1002,7 +1049,7 @@ document.addEventListener("pointerdown", function (e) {
 
 // ---- Events ----
 document.addEventListener("click", function (e) {
-  if (e.target.closest && e.target.closest("#filtNews")) { e.stopPropagation(); }
+  if (e.target.closest && (e.target.closest("#filtNews") || e.target.closest("#filttg"))) { e.stopPropagation(); }
   var b = e.target.closest("[data-a]");
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
@@ -1013,11 +1060,19 @@ document.addEventListener("click", function (e) {
   if (a === "acctmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "signin") { auth("signInWithPassword"); return; }
   if (a === "signup") { auth("signUp"); return; }
-  if (a === "signout") { sb.auth.signOut(); MENU_OPEN = ""; return; }
+  if (a === "signout") {
+    if (sb) sb.auth.signOut();
+    try { localStorage.removeItem("sp_prefs"); localStorage.removeItem("sp_wall"); localStorage.removeItem("sp_twitch"); } catch (ex) {}
+    P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, fav: {}, hidden: {} };
+    TW = []; TWC = false; MAIL = []; NEWS = []; TGP = []; YTV = []; QUOTES = {}; NG = []; USER = null;
+    applyWall(); MENU_OPEN = ""; render();
+    return;
+  }
   if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
+  if (a === "opensettingsloc") { $("panel").hidden = true; openWeather(); return; }
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
-  if (a === "filtmenu") { e.stopPropagation(); var m = $("filtNews"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
+  if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
@@ -1025,7 +1080,7 @@ document.addEventListener("click", function (e) {
   if (a === "clockmenu") { audio(); MENU_OPEN = ""; if (k === "s") startStopwatch(); else openClock(k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
   if (a === "clstart") { startClock(k); return; }
-  if (/^cl(play|reset|rm)$/.test(a)) { clockAct(a, k); return; }
+  if (/^cl(play|reset|rm|stop)$/.test(a)) { clockAct(a, k); return; }
   if (a === "noteadd" || a === "notedel") { noteAct(a, k); return; }
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
