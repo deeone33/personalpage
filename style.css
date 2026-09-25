@@ -2,7 +2,7 @@
 :root[data-theme=dark]{--bg:#10131a;--fg:#e9ecf2;--mut:#8c93a3;--card:rgba(24,28,38,.84);--line:rgba(255,255,255,.12);--solid:#181c26}
 :root[data-theme=light]{--bg:#eceff4;--fg:#161a22;--mut:#5d6575;--card:rgba(255,255,255,.86);--line:rgba(0,0,0,.12);--solid:#fff}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font:15px/1.45 "Bricolage Grotesque",system-ui,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
-#wall{position:fixed;inset:0;background-size:cover;background-position:center;z-index:-1}
+#wall{position:fixed;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;z-index:-1}
 #app{max-width:1200px;margin:auto;padding:20px}
 header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px}
 #day{font-size:40px;font-weight:800;line-height:1;letter-spacing:-1px}
@@ -244,8 +244,6 @@ body.resizing{user-select:none}
 @media(max-width:820px){.pairwrap{grid-column:auto;flex-wrap:wrap}.pairwrap>.card,.pairwrap .paird{flex-basis:100% !important}.paird{display:none}}
 input[type=datetime-local]{color-scheme:dark}
 :root[data-theme=light] input[type=datetime-local]{color-scheme:light}
-body.editing #wall{cursor:grab}
-body.editing #wall:active{cursor:grabbing}
 .clk.done button[data-a=clstop]{background:var(--acfg);color:var(--ac);border-color:var(--acfg);font-weight:600}
 .setgrp{padding:14px 0;border-top:1px solid var(--line)}
 .setgrp:first-of-type{border-top:0;padding-top:0}
@@ -254,3 +252,7 @@ body.editing #wall:active{cursor:grabbing}
 .setgrp .sub{display:flex;flex-direction:column;gap:6px;padding:10px;margin:2px 0;background:var(--card);border:1px solid var(--line);border-radius:10px}
 .setgrp .sub b{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em}
 #panel>.setgrp:last-child{padding-bottom:0}
+#wallDragOverlay{position:fixed;inset:0;z-index:40;cursor:grab;touch-action:none;display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px}
+#wallDragOverlay:active{cursor:grabbing}
+#wallDragOverlay[hidden]{display:none}
+#wallDragOverlay span{background:rgba(0,0,0,.6);color:#fff;padding:8px 14px;border-radius:99px;font-size:13px;pointer-events:none}

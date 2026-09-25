@@ -1,4 +1,4 @@
-var VERSION = 34;
+var VERSION = 35;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -88,23 +88,28 @@ function applyWall() {
   var sel = $("wallFit"); if (sel) sel.value = P.wallFit === "contain" ? "contain" : "cover";
 }
 function wallPos() { return (P.wallPos && typeof P.wallPos.x === "number") ? P.wallPos : { x: 50, y: 50 }; }
+var REPOS = false, reposStart = null;
+function toggleRepos() {
+  REPOS = !REPOS;
+  $("wallDragOverlay").hidden = !REPOS;
+  $("wallReposBtn").textContent = REPOS ? "Done" : "Reposition";
+}
 (function () {
-  var el = $("wall"), dragging = false, start = null;
-  el.addEventListener("pointerdown", function (e) {
-    if (!EDIT) return;
-    dragging = true; start = { x: e.clientX, y: e.clientY, pos: wallPos() };
-    el.style.cursor = "grabbing";
-    try { el.setPointerCapture(e.pointerId); } catch (ex) {}
+  var ov = $("wallDragOverlay");
+  ov.addEventListener("pointerdown", function (e) {
+    reposStart = { x: e.clientX, y: e.clientY, pos: wallPos() };
+    try { ov.setPointerCapture(e.pointerId); } catch (ex) {}
   });
-  el.addEventListener("pointermove", function (e) {
-    if (!dragging) return;
-    var dx = ((e.clientX - start.x) / window.innerWidth) * 100, dy = ((e.clientY - start.y) / window.innerHeight) * 100;
-    P.wallPos = { x: Math.max(0, Math.min(100, start.pos.x + dx)), y: Math.max(0, Math.min(100, start.pos.y + dy)) };
-    el.style.backgroundPosition = P.wallPos.x + "% " + P.wallPos.y + "%";
+  ov.addEventListener("pointermove", function (e) {
+    if (!reposStart) return;
+    var dx = ((e.clientX - reposStart.x) / window.innerWidth) * 100, dy = ((e.clientY - reposStart.y) / window.innerHeight) * 100;
+    P.wallPos = { x: Math.max(0, Math.min(100, reposStart.pos.x + dx)), y: Math.max(0, Math.min(100, reposStart.pos.y + dy)) };
+    $("wall").style.backgroundPosition = P.wallPos.x + "% " + P.wallPos.y + "%";
   });
-  function endDrag() { if (!dragging) return; dragging = false; el.style.cursor = ""; persist(); syncWall(false); }
-  el.addEventListener("pointerup", endDrag); el.addEventListener("pointercancel", endDrag);
+  function endDrag() { if (!reposStart) return; reposStart = null; persist(); syncWall(false); }
+  ov.addEventListener("pointerup", endDrag); ov.addEventListener("pointercancel", endDrag);
 })();
+$("wallReposBtn").onclick = toggleRepos;
 $("wallFit").onchange = function (e) { P.wallFit = e.target.value; persist(); applyWall(); };
 $("wallReset").onclick = function () { P.wallPos = { x: 50, y: 50 }; persist(); applyWall(); };
 $("volSlider").oninput = function (e) { P.vol = +e.target.value; persist(); };
@@ -130,7 +135,7 @@ function tick() {
   var d = new Date(), tz = { timeZone: TZ };
   $("day").textContent = d.toLocaleDateString("en-GB", Object.assign({ weekday: "long" }, tz));
   $("date").textContent = d.toLocaleDateString("en-GB", Object.assign({ day: "numeric", month: "long", year: "numeric" }, tz)) +
-    " · " + d.toLocaleTimeString("en-GB", Object.assign({ hour: "2-digit", minute: "2-digit" }, tz)) + " · Tallinn";
+    " · " + d.toLocaleTimeString("en-GB", Object.assign({ hour: "2-digit", minute: "2-digit" }, tz)) + " · " + LOCNAME;
 }
 
 // ---- Rows with favorite / hide controls in edit mode ----
@@ -916,14 +921,44 @@ var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45:
 function wxText(c) { return WC[c] || "Unknown"; }
 var WXM = null, CITYRES = [];
 function homeCity() { return P.home || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
-var TZ = "Europe/Tallinn";
+var LOCNAME = "Tallinn", TZ = "Europe/Tallinn";
+function clockCity() { return P.loc || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
+function fetchClockTz() {
+  var c = clockCity();
+  LOCNAME = c.name;
+  fetch("https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m&timezone=auto&forecast_days=1")
+    .then(function (r) { return r.json(); })
+    .then(function (j) { if (j && j.timezone) { TZ = j.timezone; tick(); } })
+    .catch(function () {});
+}
+var LOCRES = [];
+function openLocationPicker() {
+  openModal("Location", '<p class="mut">Sets the place shown next to the date and time, and the clock\'s timezone. The weather tile has its own location, set separately by clicking it.</p><div class="add"><input type="text" id="locIn" placeholder="Search a city, e.g. Stockholm"><button data-a="locgo">Search</button></div><div id="locRes"></div>');
+}
+function locGo() {
+  var q = $("locIn").value.trim();
+  if (!q) return;
+  $("locRes").innerHTML = '<p class="mut">Searching...</p>';
+  fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=6&language=en&format=json").then(function (r) { return r.json(); }).then(function (j) {
+    LOCRES = (j.results || []).map(function (x) { return { name: x.name, lat: x.latitude, lon: x.longitude, label: [x.admin1, x.country].filter(Boolean).join(", ") }; });
+    $("locRes").innerHTML = LOCRES.length ? LOCRES.map(function (c, i) {
+      return '<div class="row"><span>' + esc(c.name) + ' <small class="mut">' + esc(c.label) + '</small></span><button data-a="locpick" data-k="' + i + '">Use</button></div>';
+    }).join("") : '<p class="mut">No city found.</p>';
+  }).catch(function () { $("locRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
+}
+function locPick(i) {
+  var c = LOCRES[i];
+  if (!c) return;
+  P.loc = { name: c.name, lat: c.lat, lon: c.lon };
+  persist(); fetchClockTz(); closeModal();
+}
 function wxUrl(c) {
   return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
 }
 function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
 function fetchWeather() {
   loadWx(homeCity()).then(function (j) {
-    if (j && j.current) { WX = j; if (j.timezone) { TZ = j.timezone; tick(); } render(); }
+    if (j && j.current) { WX = j; render(); }
   }).catch(function () {});
 }
 function wxHtml(j) {
@@ -980,6 +1015,7 @@ function cityGo() {
 document.addEventListener("keydown", function (e) {
   if (e.key === "Enter") {
     if (e.target.id === "cityIn") cityGo();
+    else if (e.target.id === "locIn") locGo();
     else if (e.target.id === "acctEmail" || e.target.id === "acctPass") auth("signInWithPassword");
     return;
   }
@@ -997,7 +1033,13 @@ function cityAct(a, k) {
   else if (a === "cityres") { showCity(CITYRES[+k]); $("cityRes").innerHTML = ""; }
   else if (a === "citysave" && cur) { P.cities = P.cities || []; if (P.cities.length < 8) P.cities.push({ name: cur.name, lat: cur.lat, lon: cur.lon }); persist(); showCity(cur, WXM.j); }
   else if (a === "cityrm" && cur) { P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); }); persist(); showCity(homeCity(), WX); }
-  else if (a === "cityhome" && cur) { P.home = { name: cur.name, lat: cur.lat, lon: cur.lon }; P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); }); persist(); WX = null; render(); fetchWeather(); showCity(cur, WXM.j); }
+  else if (a === "cityhome" && cur) {
+    var oldHome = homeCity();
+    P.home = { name: cur.name, lat: cur.lat, lon: cur.lon };
+    P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); });
+    if (!sameCity(oldHome, cur) && !P.cities.some(function (x) { return sameCity(x, oldHome); }) && P.cities.length < 8) P.cities.unshift({ name: oldHome.name, lat: oldHome.lat, lon: oldHome.lon });
+    persist(); WX = null; render(); fetchWeather(); showCity(cur, WXM.j);
+  }
 }
 
 // ---- Stocks: details window with TradingView chart, and adding symbols ----
@@ -1069,7 +1111,9 @@ document.addEventListener("click", function (e) {
     return;
   }
   if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
-  if (a === "opensettingsloc") { $("panel").hidden = true; openWeather(); return; }
+  if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
+  if (a === "locgo") { locGo(); return; }
+  if (a === "locpick") { locPick(+k); return; }
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
@@ -1136,7 +1180,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); fetchWeather();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); fetchWeather(); fetchClockTz();
   });
 }
 function auth(fn) {
@@ -1165,7 +1209,7 @@ function acctHtml() {
 }
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000); fetchRates(); setInterval(fetchRates, 300000);
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000); fetchClockTz(); fetchRates(); setInterval(fetchRates, 300000);
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks();
 setInterval(tick, 30000);
