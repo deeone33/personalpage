@@ -1,4 +1,4 @@
-var VERSION = 22;
+var VERSION = 23;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 (function () {
@@ -118,7 +118,7 @@ function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0)
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var DEF_C = { weather: 3, mail: 3, live: 3, menu: 3, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
 function LAY() {
@@ -681,8 +681,9 @@ function positionClocks() {
     if (!slot) continue;
     var r = slot.getBoundingClientRect(), h = chip.offsetHeight || 34;
     chip.style.position = "fixed";
-    chip.style.left = Math.round(r.left) + "px"; chip.style.width = Math.round(r.width) + "px";
     chip.style.top = Math.round(r.top - (row + 1) * (h + 6)) + "px";
+    var w = chip.offsetWidth || 120, left = Math.round(r.left + r.width / 2 - w / 2);
+    chip.style.left = Math.max(8, Math.min(left, window.innerWidth - w - 8)) + "px";
   }
 }
 function startStopwatch() {
