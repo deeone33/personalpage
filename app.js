@@ -1,4 +1,4 @@
-var VERSION = 45;
+var VERSION = 46;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -102,6 +102,9 @@ function applyTheme() {
   r.style.setProperty("--acsoft", rgba(P.accent, 0.16)); r.style.setProperty("--acglow", rgba(P.accent, 0.35));
   document.body.classList.toggle("noaurora", P.aurora === false);
   $("auroraOn").checked = P.aurora !== false;
+  document.body.classList.toggle("noshadow", P.shadow === false);
+  $("shadowOn").checked = P.shadow !== false;
+  $("srcNamesOn").checked = !P.hideSrc;
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
   $("volSlider").value = P.vol == null ? 70 : P.vol;
 }
@@ -302,7 +305,7 @@ function render() {
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
       var cls = (isNewTs(n.ts) && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
-      return row("n:" + n.s, esc(n.t), srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
+      return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
     }).join(""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
@@ -371,7 +374,7 @@ function render() {
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewTs(x.ts) && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
-    return row("r:" + x.s.toLowerCase(), esc(x.t), "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
+    return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew) + ctlR);
 
   var SL = P.stocks || D.stocks;
@@ -632,6 +635,18 @@ var NEWS_SRC = [
 ];
 var TG_SRC = ["ClashReport"];
 var NEWS = [], TGP = [], NERR = "", NERRK = [], nBusy = false, NVIA = {}, NWHY = {}, FNVER = 0, NEWSV = 0, NLAST = 0;
+// Telegram on its own, every minute: it is one light request, so posts show up quickly between the full news refreshes
+var tgBusy = false;
+function fetchTG() {
+  if (!sb || !USER || tgBusy || nBusy || !tgSrc().length) return;
+  tgBusy = true;
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tg: tgSrc() } }).then(function (r) {
+    tgBusy = false;
+    if (r.error || !r.data || !r.data.tg || nBusy) return;
+    TGP = unentAll(r.data.tg, ["t", "tx"]);
+    newsAlerts(); render();
+  }).catch(function () { tgBusy = false; });
+}
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
   nBusy = true; render();
@@ -1158,17 +1173,31 @@ function dockAdd(k) {
   var kind = k.charAt(0), id = k.slice(2);
   if (DOCK.some(function (d) { return d.kind === kind && d.id === id; })) { closeModal(); return; }
   if (DOCK.length >= 3) { alert("The dock is full (3 players). Close one first."); return; }
-  var title = id;
-  if (kind === "v") { var v = YTV.filter(function (x) { return x.id === id; })[0]; if (v) title = v.t; }
   var d = { kind: kind, id: id, uid: ++dockUid };
   DOCK.push(d);
   var src = kind === "t" ? twEmbedSrc(id)
     : "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1";
   var w = document.createElement("div");
   w.className = "dk"; w.id = "dk" + d.uid;
-  w.innerHTML = '<div class="dkh"><b>' + esc(hd(title, 40)) + '</b><button data-a="undock" data-k="' + d.uid + '" aria-label="Close player">✕</button></div><div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div>';
+  // Just the player. Chat and close buttons appear in its top-right corner when the mouse is over it.
+  w.innerHTML = '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div><div class="dkc">' +
+    (kind === "t" ? '<button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button>' : "") +
+    '<button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
   $("dock").appendChild(w);
+  if (kind === "t" && P.dockChat) dockChat(d.uid);
   syncDock(); closeModal();
+}
+function dockChat(uid) {
+  var w = $("dk" + uid), d = DOCK.filter(function (x) { return x.uid === +uid; })[0];
+  if (!w || !d) return;
+  var c = w.querySelector(".dkchat");
+  if (c) c.remove();
+  else {
+    c = document.createElement("div"); c.className = "dkchat";
+    c.innerHTML = '<iframe title="Chat" src="https://www.twitch.tv/embed/' + encodeURIComponent(d.id) + "/chat?parent=" + location.hostname + (P.theme === "dark" ? "&darkpopout" : "") + '"></iframe>';
+    w.appendChild(c);
+  }
+  w.classList.toggle("haschat", !!w.querySelector(".dkchat"));
 }
 function undock(uid) {
   DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
@@ -1501,6 +1530,7 @@ document.addEventListener("click", function (e) {
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
   if (a === "undock") { undock(k); return; }
+  if (a === "dockchat") { dockChat(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
@@ -2021,7 +2051,7 @@ $("srchIn").addEventListener("keydown", function (e) {
 function loadExtraForm() {
   var w = NW();
   $("nwMute").value = w.mute || ""; $("nwHi").value = w.hi || "";
-  $("twPopOn").checked = !!P.twPop;
+  $("twPopOn").checked = !!P.twPop; $("dockChatOn").checked = !!P.dockChat;
   $("engineSel").value = ENGINES[P.engine] ? P.engine : "google"; $("srchNewTab").checked = !!P.srchNew;
   var n = NTF();
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
@@ -2046,6 +2076,9 @@ $("briefOn").onchange = function () { P.brief = this.checked; persist(); };
 $("engineSel").onchange = function () { P.engine = this.value; persist(); };
 $("srchNewTab").onchange = function () { P.srchNew = this.checked; persist(); };
 $("auroraOn").onchange = function () { P.aurora = this.checked; persist(); applyTheme(); };
+$("shadowOn").onchange = function () { P.shadow = this.checked; persist(); applyTheme(); };
+$("srcNamesOn").onchange = function () { P.hideSrc = !this.checked; persist(); render(); };
+$("dockChatOn").onchange = function () { P.dockChat = this.checked; persist(); };
 document.addEventListener("input", function (e) {
   if (e.target.id !== "newsQ") return;
   debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase() : ""; render(); });
@@ -2122,6 +2155,7 @@ every(900000, fetchWeather); every(300000, fetchRates);
 // With desktop notifications on, the things that can notify keep updating while the tab is in the background
 function bg(kind) { return function () { var n = NTF(); return !!n.desktop && n[kind] !== false; }; }
 every(60000, fetchTwitch, bg("live"));
-every(300000, fetchNews, function () { return bg("news")() || bg("words")(); });
+every(120000, fetchNews, function () { return bg("news")() || bg("words")(); });
+every(60000, fetchTG, bg("words"));
 every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(300000, checkUpdate);
 setInterval(tick, 1000);

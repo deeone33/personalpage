@@ -274,13 +274,24 @@ input[type=datetime-local]{color-scheme:dark}
 #upd button{background:transparent;color:inherit;border-color:currentColor}
 
 /* ---- Docked players ---- */
-#dock{position:fixed;left:0;top:0;bottom:0;width:var(--dock-w);background:transparent;padding:calc(10px + env(safe-area-inset-top,0px)) 6px 10px 10px;overflow-y:auto;z-index:4;display:flex;flex-direction:column;gap:10px}
+#dock{position:fixed;left:0;top:0;bottom:0;width:var(--dock-w);background:transparent;padding:calc(10px + env(safe-area-inset-top,0px)) 6px 10px 10px;overflow-y:auto;z-index:4;display:flex;flex-direction:column;gap:6px}
 #dock[hidden]{display:none}
 body.docked{padding-left:var(--dock-w)}
-.dk{display:flex;flex-direction:column;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px}
-.dkh{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
-.dkh b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dkh button{padding:0 8px}
+/* A docked player is just the video (plus chat if you turn it on); its buttons show when the mouse is over it */
+.dk{position:relative;display:flex;flex-direction:column;gap:6px;flex:none}
+.dk>.tw{flex:none}
+.dk.haschat{flex:1 1 auto}
+.dkchat{flex:1 1 auto;min-height:300px;border-radius:12px;overflow:hidden}
+.dkchat iframe{display:block;width:100%;height:100%;border:0}
+.dkc{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.dk:hover .dkc,.dkc:focus-within{opacity:1}
+.dkc button{background:rgba(0,0,0,.72);color:#fff;border:0;border-radius:7px;padding:3px 9px;font-size:12px}
+.dkc button:hover{background:var(--ac);color:var(--acfg)}
+@media(hover:none){.dkc{opacity:1}}
+/* Settings > Appearance > Shadows off */
+body.noshadow{--shadow:0 0 0 transparent;--hl:transparent}
+body.noshadow #logoImg,body.noshadow .wi{filter:none}
+body.noshadow .th h3::before,body.noshadow .mbox,body.noshadow .menu,body.noshadow .toast,body.noshadow #peek,body.noshadow #panel,body.noshadow .pill.hot,body.noshadow #upd,body.noshadow .clk.done{box-shadow:none}
 #dockGrip{display:none;position:fixed;top:0;bottom:0;left:calc(var(--dock-w) - 5px);width:10px;cursor:ew-resize;z-index:6;touch-action:none}
 #dockGrip:hover,#dockGrip:active{background:linear-gradient(90deg,transparent 4px,var(--ac) 4px,var(--ac) 6px,transparent 6px)}
 body.docked #dockGrip{display:block}
