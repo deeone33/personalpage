@@ -1,4 +1,4 @@
-var VERSION = 52;
+var VERSION = 53;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -356,7 +356,9 @@ function ico(id, logo) {
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
 function pairPct() { var p = P.layout && P.layout.pairPct; return p == null ? 65 : p; }
-function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" data-list="' + id + '" style="max-height:' + Math.round(r * 36 * fsOf(id)) + 'px">' + html + "</div>"; }
+// List height: one H step is the same number of pixels in every box (it follows the overall text size, not the box's
+// own T size), so boxes with different text sizes can be made exactly the same height. 32.4 = one row at the usual 0.9 text.
+function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" data-list="' + id + '" style="max-height:' + Math.round(r * 32.4 * (P.fs || 1)) + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
 function render() {
