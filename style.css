@@ -66,9 +66,9 @@ a.lnk:hover{color:var(--ac);text-decoration:underline}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ---- Grid of boxes ---- */
-/* Every box is as tall as its own content. The grid is made of very thin rows and app.js (packGrid) tells each box
+/* Every box is as tall as its own content. The grid is made of 1px rows and app.js (packGrid) tells each box
    how many of them it covers, so a short box can sit under another short box next to a tall one. */
-#grid{display:grid;grid-template-columns:repeat(12,1fr);column-gap:14px;row-gap:0;grid-auto-rows:2px;grid-auto-flow:row dense;align-items:start}
+#grid{display:grid;grid-template-columns:repeat(12,1fr);column-gap:14px;row-gap:0;grid-auto-rows:1px;grid-auto-flow:row dense;align-items:start}
 .c2{grid-column:span 2}.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}
 .c8{grid-column:span 8}.c9{grid-column:span 9}.c10{grid-column:span 10}.c11{grid-column:span 11}.c12{grid-column:span 12}
 .card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;min-width:0;font-size:calc(15px*var(--fs,1));box-shadow:var(--shadow),inset 0 1px 0 var(--hl);transition:border-color .2s,box-shadow .2s}
@@ -502,6 +502,8 @@ body.dockslim #dockGrip{display:none}
 .spi{display:inline-flex;vertical-align:-3px;margin-right:6px;color:var(--mut)}
 .spi svg{width:calc(15px*var(--fs,1));height:calc(15px*var(--fs,1))}
 .sp-football{color:#3fbf7f}.sp-basketball{color:#f08a3c}.sp-ufc{color:var(--live)}
+.sp-hockey{color:#6cb8ff}.sp-amfootball{color:#c98a4b}.sp-baseball{color:#e8e8e8}.sp-tennis{color:#d6e84a}.sp-racing{color:#ff6b5e}.sp-golf{color:#7ed957}
+.setgrp .sub b .spi{vertical-align:-3px}
 .tl{width:calc(16px*var(--fs,1));height:calc(16px*var(--fs,1));object-fit:contain;vertical-align:-3px;margin:0 5px 0 0}
 .lnk .tl:last-child{margin:0 0 0 5px}
 

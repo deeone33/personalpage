@@ -1,4 +1,4 @@
-var VERSION = 53;
+var VERSION = 54;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -280,7 +280,7 @@ var DEF_LAYOUT = {
   order: ["weather", "mail", "live", "menu", "news", "telegram", "stocks", "twitch", "youtube", "reddit", "sports"],
   c: { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, stocks: 3, twitch: 3, youtube: 3, reddit: 3, sports: 3 },
   fs: { weather: 0.9, mail: 0.9, live: 0.9, news: 0.9, telegram: 0.9, stocks: 0.9, twitch: 0.9, youtube: 0.9, reddit: 0.8, sports: 0.8 },
-  rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 5, sports: 5 }
+  rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 4, sports: 3 }
 };
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
@@ -467,7 +467,7 @@ function render() {
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
 
-  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(SP_SPORTS, P.spSport || "") + '</select><select data-s="spview" aria-label="Which games">' + opts(SP_VIEWS, spView()) + "</select>");
+  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(SP_VIEWS, spView()) + "</select>");
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
@@ -521,12 +521,47 @@ function render() {
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   packGrid();
 }
-// Each box covers as many of the grid's thin (2px) rows as its own height needs, plus the 14px gap under it.
+// Each box covers as many of the grid's 1px rows as its own height needs, plus the 14px gap under it.
 // That lets boxes of different heights pack together (a short Reddit box with Sports under it, beside a tall one).
 function packGrid() {
-  var kids = $("grid").children, hs = [], i;
-  for (i = 0; i < kids.length; i++) hs.push(kids[i].offsetHeight);
-  for (i = 0; i < kids.length; i++) kids[i].style.gridRowEnd = "span " + Math.ceil((hs[i] + 14) / 2);
+  var kids = Array.prototype.slice.call($("grid").children);
+  // start from each list's natural height (undo any earlier snapping)
+  Array.prototype.forEach.call($("grid").querySelectorAll(".list[data-snap]"), function (l) { l.style.minHeight = ""; l.style.maxHeight = l.dataset.mh; l.removeAttribute("data-snap"); });
+  var span = function () {
+    var hs = kids.map(function (k) { return k.offsetHeight; });
+    kids.forEach(function (k, i) { k.style.gridRowEnd = "span " + (hs[i] + 14); });
+  };
+  span();
+  if (window.innerWidth <= 820) return;   // one column on phones: nothing to line up
+  // Snap: a stack of boxes (two headers and a gap) can never add up to exactly one tall box using H steps alone.
+  // So when a box ends within 24px of the bottom edge of a clearly taller box beside it, it is stretched or trimmed
+  // those few pixels and the two bottom edges line up exactly.
+  var R = kids.map(function (k) { var r = k.getBoundingClientRect(); return { el: k, l: r.left, r: r.right, t: r.top, b: r.bottom, h: r.height }; });
+  var mark = function (l) { if (!l.dataset.snap) { l.dataset.mh = l.style.maxHeight; l.dataset.snap = "1"; } }, changed = false;
+  R.forEach(function (x) {
+    var ref = null;
+    R.forEach(function (y) {
+      if (y === x || y.h < x.h + 24 || (y.l < x.r - 1 && y.r > x.l + 1)) return;   // must be clearly taller, and beside (not above or below)
+      var d = y.b - x.b;
+      if (Math.abs(d) >= 0.5 && Math.abs(d) <= 24 && (!ref || Math.abs(d) < Math.abs(ref.b - x.b))) ref = y;
+    });
+    if (!ref) return;
+    var d = Math.round(ref.b - x.b), list = x.el.querySelector(".list");
+    if (d > 0) {
+      if (!list) return;
+      mark(list); list.style.minHeight = (list.offsetHeight + d) + "px"; changed = true;
+      return;
+    }
+    // too long: the lowest box in this stack whose list is scrolling gives up the extra pixels
+    var cur = x;
+    while (cur) {
+      var cl = cur.el.querySelector(".list");
+      if (cl && cl.scrollHeight > cl.clientHeight && cl.clientHeight + d > 40) { mark(cl); cl.style.maxHeight = (cl.clientHeight + d) + "px"; changed = true; return; }
+      var above = R.filter(function (y) { return y !== cur && Math.abs(y.l - cur.l) < 2 && Math.abs(y.r - cur.r) < 2 && Math.abs(y.b + 14 - cur.t) < 3; })[0];
+      cur = above || null;
+    }
+  });
+  if (changed) span();
 }
 var packT = 0;
 window.addEventListener("resize", function () { clearTimeout(packT); packT = setTimeout(packGrid, 80); });
@@ -559,6 +594,7 @@ function renderHidden() {
   $("hiddenList").innerHTML = keys.length ? keys.map(function (k) {
     return '<div class="row"><span>' + esc(k.slice(2)) + '</span><button data-a="show" data-k="' + esc(k) + '">Restore</button></div>';
   }).join("") : "Nothing hidden.";
+  renderSpList();
   // Settings > Layout: one switch per box
   $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu"; }).map(function (id) {
     return "<label>" + BOX_NAMES[id] + ' <input type="checkbox" data-a="boxtoggle" data-k="' + id + '"' + (boxOff(id) ? "" : " checked") + "></label>";
@@ -1658,6 +1694,7 @@ document.addEventListener("click", function (e) {
   var b = e.target.closest("[data-a]");
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
+  trackClick(a === "open" ? "open-" + String(k).charAt(0) : a, b);
   if (a === "filttoggle") { if (b.checked) delete P.hidden[k]; else P.hidden[k] = true; persist(); render(); return; }
   if (a === "clockmenu2") { e.stopPropagation(); audio(); MENU_OPEN = MENU_OPEN === "clock" ? "" : "clock"; render(); return; }
   if (a === "cogmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "cog" ? "" : "cog"; render(); return; }
@@ -1714,6 +1751,8 @@ document.addEventListener("click", function (e) {
   if (a === "boxoff") { setBoxOff(k, true); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") { spToggleFav(k, SP_OPEN); return; }
+  if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
+  if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
   if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); return; }
   if (a === "bellgo") { var be = NLOG[+k]; MENU_OPEN = ""; render(); if (be) runAct(be.act); return; }
@@ -1742,9 +1781,12 @@ document.addEventListener("click", function (e) {
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
 // ---- Settings window: sections listed on the left, one section shown at a time ----
 var SETSEC = 0;
+function isAdmin() { return !!USER && (window.ADMIN_EMAILS || []).some(function (e) { return String(e).toLowerCase() === String(USER.email || "").toLowerCase(); }); }
 function buildSetNav() {
-  var cat = "";
-  $("setNav").innerHTML = '<div class="navtitle">Settings</div>' + Array.prototype.map.call(document.querySelectorAll("#panel .setgrp"), function (g, i) {
+  var cat = "", gs = document.querySelectorAll("#panel .setgrp");
+  if (gs[SETSEC] && gs[SETSEC].dataset.admin && !isAdmin()) SETSEC = 0;
+  $("setNav").innerHTML = '<div class="navtitle">Settings</div>' + Array.prototype.map.call(gs, function (g, i) {
+    if (g.dataset.admin && !isAdmin()) return "";   // the Admin entry is only listed for the site owner
     var h = g.dataset.cat !== cat ? '<div class="navcat">' + esc(g.dataset.cat) + "</div>" : "";
     cat = g.dataset.cat;
     return h + '<button data-a="setsec" data-k="' + i + '">' + esc(g.dataset.sec) + "</button>";
@@ -1755,7 +1797,7 @@ function setSec(i) {
   var gs = document.querySelectorAll("#panel .setgrp"), bs = document.querySelectorAll("#setNav button");
   SETSEC = Math.max(0, Math.min(gs.length - 1, i || 0));
   Array.prototype.forEach.call(gs, function (g, k) { g.classList.toggle("on", k === SETSEC); });
-  Array.prototype.forEach.call(bs, function (b, k) { b.classList.toggle("on", k === SETSEC); });
+  Array.prototype.forEach.call(bs, function (b) { b.classList.toggle("on", +b.dataset.k === SETSEC); });
   $("setTitle").textContent = gs[SETSEC].dataset.sec;
   document.querySelector("#panel .setbody").scrollTop = 0;
 }
@@ -1810,6 +1852,7 @@ function renderAccount() {
   $("pwSignedIn").hidden = !USER;
   $("pwSignedOut").hidden = !!USER;
   $("delSignedIn").hidden = !USER; $("delSignedOut").hidden = !!USER;
+  buildSetNav();
 }
 function onUser(u) {
   USER = u;
@@ -2327,36 +2370,92 @@ function maybeBrief() {
 }
 
 // ---- Sports: live scores and fixtures from ESPN's public scoreboard (read straight from the browser, no key) ----
-// Order = importance: with several games on at once, earlier leagues are listed first.
-var SP_LEAGUES = [
-  { id: "soccer/uefa.champions", sp: "football", n: "Champions League" }, { id: "soccer/eng.1", sp: "football", n: "Premier League" },
-  { id: "soccer/esp.1", sp: "football", n: "La Liga" }, { id: "soccer/ita.1", sp: "football", n: "Serie A" },
-  { id: "soccer/ger.1", sp: "football", n: "Bundesliga" }, { id: "soccer/fra.1", sp: "football", n: "Ligue 1" },
-  { id: "soccer/uefa.europa", sp: "football", n: "Europa League" }, { id: "basketball/nba", sp: "basketball", n: "NBA" }, { id: "mma/ufc", sp: "ufc", n: "UFC" }
+// The catalog of leagues you can switch on in Settings > Sports. Order = importance: with several games on at once,
+// earlier leagues are listed first. `on` = part of the starting set.
+// kind: (none) two teams and a score · card = UFC fight card · tour = tennis tournament with many matches · race = F1 weekend / golf tournament
+var SP_CATALOG = [
+  { id: "soccer/uefa.champions", sp: "football", n: "Champions League", on: 1 }, { id: "soccer/eng.1", sp: "football", n: "Premier League", on: 1 },
+  { id: "soccer/esp.1", sp: "football", n: "La Liga", on: 1 }, { id: "soccer/ita.1", sp: "football", n: "Serie A", on: 1 },
+  { id: "soccer/ger.1", sp: "football", n: "Bundesliga", on: 1 }, { id: "soccer/fra.1", sp: "football", n: "Ligue 1", on: 1 },
+  { id: "soccer/uefa.europa", sp: "football", n: "Europa League", on: 1 }, { id: "soccer/uefa.europa.conf", sp: "football", n: "Conference League" },
+  { id: "soccer/eng.2", sp: "football", n: "Championship (England)" }, { id: "soccer/ned.1", sp: "football", n: "Eredivisie" },
+  { id: "soccer/por.1", sp: "football", n: "Primeira Liga" }, { id: "soccer/swe.1", sp: "football", n: "Allsvenskan" }, { id: "soccer/usa.1", sp: "football", n: "MLS" },
+  { id: "basketball/nba", sp: "basketball", n: "NBA", on: 1 }, { id: "basketball/wnba", sp: "basketball", n: "WNBA" },
+  { id: "mma/ufc", sp: "ufc", n: "UFC", kind: "card", on: 1 },
+  { id: "hockey/nhl", sp: "hockey", n: "NHL" },
+  { id: "football/nfl", sp: "amfootball", n: "NFL" },
+  { id: "baseball/mlb", sp: "baseball", n: "MLB" },
+  { id: "tennis/atp", sp: "tennis", n: "ATP tennis", kind: "tour" }, { id: "tennis/wta", sp: "tennis", n: "WTA tennis", kind: "tour" },
+  { id: "racing/f1", sp: "racing", n: "Formula 1", kind: "race" },
+  { id: "golf/pga", sp: "golf", n: "PGA Tour", kind: "race" }
 ];
-var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_SPORTS = [["", "All sports"], ["football", "Football"], ["basketball", "Basketball"], ["ufc", "UFC"]], SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["fav", "Favorites"]];
+var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC", hockey: "Ice hockey", amfootball: "American football", baseball: "Baseball", tennis: "Tennis", racing: "Formula 1", golf: "Golf" };
+function spLeagues() { var on = P.spLeagues; return SP_CATALOG.filter(function (l) { return on ? on.indexOf(l.id) >= 0 : l.on; }); }
+function spSports() {
+  var seen = {}, out = [["", "All sports"]];
+  spLeagues().forEach(function (l) { if (!seen[l.sp]) { seen[l.sp] = 1; out.push([l.sp, SP_NAME[l.sp] || l.sp]); } });
+  return out;
+}
+var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["fav", "Favorites"]];
 function spView() { return P.spView === "up" || P.spView === "fav" ? P.spView : "now"; }
+function spSport() { var s = P.spSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
 function spFavs() { return P.spFav || []; }
 function spIsFav(name) { return spFavs().indexOf(name) >= 0; }
 function spParse(lg, j, pri) {
+  var now = Date.now();
   return ((j && j.events) || []).map(function (e) {
     var st = (e.status && e.status.type) || {}, link = safeUrl(((e.links || [])[0] || {}).href);
-    var o = { id: lg.id + ":" + e.id, lg: lg.n, sp: lg.sp, pri: pri, ts: Date.parse(e.date), state: st.state || "pre", detail: st.shortDetail || "", link: link };
-    if (lg.sp === "ufc") {
+    var o = { id: lg.id + ":" + e.id, lg: lg.n, sp: lg.sp, kind: lg.kind || "team", pri: pri, ts: Date.parse(e.date), state: st.state || "pre", detail: st.shortDetail || "", link: link, names: [] };
+    var pair = function (c, label, detail) {
+      var a = (c.competitors || [])[0] || {}, b = (c.competitors || [])[1] || {}, cs = (c.status && c.status.type) || {};
+      return { a: (a.athlete || {}).displayName || "?", b: (b.athlete || {}).displayName || "?", aw: !!a.winner, bw: !!b.winner, state: cs.state || "pre", detail: detail != null ? detail : cs.shortDetail || "", wc: label, ts: Date.parse(c.date) };
+    };
+    if (o.kind === "card") {
       o.title = String(e.name || e.shortName || "UFC").replace(/^UFC Fight Night:/, "UFC FN:");
+      o.cardTitle = "Fight card (main event first)";
       // the main event is the last fight on the card
-      o.fights = (e.competitions || []).map(function (c) {
-        var a = (c.competitors || [])[0] || {}, b = (c.competitors || [])[1] || {}, cs = (c.status && c.status.type) || {};
-        return { a: (a.athlete || {}).displayName || "?", b: (b.athlete || {}).displayName || "?", aw: !!a.winner, bw: !!b.winner, state: cs.state || "pre", detail: cs.shortDetail || "", wc: (c.type || {}).abbreviation || "", ts: Date.parse(c.date) };
-      }).reverse();
+      o.fights = (e.competitions || []).map(function (c) { return pair(c, (c.type || {}).abbreviation || ""); }).reverse();
       if (o.fights.some(function (f) { return f.state === "in"; })) o.state = "in";
-      o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
+      if (o.state === "in") o.detail = "LIVE";
+    } else if (o.kind === "tour") {
+      // a tournament: keep the singles matches that are live or within a day and a half, live ones first
+      var ms = [];
+      (e.groupings || []).forEach(function (g) {
+        var gname = (g.grouping || {}).displayName || "";
+        if (!/singles/i.test(gname)) return;
+        (g.competitions || []).forEach(function (c) {
+          var cs = (c.status && c.status.type) || {}, ts = Date.parse(c.date);
+          if (cs.state !== "in" && Math.abs(ts - now) > 129600000) return;
+          var sets = function (x) { return ((x || {}).linescores || []).map(function (l) { return Math.round(l.value); }).join(" "); };
+          ms.push(pair(c, (c.round || {}).displayName || gname, cs.state === "pre" ? "" : sets(c.competitors[0]) + " / " + sets(c.competitors[1])));
+        });
+      });
+      var rank = function (m) { return m.state === "in" ? 0 : m.state === "pre" ? 1 : 2; };
+      o.fights = ms.sort(function (a, b) { return rank(a) - rank(b) || (a.state === "post" ? b.ts - a.ts : a.ts - b.ts); }).slice(0, 40);
+      o.title = e.name || e.shortName || lg.n;
+      o.cardTitle = "Matches (live first, then the nearest)";
+      var liveN = ms.filter(function (m) { return m.state === "in"; }).length;
+      var nextM = ms.filter(function (m) { return m.state === "pre"; }).sort(function (a, b) { return a.ts - b.ts; })[0];
+      if (liveN) { o.state = "in"; o.detail = liveN + " live"; }
+      else if (nextM) { o.state = "pre"; o.ts = nextM.ts; }   // nothing on court right now: show when the next match starts
+      else if (o.state === "in") o.detail = "On now";
+    } else if (o.kind === "race") {
+      // a race weekend (practice, qualifying, race) or a golf tournament
+      o.title = e.name || e.shortName || lg.n;
+      o.sessions = (e.competitions || []).map(function (c) { var cs = (c.status && c.status.type) || {}; return { n: (c.type || {}).abbreviation || (c.type || {}).text || "", state: cs.state || "pre", ts: Date.parse(c.date), detail: cs.shortDetail || "" }; }).filter(function (s) { return s.n; });
+      var lead = ((e.competitions || [])[(e.competitions || []).length - 1] || {}).competitors || [];
+      o.top = lead.slice().sort(function (a, b) { return (a.order || 99) - (b.order || 99); }).slice(0, 5).map(function (c) { return { n: (c.athlete || {}).displayName || "?", s: c.score != null && typeof c.score !== "object" ? String(c.score) : "" }; });
+      var liveS = o.sessions.filter(function (s) { return s.state === "in"; })[0], nextS = o.sessions.filter(function (s) { return s.state === "pre"; })[0];
+      if (liveS) { o.state = "in"; o.detail = liveS.n; }
+      else if (o.sessions.length && nextS) { o.state = "pre"; o.ts = nextS.ts; }
+      else if (o.state === "in") o.detail = o.detail || "On now";
     } else {
       var cs2 = ((e.competitions || [])[0] || {}).competitors || [];
       var side = function (ha) { var c = cs2.filter(function (x) { return x.homeAway === ha; })[0] || {}, t = c.team || {}; return { n: t.shortDisplayName || t.displayName || "?", s: c.score, logo: safeUrl(t.logo), win: !!c.winner }; };
       o.home = side("home"); o.away = side("away");
       o.names = [o.home.n, o.away.n];
     }
+    if (o.fights) o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
     return o;
   }).filter(function (o) { return !isNaN(o.ts); });
 }
@@ -2369,16 +2468,16 @@ function spGet(lg, pri, month) {
     .then(function (j) { store[key].ev = spParse(lg, j, pri); store[key].ok = 1; SPERR = ""; })
     .catch(function (e) { if (!store[key].ok) SPERR = String((e && e.message) || e); });
 }
-// Today's scoreboards: every minute for a league with a game in play, otherwise every 5 minutes.
-// Upcoming / Favorites also need the month's fixtures: those are fetched when you first open that view, then every 30 minutes.
+// Today's scoreboards: every minute for a league with a game in play (tennis every three: its file is large), otherwise
+// every 5 minutes. Upcoming / Favorites also need the month's fixtures: fetched when you open that view, then every 30 minutes.
 function fetchSports(force) {
   if (boxOff("sports")) return;
-  var now = Date.now(), jobs = [], sport = P.spSport || "";
-  SP_LEAGUES.forEach(function (lg, pri) {
+  var now = Date.now(), jobs = [], sport = spSport();
+  spLeagues().forEach(function (lg) {
     if (sport && lg.sp !== sport) return;
-    var c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in"; });
-    if (force || !c || now - c.t > (live ? 55000 : 290000)) jobs.push(spGet(lg, pri));
-    if (spView() !== "now") {
+    var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in"; });
+    if (force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000)) jobs.push(spGet(lg, pri));
+    if (spView() !== "now" && lg.kind !== "tour") {
       var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
       if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
       months.forEach(function (m) { var u = SP_UP[lg.id + m]; if (!u || now - u.t > 1800000) jobs.push(spGet(lg, pri, m)); });
@@ -2387,37 +2486,43 @@ function fetchSports(force) {
   if (jobs.length) Promise.all(jobs).then(render);
 }
 function spEvents() {
-  var by = {}, view = spView(), sport = P.spSport || "", now = Date.now();
+  var by = {}, view = spView(), sport = spSport(), now = Date.now(), on = {};
+  spLeagues().forEach(function (l) { on[l.n] = 1; });
   Object.keys(SP_UP).forEach(function (k) { SP_UP[k].ev.forEach(function (e) { by[e.id] = e; }); });
   Object.keys(SP_NOW).forEach(function (k) { SP_NOW[k].ev.forEach(function (e) { by[e.id] = e; }); });   // today's data is fresher, so it wins
-  var all = Object.keys(by).map(function (k) { return by[k]; }).filter(function (e) { return !sport || e.sp === sport; });
+  var all = Object.keys(by).map(function (k) { return by[k]; }).filter(function (e) { return on[e.lg] && (!sport || e.sp === sport); });
   all.forEach(function (e) { e.fav = e.names.some(spIsFav); });
   var live = function (e) { return e.state === "in" ? 1 : 0; }, day = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); };
   if (view === "up") return all.filter(function (e) { return e.state === "pre" && e.ts > now - 3600000; }).sort(function (a, b) { return a.ts - b.ts || a.pri - b.pri; }).slice(0, 60);
   if (view === "fav") return all.filter(function (e) { return e.fav && (e.state !== "post" || now - e.ts < 86400000); }).sort(function (a, b) { return live(b) - live(a) || a.ts - b.ts; }).slice(0, 60);
-  return all.filter(function (e) { return e.state === "in" || day(e.ts) === day(now) || (e.state === "post" && now - e.ts < 43200000) || (e.sp === "ufc" && e.state === "pre" && e.ts - now < 172800000); })
+  return all.filter(function (e) { return e.state === "in" || day(e.ts) === day(now) || (e.state === "post" && now - e.ts < 43200000 && e.kind === "team") || (e.kind !== "team" && e.state === "pre" && e.ts - now < 172800000); })
     .sort(function (a, b) { return live(b) - live(a) || (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || a.pri - b.pri || a.ts - b.ts; }).slice(0, 60);
 }
 function spWhen(e) {
-  if (e.state === "in") return '<span class="pill live">' + esc(e.sp === "ufc" ? "LIVE" : e.detail || "LIVE") + "</span>";
-  if (e.state === "post") return '<span class="mut">' + esc(e.sp === "ufc" ? "Final" : (e.detail || "FT")) + "</span>";
+  if (e.state === "in") return '<span class="pill live">' + esc(e.detail || "LIVE") + "</span>";
+  if (e.state === "post") return '<span class="mut">' + esc(e.kind === "team" ? (e.detail || "FT") : "Finished") + "</span>";
   var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
   return '<span class="mut">' + (today ? "" : d.toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" }) + " ") + d.toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }) + "</span>";
 }
 function spTitle(e) {
-  if (e.sp === "ufc") return esc(e.title);
+  if (e.kind !== "team") return esc(e.title);
   var sc = e.state === "pre" ? ' <span class="mut">–</span> ' : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ";
   return spCrest(e.home) + esc(e.home.n) + sc + esc(e.away.n) + spCrest(e.away);
 }
-// Small sport symbols (ball, ball, octagon) and 40px team crests (ESPN resizes them for us: 3 KB instead of 36 KB)
+// Small sport symbols and 40px team crests (ESPN resizes them for us: 3 KB instead of 36 KB)
 var SP_SVG = 'viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 var SP_ICON = {
-  football: "<svg " + SP_SVG + '><circle cx="12" cy="12" r="9"/><path d="M12 8l3.8 2.8-1.5 4.4H9.7l-1.5-4.4zM12 3v5M3.5 9.6l4.7 1.2M20.5 9.6l-4.7 1.2M6.6 19.2l3.1-4M17.4 19.2l-3.1-4"/></svg>',
-  basketball: "<svg " + SP_SVG + '><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3 2.8 3 9.8 0 12.6M18.3 5.7c-3 2.8-3 9.8 0 12.6"/></svg>',
-  ufc: "<svg " + SP_SVG + '><path d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"/><path d="M9 9.5l6 5M15 9.5l-6 5"/></svg>'
+  football: '<circle cx="12" cy="12" r="9"/><path d="M12 8l3.8 2.8-1.5 4.4H9.7l-1.5-4.4zM12 3v5M3.5 9.6l4.7 1.2M20.5 9.6l-4.7 1.2M6.6 19.2l3.1-4M17.4 19.2l-3.1-4"/>',
+  basketball: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3 2.8 3 9.8 0 12.6M18.3 5.7c-3 2.8-3 9.8 0 12.6"/>',
+  ufc: '<path d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"/><path d="M9 9.5l6 5M15 9.5l-6 5"/>',
+  hockey: '<path d="M6 3l5 12h7a2 2 0 0 1 0 4h-8.5L4 5z"/><ellipse cx="18.5" cy="6" rx="2.5" ry="1.3"/>',
+  amfootball: '<path d="M4 20C3 12 12 3 20 4c1 8-8 17-16 16z"/><path d="M9 15l6-6M10.5 10.5l3 3M12.5 8.5l3 3M8.5 12.5l3 3"/>',
+  baseball: '<circle cx="12" cy="12" r="9"/><path d="M6.2 5.2c2.6 3.6 2.6 10 0 13.6M17.8 5.2c-2.6 3.6-2.6 10 0 13.6"/>',
+  tennis: '<circle cx="12" cy="12" r="9"/><path d="M3.6 8.5c5.5 1 9 5.5 8.9 12.4M20.4 15.5c-5.500-1-9-5.500-8.900-12.400"/>',
+  racing: '<path d="M5 21V4M5 4h13l-2.500 4L18 12H5"/><path d="M9.300 4v8M13.600 4v8M5 8h10.500"/>',
+  golf: '<path d="M11 21V3l7 3.500-7 3.500"/><path d="M6 21c0-1.700 2.700-3 5-3s5 1.300 5 3z"/>'
 };
-var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC" };
-function spIcon(sp) { return '<i class="spi sp-' + sp + '" title="' + (SP_NAME[sp] || "") + '">' + (SP_ICON[sp] || "") + "</i>"; }
+function spIcon(sp) { return '<i class="spi sp-' + sp + '" title="' + (SP_NAME[sp] || "") + '"><svg ' + SP_SVG + ">" + (SP_ICON[sp] || SP_ICON.baseball) + "</svg></i>"; }
 function spCrest(t) {
   var u = safeUrl(t.logo);
   if (u.indexOf("https://a.espncdn.com/i/") === 0) u = "https://a.espncdn.com/combiner/i?img=/i/" + u.slice(24) + "&w=40&h=40";
@@ -2425,7 +2530,8 @@ function spCrest(t) {
 }
 function sportsBody() {
   var ev = spEvents(), view = spView();
-  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or fighter.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
+  if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
+  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
   return lst("sports", ev.map(function (e) {
     return '<div class="row' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + (e.fav ? '<i class="fv">★</i>' : "") + spTitle(e) + "</button>" +
       (P.hideSrc ? "" : " <small>" + esc(e.lg) + "</small>") + '</span><span class="r">' + spWhen(e) + "</span></div>";
@@ -2437,17 +2543,38 @@ function openSport(id) {
   if (!e) return;
   SP_OPEN = id;
   var favBtn = function (n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; };
-  var body;
-  if (e.sp === "ufc") {
-    body = '<h2 class="mh">' + esc(e.title) + '</h2><div class="mut">' + spWhen(e) + "</div><h3>Fight card (main event first)</h3>" + e.fights.map(function (f) {
-      var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "Draw / no contest") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' : "";
+  var body, head = '<h2 class="mh">' + esc(e.title || "") + '</h2><div class="mut">' + spWhen(e) + "</div>";
+  if (e.fights) {
+    body = head + "<h3>" + e.cardTitle + "</h3>" + (e.fights.map(function (f) {
+      var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "No result") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' + (e.kind === "tour" && f.detail ? " " + esc(f.detail) : "") : "";
       return '<div class="row"><span>' + favBtn(f.a) + " <b" + (f.aw ? ' class="win"' : "") + ">" + esc(f.a) + '</b> <span class="mut">vs</span> <b' + (f.bw ? ' class="win"' : "") + ">" + esc(f.b) + "</b> " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") + '</span><span class="r mut">' + res + "</span></div>";
-    }).join("");
+    }).join("") || '<p class="mut sn">No matches in the next day and a half.</p>');
+  } else if (e.kind === "race") {
+    body = head + (e.sessions.length ? "<h3>Sessions</h3>" + e.sessions.map(function (s) {
+      return '<div class="row"><span><b>' + esc(s.n) + '</b></span><span class="r">' + spWhen({ state: s.state, ts: s.ts, kind: "race", detail: "LIVE" }) + "</span></div>";
+    }).join("") : "") + (e.top.length ? "<h3>" + (e.state === "pre" ? "Field" : "Leaders") + "</h3>" + e.top.map(function (t, i) { return '<div class="row"><span>' + (i + 1) + ". <b>" + esc(t.n) + '</b></span><span class="r mut">' + esc(t.s) + "</span></div>"; }).join("") : "");
   } else {
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>";
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, "Details on ESPN") + "</p>" : "") + "</div>");
+}
+// Settings > Sports: one switch per league, grouped by sport
+function renderSpList() {
+  var on = {}, groups = {}, order = [];
+  spLeagues().forEach(function (l) { on[l.id] = 1; });
+  SP_CATALOG.forEach(function (l) { if (!groups[l.sp]) { groups[l.sp] = []; order.push(l.sp); } groups[l.sp].push(l); });
+  $("spList").innerHTML = order.map(function (sp) {
+    return '<div class="sub"><b>' + spIcon(sp) + SP_NAME[sp] + "</b>" + groups[sp].map(function (l) {
+      return "<label>" + esc(l.n) + ' <input type="checkbox" data-a="sptoggle" data-k="' + l.id + '"' + (on[l.id] ? " checked" : "") + "></label>";
+    }).join("") + "</div>";
+  }).join("");
+}
+function spToggleLeague(id, onNow) {
+  var cur = spLeagues().map(function (l) { return l.id; }).filter(function (x) { return x !== id; });
+  if (onNow) cur.push(id);
+  P.spLeagues = SP_CATALOG.map(function (l) { return l.id; }).filter(function (x) { return cur.indexOf(x) >= 0; });
+  persist(); render(); fetchSports(true);
 }
 function spToggleFav(name, openId) {
   P.spFav = spFavs().slice();
@@ -2578,6 +2705,26 @@ function wizAct(a, k) {
   }
   wizRender();
 }
+
+// ---- Usage counters for the site owner's admin overview ----
+// Only two things are counted, and only while signed in: seconds the page was open and visible, and how many times
+// each kind of button was pressed (for example "news: open headline"). Never what you read, type, search or save.
+var TRK = { secs: 0, clicks: {} };
+setInterval(function () { if (USER && !document.hidden) TRK.secs += 15; }, 15000);
+function trackClick(a, el) {
+  if (!USER || !a) return;
+  var box = el.closest("[data-id]"), where = box ? box.dataset.id : el.closest("#panel") ? "settings" : el.closest("#modal") ? "window" : el.closest(".sw") ? "side" : "page";
+  var k = (where + ":" + a).replace(/[^\w:.-]/g, "").slice(0, 48);
+  TRK.clicks[k] = (TRK.clicks[k] || 0) + 1;
+}
+function trackFlush() {
+  if (!sb || !USER || (!TRK.secs && !Object.keys(TRK.clicks).length)) return;
+  var t = TRK;
+  TRK = { secs: 0, clicks: {} };
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { track: t } }).catch(function () {});
+}
+setInterval(trackFlush, 120000);
+document.addEventListener("visibilitychange", function () { if (document.hidden) trackFlush(); });
 
 // ---- Search bar: plain words go to your search engine, a site name opens the site, !bangs pick a site to search ----
 var ENGINES = { google: "https://www.google.com/search?q=", ddg: "https://duckduckgo.com/?q=", brave: "https://search.brave.com/search?q=", bing: "https://www.bing.com/search?q=", kagi: "https://kagi.com/search?q=" };

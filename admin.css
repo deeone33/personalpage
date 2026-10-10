@@ -1,0 +1,55 @@
+/* OmniRama admin overview. Always dark; builds on style.css (colors, buttons, pills, rows). */
+:root{--ac:#f5b942;--acfg:#111;--acsoft:rgba(245,185,66,.16);--acglow:rgba(245,185,66,.35)}
+body.adminpage{background:var(--bg);color:var(--fg)}
+#adm{max-width:1280px;margin:auto;padding:22px 20px 60px}
+.ahead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.ahead h1{margin:0;font-size:28px;font-weight:800;letter-spacing:-.5px}
+.abtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#aQ{font:inherit;font-size:14px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 12px;width:220px;outline:0}
+#aQ:focus{border-color:var(--ac)}
+#aMsg:empty{display:none}
+#aMsg{margin:0 0 14px;padding:9px 12px;border-radius:10px;background:var(--acsoft);border:1px solid var(--ac);font-size:14px}
+.agate{max-width:520px;margin:12vh auto 0;padding:26px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:16px}
+.agate h2{margin:0 0 8px}
+.atiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.atile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.atile b{display:block;font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.atile span{font-size:12px;color:var(--mut)}
+.agrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:12px}
+.apanel{grid-column:span 6;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.apanel.w4{grid-column:span 4}.apanel.w12{grid-column:span 12}
+.apanel h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--mut);display:flex;align-items:center;gap:6px}
+.apanel h2::before{content:"";width:3px;height:12px;border-radius:3px;background:var(--ac)}
+.apanel h2 small{font-weight:400;margin-left:auto}
+/* bar chart: one column per day */
+.bars{display:flex;align-items:flex-end;gap:2px;height:110px}
+.bars i{flex:1;min-width:0;background:var(--ac);border-radius:3px 3px 0 0;opacity:.85;min-height:1px}
+.bars i.z{background:var(--line)}
+.bars i:hover{opacity:1}
+.baxis{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);margin-top:4px}
+/* horizontal bars: a label, a bar, a number */
+.hb{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;font-size:13px;padding:3px 0}
+.hb span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb em{display:block;height:8px;border-radius:5px;background:var(--line);overflow:hidden}
+.hb em u{display:block;height:100%;background:var(--ac);border-radius:5px}
+.hb b{font-variant-numeric:tabular-nums;font-weight:600;min-width:34px;text-align:right}
+/* accounts table */
+.atable{width:100%;border-collapse:collapse;font-size:13px}
+.atable th{text-align:left;font-weight:600;color:var(--mut);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+.atable th.on{color:var(--fg)}
+.atable td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.atable tr.urow{cursor:pointer}
+.atable tr.urow:hover td{background:var(--acsoft)}
+.atable td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.atable .mail{font-weight:600;word-break:break-all}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tags span{font-size:11px;padding:0 7px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.tags span.y{border-color:var(--ac);color:var(--fg)}
+.tags span.bad{border-color:var(--down);color:var(--down)}
+.udetail td{background:var(--bg)}
+.ud{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ud h3{margin:0 0 6px;font-size:12px;color:var(--mut);font-weight:700}
+.uacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.uacts button{font-size:12px;padding:4px 10px}
+.tablewrap{overflow-x:auto}
+@media(max-width:900px){.apanel,.apanel.w4{grid-column:span 12}.ud{grid-template-columns:1fr}}

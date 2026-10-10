@@ -104,6 +104,12 @@
     </div>
   </section>
 
+  <section class="setgrp" data-cat="Content" data-sec="Sports">
+    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders.</div>
+    <div id="spList"></div>
+    <button data-a="spreset">Back to the starting leagues</button>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Twitch">
     <label>Twitch account <button id="twBtn"></button></label>
     <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
@@ -173,6 +179,12 @@
       <div id="delMsg" class="sn" role="status"></div>
     </div>
     <div id="delSignedOut" class="mut" hidden>Sign in first to delete an account.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Account" data-sec="Admin" data-admin="1">
+    <div class="mut sn">Only you see this entry. The overview shows every account, sign-ups, how much the site is used and what is clicked most, and lets you reset a password, block or delete an account.</div>
+    <a class="btn" href="admin.html" target="_blank" rel="noopener">Open the admin overview</a>
+    <div class="mut sn">The data comes from your function, which checks that the request is signed in as your confirmed email before it answers. Hiding or showing this entry is cosmetic; it gives nobody access.</div>
   </section>
 
   <section class="setgrp" data-cat="Account" data-sec="Backup">
