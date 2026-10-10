@@ -43,7 +43,7 @@
     <label>Text color <input type="color" id="cFg"></label>
     <label>Muted text <input type="color" id="cMut"></label>
     <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
-    <label>Glow background <input type="checkbox" id="auroraOn"></label>
+    <label data-kw="aurora gradient">Glow background <input type="checkbox" id="auroraOn"></label>
     <label>Shadows behind boxes and logo <input type="checkbox" id="shadowOn"></label>
     <button id="cReset">Reset colors</button>
   </section>
@@ -63,6 +63,7 @@
       <div id="hiddenList" class="mut"></div>
     </div>
     <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
+    <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
     <button data-a="wizopen">Run the setup guide again</button>
   </section>
 
@@ -114,7 +115,7 @@
       <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
       <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
     </div>
-    <label>Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
+    <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Sports">
@@ -129,7 +130,7 @@
     <label>Twitch account <button id="twBtn"></button></label>
     <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
     <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
-    <label>Show my ★ streamers who are offline <input type="checkbox" id="twOffOn"></label>
+    <label data-kw="favorite favourite starred last live">Show my ★ streamers who are offline <input type="checkbox" id="twOffOn"></label>
     <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
   </section>
 
@@ -195,6 +196,8 @@
   <section class="setgrp" data-cat="Account" data-sec="Sign-in activity" id="actSec">
     <div class="mut sn">Every device and browser that is signed in to your account right now, and the latest sign-ins. If something here is not you, change your password and sign the other devices out.</div>
     <div id="actList"></div>
+    <label>Email me when a new device or browser signs in <input type="checkbox" id="devMailOn"></label>
+    <div class="mut sn">Sent through your connected Gmail inbox (Settings → Mail), by the page itself the first time it opens in a browser your account has not been seen in.</div>
     <span><button data-a="actload">Refresh</button> <button data-a="actout">Sign out everywhere else</button></span>
   </section>
 

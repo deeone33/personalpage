@@ -1,4 +1,4 @@
-var VERSION = 66;
+var VERSION = 67;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1958,6 +1958,8 @@ document.addEventListener("click", function (e) {
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
+  if (a === "setfind") { setFind(+k); return; }
+  if (a === "pastesave") { pasteSave(k); return; }
   if (a === "keyset") { e.preventDefault(); KEYCAP = KEYCAP === k ? "" : k; renderKeys(); return; }
   if (a === "keyreset") { delete P.keys; KEYCAP = ""; persist(); renderKeys(); return; }
   if (a === "srchans") { srchTake(); return; }
@@ -2002,16 +2004,18 @@ function isAdmin() { return !!USER && (window.ADMIN_EMAILS || []).some(function 
 function buildSetNav() {
   var cat = "", gs = document.querySelectorAll("#panel .setgrp");
   if (gs[SETSEC] && gs[SETSEC].dataset.admin && !isAdmin()) SETSEC = 0;
-  $("setNav").innerHTML = '<div class="navtitle">Settings</div>' + Array.prototype.map.call(gs, function (g, i) {
+  var q = $("setQ") ? $("setQ").value : "";
+  $("setNav").innerHTML = '<div class="navtitle">Settings</div><input type="search" id="setQ" placeholder="Search settings…" aria-label="Search settings" autocomplete="off"><div id="setRes" hidden></div><div id="setNavL">' + Array.prototype.map.call(gs, function (g, i) {
     if (g.dataset.admin && !isAdmin()) return "";   // the Admin entry is only listed for the site owner
     var h = g.dataset.cat !== cat ? '<div class="navcat">' + esc(g.dataset.cat) + "</div>" : "";
     cat = g.dataset.cat;
     return h + '<button data-a="setsec" data-k="' + i + '">' + esc(g.dataset.sec) + "</button>";
-  }).join("");
+  }).join("") + "</div>";
+  if (q) { $("setQ").value = q; setSearch(); }
   setSec(SETSEC);
 }
 function setSec(i) {
-  var gs = document.querySelectorAll("#panel .setgrp"), bs = document.querySelectorAll("#setNav button");
+  var gs = document.querySelectorAll("#panel .setgrp"), bs = document.querySelectorAll("#setNavL button");
   SETSEC = Math.max(0, Math.min(gs.length - 1, i || 0));
   Array.prototype.forEach.call(gs, function (g, k) { g.classList.toggle("on", k === SETSEC); });
   Array.prototype.forEach.call(bs, function (b) { b.classList.toggle("on", +b.dataset.k === SETSEC); });
@@ -2089,6 +2093,7 @@ function onUser(u) {
     var resume = null; try { resume = JSON.parse(sessionStorage.getItem("sp_wiz") || "null"); sessionStorage.removeItem("sp_wiz"); } catch (e) {}
     if (resume) setTimeout(function () { openWizard(resume); }, 300);
     else if (isNew && !P.onboarded) setTimeout(function () { openWizard(); }, 600);
+    checkDevice();
     fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz();
   });
 }
@@ -2768,11 +2773,12 @@ function spGetX(list) {
       if (!Array.isArray(d[lg.x])) return;
       var pri = SP_CATALOG.indexOf(lg), side = function (s) {
         s = s || {};
-        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: "", lines: [], st: {}, lead: [] };
+        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: String(s.ab || "").slice(0, 4).toUpperCase(), lines: [], st: {}, lead: [] };
       };
       SP_NOW[lg.id].ev = d[lg.x].map(function (g) {
         var o = { id: lg.id + ":" + g.id, lg: lg.n, sp: lg.sp, kind: "team", pri: pri, ts: +g.ts, state: g.state === "in" || g.state === "post" ? g.state : "pre", detail: String(g.detail || ""), link: safeUrl(g.link),
-          home: side(g.home), away: side(g.away), ev: [], venue: String(g.venue || ""), att: 0, recap: String(g.note || "") };
+          home: side(g.home), away: side(g.away), ev: [], venue: String(g.venue || ""), att: 0, recap: String(g.note || ""),
+          tw: (Array.isArray(g.tw) ? g.tw : []).map(String).filter(function (l) { return /^[a-z0-9_]{2,25}$/i.test(l); }).slice(0, 3) };
         o.names = [o.home.n, o.away.n];
         return o;
       }).filter(function (o) { return !isNaN(o.ts); });
@@ -2949,6 +2955,16 @@ var SP_TAB = {};
 function spTabGet(lgId) {
   var c = SP_TAB[lgId];
   if (c && Date.now() - c.t < 600000) return Promise.resolve(c.g);
+  // the SHL table comes from shl.se through the feeds function, already in the shape used below
+  if (lgId === "x/shl") {
+    if (!sb || !USER) return Promise.reject(new Error("sign in"));
+    return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { sptable: "shl" } }).then(function (r) {
+      var g = (r.data && r.data.sptable) || [];
+      g.forEach(function (x) { (x.rows || []).forEach(function (row, i) { row.pos = i + 1; row.logo = safeUrl(row.logo); row.s = row.s || {}; }); });
+      if (g.length) SP_TAB[lgId] = { t: Date.now(), g: g };
+      return g;
+    });
+  }
   return fetch("https://site.api.espn.com/apis/v2/sports/" + lgId + "/standings")
     .then(function (r) { if (!r.ok) throw new Error("no table"); return r.json(); })
     .then(function (j) {
@@ -2981,19 +2997,20 @@ function spTabHtml(groups, e) {
   if (!mine.length) return "";
   // football: played, won, drawn, lost, goal difference, points. Other sports: won, lost, win share, games behind.
   var foot = mine[0].rows[0].s.points != null && mine[0].rows[0].s.ties != null && mine[0].rows[0].s.gamesBehind == null;
-  var cols = foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]] : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["streak", "Strk"]];
+  var own = Array.isArray(mine[0].cols) && mine[0].cols.length;   // a source that names its own columns (SHL); the last one is the points
+  var cols = own ? mine[0].cols.map(function (c) { return [String(c[0]), esc(String(c[1]))]; }) : foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]] : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["streak", "Strk"]];
   cols = cols.filter(function (c) { return mine[0].rows.some(function (r) { return r.s[c[0]] != null && r.s[c[0]] !== ""; }); });
   return mine.map(function (g) {
-    return "<h3>" + esc(mine.length > 1 || !foot ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
+    return "<h3>" + esc(mine.length > 1 || !(foot || own) ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
       g.rows.map(function (r) {
         return '<tr class="' + (ids.indexOf(r.id) >= 0 ? "me" : "") + '"' + (r.note ? ' title="' + esc(r.note) + '"' : "") + '><td class="ps"' + (r.col ? ' style="box-shadow:inset 3px 0 0 ' + r.col + '"' : "") + ">" + r.pos + '</td><td class="tn">' + spCrest({ logo: r.logo }) + esc(r.n) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" +
-          cols.map(function (c, i) { return "<td" + (i === cols.length - 1 && foot ? ' class="pt"' : "") + ">" + esc(r.s[c[0]] != null ? r.s[c[0]] : "") + "</td>"; }).join("") + "</tr>";
+          cols.map(function (c, i) { return "<td" + (i === cols.length - 1 && (foot || own) ? ' class="pt"' : "") + ">" + esc(r.s[c[0]] != null ? r.s[c[0]] : "") + "</td>"; }).join("") + "</tr>";
       }).join("") + "</table></div>";
   }).join("");
 }
 function spTabLoad(e) {
   var box = $("spTab"), lgId = e.id.slice(0, e.id.lastIndexOf(":"));
-  if (!box || lgId.indexOf("x/") === 0) return;   // ESPN has no table for the leagues that come from elsewhere
+  if (!box || (lgId.indexOf("x/") === 0 && lgId !== "x/shl")) return;   // no table for esports
   spTabGet(lgId).then(function (g) {
     box = $("spTab");
     if (!box || SP_OPEN !== e.id) return;
@@ -3041,7 +3058,9 @@ function openSport(id) {
   } else {
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
-      (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
+      (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
+      // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
+      (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
@@ -3369,7 +3388,7 @@ function loadExtraForm() {
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
-  $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn();
+  $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
   renderKeys();
 }
@@ -3394,6 +3413,8 @@ $("keysOn").onchange = function () { P.keysOff = !this.checked; persist(); rende
 $("cntNews").onchange = function () { P.cnt = P.cnt || {}; P.cnt.news = +this.value; MORE.news = 0; persist(); render(); };
 $("cntTg").onchange = function () { P.cnt = P.cnt || {}; P.cnt.tg = +this.value; MORE.tg = 0; persist(); render(); tgTopUp(); };
 $("rdComSel").onchange = function () { P.rdCom = +this.value; persist(); };
+$("devMailOn").onchange = function () { P.devMail = this.checked; persist(); };
+$("pasteOn").onchange = function () { P.pasteNote = this.checked; persist(); };
 $("twOffOn").onchange = function () { P.twOff = this.checked; persist(); render(); if (this.checked && twToken()) fetchTwOffline(twToken()); };
 // a click anywhere else cancels "Press a key…"
 document.addEventListener("click", function (e) { if (KEYCAP && !(e.target.closest && e.target.closest(".kbd"))) { KEYCAP = ""; renderKeys(); } }, true);
@@ -3438,6 +3459,90 @@ function loadActivity() {
       }).join("") || '<p class="mut sn">No history available (Supabase may not be keeping its sign-in log).</p>') + "</div>";
   }).catch(function (e) { box.innerHTML = '<p class="mut sn">Could not load it: ' + esc(String((e && e.message) || e)) + "</p>"; });
 }
+
+// ---- Paste to note: Ctrl+V on the page itself (not in a text box) offers to keep the clipboard text as a note or to-do ----
+document.addEventListener("paste", function (e) {
+  var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  if (typing || P.pasteNote === false) return;
+  var txt = "";
+  try { txt = (e.clipboardData || window.clipboardData).getData("text"); } catch (x) {}
+  txt = String(txt || "").trim().slice(0, 2000);
+  if (!txt) return;
+  e.preventDefault();
+  var old = $("pasteAsk"); if (old) old.remove();
+  var el = document.createElement("div");
+  el.className = "toast pasteask"; el.id = "pasteAsk";
+  el.innerHTML = '<div class="tb"><b>Save what you pasted?</b><span></span><p class="acts"><button class="pri" data-a="pastesave" data-k="note">As a note</button><button data-a="pastesave" data-k="todo">As a to-do</button></p></div><button class="tx" data-a="pastesave" data-k="" aria-label="Dismiss">✕</button>';
+  el.querySelector("span").textContent = txt.length > 160 ? txt.slice(0, 160) + "…" : txt;
+  el.dataset.txt = txt;
+  $("toasts").appendChild(el);
+  setTimeout(function () { if (document.contains(el)) el.remove(); }, 15000);
+});
+function pasteSave(kind) {
+  var el = $("pasteAsk");
+  if (!el) return;
+  var txt = el.dataset.txt;
+  el.remove();
+  if (!kind || !txt) return;
+  (P.notes = P.notes || []).push({ id: "n" + Date.now().toString(36), t: txt, ts: Date.now(), todo: kind === "todo" });
+  persist(); render();
+  if (sideOf("notes")) putWidget("notes");
+}
+
+// ---- New device: the first time this account is opened in a browser it has not been seen in, it emails you ----
+// Each browser gets a random name of its own, kept on that device; the account remembers which ones it has seen.
+// The email goes through your own Gmail script (Settings > Mail), so it only works when an inbox is connected.
+function checkDevice() {
+  if (!USER) return;
+  var id = "";
+  try { id = localStorage.getItem("sp_dev") || ""; if (!/^[a-z0-9]{8,20}$/.test(id)) { id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); localStorage.setItem("sp_dev", id); } } catch (e) { return; }
+  var devs = P.devs && typeof P.devs === "object" ? P.devs : {}, known = Object.keys(devs);
+  if (devs[id]) return;
+  var name = devName(navigator.userAgent), first = !known.length;
+  devs[id] = { n: name, t: Date.now() };
+  if (known.length >= 30) known.sort(function (a, b) { return (devs[a].t || 0) - (devs[b].t || 0); }).slice(0, known.length - 29).forEach(function (k) { delete devs[k]; });
+  P.devs = devs; persist();
+  // the very first device of an account is not news; after that every new one is
+  if (first || P.devMail === false || !mailCfg()) return;
+  sendNtfMail([{ ts: Date.now(), t: "New sign-in to your OmniRama account", b: name + ", " + when(Date.now()) + ". If this was you, nothing needs doing. If not: change your password, then Settings > Account > Sign-in activity > Sign out everywhere else." }]);
+}
+
+// ---- Settings search: type a word, get every setting that mentions it, click to jump there ----
+var SETRES = [];
+function setSearch() {
+  var q = ($("setQ") ? $("setQ").value : "").trim().toLowerCase(), res = $("setRes"), list = $("setNavL");
+  if (!res) return;
+  SETRES = [];
+  if (q.length < 2) { res.hidden = true; list.hidden = false; return; }
+  Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, i) {
+    if (g.dataset.admin && !isAdmin()) return;
+    var seen = {};
+    if (g.dataset.sec.toLowerCase().indexOf(q) >= 0) SETRES.push({ i: i, el: null, t: g.dataset.sec, sec: g.dataset.sec });
+    Array.prototype.forEach.call(g.querySelectorAll("label, .sn, button, .sub > b, option"), function (el) {
+      // shown: the setting's own words. Searched as well: the choices of its dropdown and extra search words (data-kw).
+      var txt = (el.tagName === "LABEL" ? Array.prototype.map.call(el.childNodes, function (n) { return n.nodeType === 3 ? n.textContent : ""; }).join(" ") : el.textContent).replace(/\s+/g, " ").trim();
+      var at = el.tagName === "OPTION" ? el.closest("label") || el.parentNode : el, hay = (txt + " " + (el.tagName === "LABEL" ? el.textContent : "") + " " + (el.dataset.kw || "")).toLowerCase();
+      if (el.tagName === "OPTION") txt = (at.tagName === "LABEL" ? Array.prototype.map.call(at.childNodes, function (n) { return n.nodeType === 3 ? n.textContent : ""; }).join(" ").replace(/\s+/g, " ").trim() + ": " : "") + txt;
+      if (!txt || hay.indexOf(q) < 0 || seen[txt] || SETRES.some(function (r) { return r.el === at; })) return;
+      seen[txt] = 1;
+      SETRES.push({ i: i, el: at, t: txt.length > 64 ? txt.slice(0, 62) + "…" : txt, sec: g.dataset.sec });
+    });
+  });
+  SETRES = SETRES.slice(0, 14);
+  list.hidden = true; res.hidden = false;
+  res.innerHTML = SETRES.length ? SETRES.map(function (r, n) { return '<button data-a="setfind" data-k="' + n + '"><small>' + esc(r.sec) + "</small>" + esc(r.t) + "</button>"; }).join("") : '<div class="mut sn">Nothing found.</div>';
+}
+function setFind(n) {
+  var r = SETRES[n];
+  if (!r) return;
+  setSec(r.i);
+  if (!r.el || !document.contains(r.el)) return;
+  r.el.scrollIntoView({ block: "center" });
+  r.el.classList.add("found");
+  setTimeout(function () { r.el.classList.remove("found"); }, 1800);
+}
+document.addEventListener("input", function (e) { if (e.target.id === "setQ") setSearch(); });
+document.addEventListener("keydown", function (e) { if (e.target.id === "setQ" && e.key === "Enter") { e.preventDefault(); setFind(0); } });
 
 // ---- Backup and restore ----
 $("bkExport").onclick = function () {
