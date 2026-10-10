@@ -1,4 +1,4 @@
-var VERSION = 68;
+var VERSION = 69;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -144,6 +144,41 @@ function setCol(k, v) {
   P.colors = P.colors || {}; P.colors[P.theme] = P.colors[P.theme] || {};
   P.colors[P.theme][k] = v; persist(); applyTheme();
 }
+// ---- Signal colors per box (Settings > Appearance): the green and red in Stocks, the live dot in Twitch, the live
+// red and the sport icons in Sports, each with a strength (how see-through the color is). Nothing saved = today's look.
+var BC = [
+  ["stocks", "Stocks", [["up", "Up", "#2fd17f"], ["down", "Down", "#ff5c6c"]]],
+  ["twitch", "Twitch", [["live", "Live dot", "#ff4655"]]],
+  ["sports", "Sports", [["live", "Live", "#ff4655"], ["icon", "Sport icons", "#3fbf7f"]]]
+];
+function bcGet(box, k) { var v = P.bc && P.bc[box] && P.bc[box][k]; return k === "op" ? (v >= 15 && v <= 100 ? +v : 100) : /^#[0-9a-f]{6}$/i.test(v || "") ? v : ""; }
+function applyBoxCols() {
+  var css = BC.map(function (b) {
+    var box = b[0], op = bcGet(box, "op"), sel = '#grid [data-id="' + box + '"]', out = "";
+    var mix = function (hex) { return op < 100 ? "color-mix(in srgb," + hex + " " + op + "%,transparent)" : hex; };
+    var vars = b[2].filter(function (c) { return c[0] !== "icon" && (bcGet(box, c[0]) || op < 100); }).map(function (c) { return "--" + c[0] + ":" + mix(bcGet(box, c[0]) || c[2]); });
+    if (vars.length) out += sel + "{" + vars.join(";") + "}";
+    // the sport icons each have their own color until you pick one for all of them
+    if (box === "sports" && (bcGet(box, "icon") || op < 100)) out += sel + " .spi{" + (bcGet(box, "icon") ? "color:" + bcGet(box, "icon") + ";" : "") + (op < 100 ? "opacity:" + op / 100 : "") + "}";
+    return out;
+  }).join("\n");
+  var st = $("boxCols");
+  if (!st) { st = document.createElement("style"); st.id = "boxCols"; document.head.appendChild(st); }
+  st.textContent = css;
+  if ($("bcList") && !$("bcList").contains(document.activeElement)) $("bcList").innerHTML = BC.map(function (b) {
+    return '<div class="bcrow"><b>' + b[1] + "</b>" + b[2].map(function (c) {
+      return "<label>" + c[1] + ' <input type="color" data-bc="' + b[0] + ":" + c[0] + '" value="' + (bcGet(b[0], c[0]) || c[2]) + '"></label>';
+    }).join("") + '<label title="How strong the colors are: lower is more see-through">Strength <input type="range" min="15" max="100" step="5" data-bc="' + b[0] + ':op" value="' + bcGet(b[0], "op") + '"></label></div>';
+  }).join("");
+}
+document.addEventListener("input", function (e) {
+  var k = e.target.dataset && e.target.dataset.bc;
+  if (!k) return;
+  var p = k.split(":");
+  P.bc = P.bc || {}; P.bc[p[0]] = P.bc[p[0]] || {};
+  P.bc[p[0]][p[1]] = p[1] === "op" ? +e.target.value : e.target.value;
+  persist(); applyBoxCols();
+});
 function applyTheme() {
   var r = document.documentElement;
   if (P.theme !== "light") P.theme = "dark";
@@ -169,6 +204,7 @@ function applyTheme() {
   $("srcNamesOn").checked = !P.hideSrc;
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
   $("volSlider").value = P.vol == null ? 70 : P.vol;
+  applyBoxCols();
 }
 function applyWall() {
   var w = null;
@@ -1959,6 +1995,7 @@ document.addEventListener("click", function (e) {
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
   if (a === "setfind") { setFind(+k); return; }
+  if (a === "bcreset") { delete P.bc; persist(); if (document.activeElement) document.activeElement.blur(); applyBoxCols(); return; }
   if (a === "pastesave") { pasteSave(k); return; }
   if (a === "keyset") { e.preventDefault(); KEYCAP = KEYCAP === k ? "" : k; renderKeys(); return; }
   if (a === "keyreset") { delete P.keys; KEYCAP = ""; persist(); renderKeys(); return; }
