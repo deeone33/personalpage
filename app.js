@@ -1,4 +1,4 @@
-var VERSION = 48;
+var VERSION = 49;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -69,7 +69,15 @@ function unentAll(list, keys) { (list || []).forEach(function (x) { keys.forEach
 function safeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
 function linkBtn(u, label) { u = safeUrl(u); return u ? '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + label + "</a>" : ""; }
 // Broken logos remove themselves (instead of an inline onerror, which the security policy blocks)
-document.addEventListener("error", function (e) { var t = e.target; if (t && t.tagName === "IMG" && t.getAttribute("data-rm") === "1") t.remove(); }, true);
+// A logo that failed to load is remembered for a week, so it is not put back (and flashed white) on every redraw.
+var BADIMG = load("sp_badimg", {});
+Object.keys(BADIMG).forEach(function (u) { if (Date.now() - BADIMG[u] > 604800000) delete BADIMG[u]; });
+document.addEventListener("error", function (e) {
+  var t = e.target;
+  if (!t || t.tagName !== "IMG" || t.getAttribute("data-rm") !== "1") return;
+  if (t.closest(".ic")) { BADIMG[t.getAttribute("src")] = Date.now(); save("sp_badimg", BADIMG); }
+  t.remove();
+}, true);
 
 // ---- Theme, accent, wallpaper ----
 var DEFC = { dark: { bg: "#10131a", card: "#181c26", fg: "#e9ecf2", mut: "#8c93a3", a: 84 }, light: { bg: "#eceff4", card: "#ffffff", fg: "#161a22", mut: "#5d6575", a: 86 } };
@@ -276,6 +284,7 @@ function ico(id, logo) {
   var cr = /^[A-Z0-9]{2,10}USDT?$/.test(t) ? t.replace(/USDT?$/, "").toLowerCase() : "";
   var src = logo || (cr ? "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/" + cr + ".png" : "");
   src = safeUrl(src);
+  if (BADIMG[src]) src = "";
   return '<span class="ic" style="--h:' + h + '"><i>' + esc(t.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)) + "</i>" + (src ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(src) + '">' : "") + "</span>";
 }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
