@@ -1,4 +1,4 @@
-var VERSION = 61;
+var VERSION = 62;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -498,7 +498,9 @@ function render() {
     "</div>");
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[tk(x.id)];
-    var spk = sparkOn() ? sparkSvg(pts, c != null ? up : pts && pts[pts.length - 1] >= pts[0]) : "";
+    // the day chart takes its color from today's change (the number next to it); a week or month chart from its own direction
+    var rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
+    var spk = sparkOn() ? sparkSvg(pts, SPARKR === "d" && c != null && !PREVIEW ? up : rise) : "";
     return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), spk + (c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>"), 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
@@ -703,18 +705,22 @@ function fetchQuotes(force) {
     render(); fetchSparks(force);
   }).catch(function (e) { qBusy = false; QERR = String((e && e.message) || e); render(); });
 }
-// ---- Small day chart on each stock row (Settings > Stocks switches it off). Fetched every 10 minutes. ----
-var SPARK = load("sp_spark", {}), spkBusy = false, spkLast = 0;
+// ---- Small chart on each stock row: the day, the week or the month (Settings > Stocks, also switches it off). Fetched every 10 minutes. ----
+var SPARK = {}, SPARKR = "", spkBusy = false, spkLast = 0;
+(function () { var c = load("sp_spark", null); if (c && c.r && c.d) { SPARK = c.d; SPARKR = c.r; } })();
 function sparkOn() { return P.spark !== false; }
+function sparkRange() { return P.sparkR === "w" || P.sparkR === "m" ? P.sparkR : "d"; }
 function fetchSparks(force) {
   if (!sb || !USER || spkBusy || !sparkOn() || boxOff("stocks")) return;
-  if (!force && Date.now() - spkLast < 540000) return;
+  var range = sparkRange();
+  if (!force && range === SPARKR && Date.now() - spkLast < 540000) return;
   spkBusy = true; spkLast = Date.now();
   var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
-  sb.functions.invoke("quotes", { body: { spark: list } }).then(function (r) {
+  sb.functions.invoke("quotes", { body: { spark: list, range: range } }).then(function (r) {
     spkBusy = false;
     // an older "quotes" function does not know this request and answers without "spark": then there are simply no charts
-    if (r.data && r.data.spark && typeof r.data.spark === "object") { SPARK = r.data.spark; save("sp_spark", SPARK); render(); }
+    // (a "quotes" function from before the week and month choice always answers with the day, and says no range)
+    if (r.data && r.data.spark && typeof r.data.spark === "object") { SPARK = r.data.spark; SPARKR = r.data.range || "d"; save("sp_spark", { r: SPARKR, d: SPARK }); render(); }
   }).catch(function () { spkBusy = false; });
 }
 // The line is drawn in a fixed 44 x 14 box and stretched to the size the stylesheet gives it, so it can never push a row wider.
@@ -3180,7 +3186,7 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
-  $("sparkOn").checked = sparkOn(); $("spCalOn").checked = P.spCal !== false;
+  $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
   renderKeys();
 }
 function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi").value.trim() }; persist(); render(); }
@@ -3198,7 +3204,7 @@ function setNtf() {
 }
 NF_BOX.concat(NF_NUM).forEach(function (x) { $(x[0]).onchange = setNtf; });
 $("briefOn").onchange = function () { P.brief = this.checked; persist(); };
-$("sparkOn").onchange = function () { P.spark = this.checked; persist(); render(); fetchSparks(true); };
+$("sparkSel").onchange = function () { P.spark = this.value !== "off"; if (P.spark) P.sparkR = this.value; persist(); if (sparkRange() !== SPARKR) SPARK = {}; render(); fetchSparks(true); };
 $("spCalOn").onchange = function () { P.spCal = this.checked; persist(); render(); refreshCal(); };
 $("keysOn").onchange = function () { P.keysOff = !this.checked; persist(); renderKeys(); };
 // a click anywhere else cancels "Press a key…"
