@@ -6,7 +6,8 @@
 :root[data-theme=dark]{--bg:#0b0e14;--fg:#e9ecf2;--mut:#8c93a3;--card:rgba(22,26,36,.72);--line:rgba(255,255,255,.1);--solid:#141824;--shadow:0 12px 32px -14px rgba(0,0,0,.65);--hl:rgba(255,255,255,.06)}
 :root[data-theme=light]{--bg:#eceff4;--fg:#161a22;--mut:#5d6575;--card:rgba(255,255,255,.8);--line:rgba(0,0,0,.1);--solid:#fff;--shadow:0 10px 28px -16px rgba(20,30,60,.35);--hl:rgba(255,255,255,.7)}
 html{background:var(--bg)}
-body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font:15px/1.45 "Bricolage Grotesque",system-ui,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);-webkit-font-smoothing:antialiased}
+/* the page color sits on <html>; <body> must stay see-through or it covers the wallpaper layer behind it */
+body{margin:0;min-height:100vh;background:transparent;color:var(--fg);font:15px/1.45 "Bricolage Grotesque",system-ui,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);-webkit-font-smoothing:antialiased}
 ::selection{background:var(--ac);color:var(--acfg)}
 
 /* ---- Background: wallpaper, or a soft glow in your accent color ---- */
