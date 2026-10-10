@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniRama</title>
@@ -106,6 +106,12 @@
       <input type="text" id="nwMute" placeholder="Mute words, comma separated (hides headlines)">
       <input type="text" id="nwHi" placeholder="Highlight words, comma separated">
     </div>
+    <div class="sub" data-kw="language languages english swedish translate foreign">
+      <b>Languages shown in News</b>
+      <div id="langList"></div>
+      <div id="langNote" class="mut sn"></div>
+      <div class="mut sn">Tick the languages you read; headlines in any other language are left out. Nothing is translated. The same story in Swedish and in English is still combined into one row.</div>
+    </div>
     <label>Headlines shown <select id="cntNews"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option></select></label>
     <label>Telegram posts shown <select id="cntTg"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label>
     <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
@@ -126,6 +132,8 @@
   <section class="setgrp" data-cat="Content" data-sec="Sports">
     <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
     <div id="spList"></div>
+    <label data-kw="favourite favorite sport ufc view">Favorite sport <select id="spFavSel"></select></label>
+    <div class="mut sn">Your favorite sport gets its own choice in the Sports box (★ and its name): everything in it that is on now, today and coming up. A UFC card that is on shows every fight as its own row.</div>
     <button data-a="spreset">Back to the starting leagues</button>
     <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
     <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>

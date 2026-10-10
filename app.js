@@ -1,4 +1,4 @@
-var VERSION = 69;
+var VERSION = 72;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -427,16 +427,19 @@ function render() {
   if (NEWS.length) {
     var nowN = Date.now();
     NG = newsGroups();
-    var gRead = function (g) { return g.some(function (x) { return READ[x.u]; }); };
-    nNew = NG.filter(function (g) { return isNewItem(g[0], "news") && !gRead(g); }).length;
+    // A story (one or several sources merged into a row) is new only while you have seen and opened NONE of its
+    // articles. Another source reporting a story that is already in your list does not mark it as new again.
+    var gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !READ[x.u]; }); };
+    nNew = NG.filter(gNew).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
     nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
-      var n = g[0], srcs = g.map(function (x) { return x.s; }), b = g.fav ? "★ Favorite sources" : bucket(n.ts);
+      // n = the story's latest headline; t0 = when it was first reported, which is where it stays in the list
+      var n = g[0], srcs = g.src || g.map(function (x) { return x.s; }), t0 = g.t0 || n.ts, b = g.fav ? "★ Favorite sources" : bucket(t0);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
-      var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
-      var cls = (isNewItem(n, "news") && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
-      return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
+      var hot = srcs.length >= 3 && nowN - n.ts < 10800000, nw = gNew(g), rd = !nw && g.some(function (x) { return READ[x.u]; });
+      var cls = (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
+      return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : "") + '<span class="mut">' + ago(t0) + "</span>", "a:" + n.u, cls, bk);   // the time is always the last thing on the row
     }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : ""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
@@ -513,7 +516,7 @@ function render() {
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
 
-  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(SP_VIEWS, spView()) + "</select>");
+  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + "</select>");
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
@@ -1000,7 +1003,7 @@ function fetchNews() {
     nBusy = false;
     if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
-      NEWS = unentAll(r.data.news, ["t", "d"]); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
+      NEWSALL = unentAll(r.data.news, ["t", "d"]); NEWS = langFilter(NEWSALL.slice()); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
       stampFirst(NEWS, "news"); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
       setTimeout(tgTopUp, 0);
       var ne = r.data.news_err || {};
@@ -1010,7 +1013,7 @@ function fetchNews() {
       newsAlerts(); bigNews();
       setTimeout(maybeBrief, 2500);
     }
-    renderSources(); render();
+    renderSources(); renderLangs(); render();
   }).catch(function (e) { nBusy = false; NERR = String((e && e.message) || e); render(); });
 }
 
@@ -1066,7 +1069,9 @@ function newsGroups() {
     g.fav = g.some(function (n) { return P.fav["n:" + n.s] && now - n.ts < 21600000; });
     g.hi = hi.length > 0 && g.some(function (n) { return hasWord(n.t, hi); });
   });
-  gs.sort(function (a, b) { return (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b[0].ts - a[0].ts; });
+  // newest story first, by when each story was FIRST reported: a later article about a story you already have joins
+  // its row where it is, and does not push the story back to the top
+  gs.sort(function (a, b) { return (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (b.t0 || b[0].ts) - (a.t0 || a[0].ts); });
   NGKEY = key; NGMEMO = gs;
   return gs;
 }
@@ -1095,37 +1100,256 @@ function notifyTxt(title, body, onclick) {
 }
 function askNotify() { try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {} }
 
+// ---- Which language a headline is in (plain word lists, no AI) ----
+// Used for "Languages shown" in Settings and to match the same story across Swedish and English.
+// Other alphabets are told apart by their letters. For the Latin-alphabet languages each one has a list of its small
+// everyday words; a word that several languages share counts less. Too little to go on = "" (unknown).
+var LANGS = [["en", "English"], ["sv", "Swedish"], ["nb", "Norwegian / Danish"], ["fi", "Finnish"], ["et", "Estonian"], ["de", "German"], ["fr", "French"], ["es", "Spanish"], ["it", "Italian"], ["pt", "Portuguese"], ["nl", "Dutch"], ["pl", "Polish"], ["tr", "Turkish"], ["ru", "Russian / Cyrillic"], ["ar", "Arabic / Hebrew"], ["zh", "Chinese / Japanese / Korean"], ["el", "Greek"]];
+var LANG_W = {
+  en: "the of and to in for on with at from by as is are was were after over says say said new not his her their has have had will be been it its that this more than who what how why amid into out up about against before between could would should while where which when they them our your but can may if all one two first year years people court killed dead dies government talks leader world says does face stars",
+  sv: "och i att det som en på är av för med till den har de inte om ett han hon efter vid från mot under kan ska blir blev nu här där sig sin sitt sina också över mellan utan när hur varför fler än säger ny nya nytt år döda död polisen kriget regeringen så var vill får fick ska kommer många flera inför trots enligt mer igen",
+  nb: "og i å at det som en på er av af for med til den har de ikke om et han hun etter efter ved fra mot mod under kan skal blir ble blev nå nu her der seg sig sin også over mellom mellem uten uden når hvordan hvorfor flere enn end sier siger ny nye år døde død politiet krigen regjeringen regeringen så var vil får fikk",
+  fi: "ja on ei että se oli hän mutta kun niin kuin myös tai sekä jo vain ovat olla mukaan jälkeen kanssa tämä ovat sen sitä hänen nyt vuoden uusi kertoo poliisi",
+  et: "ja on ei et see oli ta aga kui nii ka või ning juba ainult olid olla järgi pärast koos mis kes selle tema nüüd aasta uus ütles politsei eesti",
+  de: "der die das und in zu den von mit für auf ist im dem nicht ein eine einen als auch nach bei über wird sich aus noch wie vor zum zur hat sind des dass oder mehr gegen neue neuer warum unter kommt wurde werden ohne durch seit wegen",
+  fr: "le la les de des du et à en un une pour dans sur au aux est que qui par plus avec ce se son sa ses ne pas après contre sont ont été cette ces leur mais ou où comment pourquoi",
+  es: "el la los las de del y en un una para por con que se su al es más tras sobre como entre sin ya fue ha han son sus pero qué cómo contra desde hasta",
+  it: "il lo la i gli le di del della dei e in un una per con che non si da al è più dopo sono ha nel alla dal delle degli ma come perché contro",
+  pt: "o a os as de do da e em um uma para por com que não se na no é mais após dos das ao foi são tem mas como contra entre sobre",
+  nl: "de het een en van in op te voor met is dat die niet aan zijn bij ook als uit naar om door over na wordt heeft maar meer tegen nieuwe",
+  pl: "w i z na do nie się że to jest po o za od jak ale przez dla co są był tym tego oraz już czy",
+  tr: "ve bir bu için ile de da ne gibi daha çok en olarak sonra kadar oldu dedi yeni"
+};
+var LANG_IX = {};
+Object.keys(LANG_W).forEach(function (l) { LANG_W[l].split(" ").forEach(function (w) { if (w.length > 1) (LANG_IX[w] = LANG_IX[w] || []).push(l); }); });   // one-letter words say nothing
+var LANG_CH = [[/[åÅ]/, ["sv", "nb"]], [/[äöÄÖ]/, ["sv", "fi", "et", "de"]], [/[æøÆØ]/, ["nb"]], [/ß/, ["de"]], [/[ñ¿¡]/, ["es"]], [/[ãÃ]/, ["pt"]], [/[õÕ]/, ["et", "pt"]], [/[łżśćńęąŁŻŚ]/, ["pl"]], [/[ğşıİĞŞ]/, ["tr"]], [/[èêùûœ]/, ["fr"]], [/[ìò]/, ["it"]]];
+var LANGSURE = 0;   // how sure the last langOf() was: under 1.6 = a guess from one or two small words
+function langOf(t) {
+  t = String(t || ""); LANGSURE = 9;
+  var all = (t.match(/\p{L}/gu) || []).length || 1;
+  var cnt = function (re) { return (t.match(re) || []).length / all; };
+  if (cnt(/[Ѐ-ӿ]/g) > 0.3) return "ru";
+  if (cnt(/[؀-ۿ֐-׿]/g) > 0.3) return "ar";
+  if (cnt(/[぀-ヿ一-鿿가-힯]/g) > 0.2) return "zh";
+  if (cnt(/[Ͱ-Ͽ]/g) > 0.3) return "el";
+  var sc = {}, add = function (l, v) { sc[l] = (sc[l] || 0) + v; };
+  t.toLowerCase().split(/[^\p{L}]+/u).forEach(function (w) { var ls = LANG_IX[w]; if (ls) ls.forEach(function (l) { add(l, 1 / ls.length); }); });
+  LANG_CH.forEach(function (c) { if (c[0].test(t)) c[1].forEach(function (l) { add(l, 0.6 / c[1].length); }); });
+  var top = Object.keys(sc).sort(function (a, b) { return sc[b] - sc[a]; });
+  LANGSURE = top.length ? sc[top[0]] : 0;
+  if (!top.length || sc[top[0]] < 0.9) return "";
+  return top.length > 1 && sc[top[0]] < sc[top[1]] * 1.25 ? "" : top[0];
+}
+// Every headline gets its language once. A headline too short to tell takes the language most of its source writes in.
+function tagLangs(items) {
+  var per = {};
+  items.forEach(function (x) { if (x.lg == null) { x.lg = langOf(x.t); x.lgs = LANGSURE; } if (x.lg) { per[x.s] = per[x.s] || {}; per[x.s][x.lg] = (per[x.s][x.lg] || 0) + 1; } });
+  // A source that writes (nearly) everything in one language: its short headlines, and the ones that were only a
+  // guess, take that language. A headline that is clearly in another language keeps it (a mostly-English source
+  // that now and then carries a Spanish or German headline).
+  items.forEach(function (x) {
+    if (!per[x.s]) return;
+    var k = Object.keys(per[x.s]).sort(function (a, b) { return per[x.s][b] - per[x.s][a]; }), tot = k.reduce(function (n, l) { return n + per[x.s][l]; }, 0), share = per[x.s][k[0]] / tot;
+    if ((!x.lg && share >= 0.7) || (tot >= 8 && share >= 0.85 && x.lgs < 1.6)) x.lg = k[0];
+  });
+  return items;
+}
+// "Languages shown": nothing chosen = everything. A headline whose language cannot be told is kept.
+var NEWSALL = [], LANGCUT = 0;
+function langList() { return Array.isArray(P.langs) ? P.langs.filter(function (l) { return LANGS.some(function (x) { return x[0] === l; }); }) : []; }
+function langFilter(items) {
+  var ok = langList();
+  tagLangs(items);
+  LANGCUT = 0;
+  if (!ok.length) return items;
+  return items.filter(function (x) { var keep = !x.lg || ok.indexOf(x.lg) >= 0; if (!keep) LANGCUT++; return keep; });
+}
+function renderLangs() {
+  var ok = langList();
+  $("langList").innerHTML = LANGS.map(function (l) { return '<label class="chip"><input type="checkbox" data-a="langtoggle" data-k="' + l[0] + '"' + (ok.indexOf(l[0]) >= 0 ? " checked" : "") + "> " + l[1] + "</label>"; }).join("");
+  $("langNote").textContent = !ok.length ? "Nothing ticked: every language is shown." : LANGCUT ? LANGCUT + " headline" + (LANGCUT > 1 ? "s" : "") + " in other languages hidden right now." : "No headlines in other languages right now.";
+}
+function setLang(code, on) {
+  var ok = langList().filter(function (l) { return l !== code; });
+  if (on) ok.push(code);
+  if (ok.length) P.langs = ok; else delete P.langs;
+  persist();
+  NEWS = langFilter(NEWSALL.slice()); NEWSV++;
+  renderLangs(); render();
+}
+
 // ---- Same story from different sources (plain word matching, no AI) ----
 var NG = [];
 var STOP = {};
 ("that this with from have will been were about after their there which would could says said into over more than what when they your also just amid " +
- "och att som det för med har inte den till att ett var sig från vid men han hon eller kan ska efter under över mot mellan sedan blir blev finns fick").split(" ").forEach(function (w) { STOP[w] = 1; });
-function tokz(t) {
-  var s = t.replace(/\s[-|–—]\s[^-|–—]{2,40}$/, ""), set = [], strong = {};
-  s.split(/[^\p{L}\p{N}]+/u).forEach(function (w, i) {
-    if (!w) return;
-    var lw = w.toLowerCase();
-    if ((lw.length < 4 && !/^\d{2,}$/.test(lw)) || STOP[lw]) return;
-    set.push(lw);
-    if (/\d/.test(w) || (i > 0 && w.charAt(0) !== lw.charAt(0))) strong[lw] = 1;
+ "watch live video update updates latest breaking news analysis explained " +
+ "och att som det för med har inte den till att ett var sig från vid men han hon eller kan ska efter under över mot mellan sedan blir blev finns fick " +
+ "just nu senaste uppgifter här därför detta dessa denna flera minst källor uppger enligt många sources least several").split(" ").forEach(function (w) { STOP[w] = 1; });
+// Countries, and people who are in the news every day: they are words two headlines can share, but they do not
+// say WHICH story it is, so they never count as a story's "name" (two different stories about Taiwan and China stay apart).
+var WEAK = {};
+("russia china ukraine germany france britain sweden norway denmark finland estonia latvia lithuania poland spain italy greece turkey india pakistan japan korea taiwan israel iran iraq syria egypt saudi " +
+ "usa europe africa asia canada mexico brazil australia netherlands belgium hungary austria switzerland ireland scotland england wales lebanon yemen qatar gaza palest afghan " +
+ "trump biden putin zelensk musk netanyahu macron starmer merz xi modi erdogan kreml kremlin white house nato un eu us uk ").split(" ").forEach(function (w) { if (w) WEAK[w] = 1; });
+// Swedish words (and number words in both languages) written the English way, so "Tolv döda i attack mot flygplats"
+// and "Twelve killed in airport attack" share words. Names and numbers match across languages by themselves.
+var XL = { sv: {}, en: {} };
+[["sv", "ryssland:russia rysk:russia ryska:russia ryske:russia tyskland:germany tysk:germany tyska:germany frankrike:france fransk:france franska:france kina:china kinesisk:china kinesiska:china " +
+  "storbritannien:britain brittisk:britain brittiska:britain sverige:sweden svensk:sweden svenska:sweden norge:norway norsk:norway danmark:denmark dansk:denmark finsk:finland " +
+  "estland:estonia estnisk:estonia polen:poland polsk:poland spanien:spain spansk:spain italien:italy italiensk:italy grekland:greece turkiet:turkey turkisk:turkey indien:india indisk:india " +
+  "irak:iraq syrien:syria egypten:egypt etiopien:ethiopia ukraina:ukraine ukrainsk:ukraine ukrainska:ukraine israelisk:israel israeliska:israel iransk:iran iranska:iran " +
+  "saudiarabien:saudi nordkorea:korea sydkorea:korea europa:europe europeisk:europe europeiska:europe amerikansk:usa amerikanska:usa usa:usa fn:un " +
+  "död:kill döda:kill dödad:kill dödade:kill dödats:kill dödas:kill dör:kill avled:kill skadad:injure skadade:injure skadats:injure skadas:injure " +
+  "attack:attack attacken:attack anfall:attack angrepp:attack flygplats:airport flygplatsen:airport valet:election nyval:election president:president presidenten:president " +
+  "krig:war kriget:war jordbävning:earthquake jordskalv:earthquake orkan:hurricane orkanen:hurricane storm:storm stormen:storm översvämning:flood översvämningar:flood " +
+  "brand:fire branden:fire skogsbrand:wildfire explosion:explosion explosionen:explosion skjutning:shooting skjutningen:shooting gripen:arrest gripna:arrest grips:arrest greps:arrest " +
+  "protest:protest protester:protest demonstration:protest demonstranter:protest eldupphör:ceasefire vapenvila:ceasefire sanktioner:sanctions regering:government regeringen:government minister:minister ministern:minister " +
+  "sjukhus:hospital sjukhuset:hospital skola:school skolan:school skoldåd:school avrättning:execution avrättningen:execution mord:murder mordet:murder polis:police polisen:police domstol:court domstolen:court domen:verdict åtal:charge åtalas:charge fängelse:prison gisslan:hostage " +
+  "fredsavtal:peace avtal:deal avtalet:deal toppmöte:summit toppmötet:summit flyktingar:refugee soldater:soldier trupper:soldier " +
+  "drönare:drone robotar:missile kärnvapen:nuclear olja:oil tullar:tariff ränta:rate räntan:rate inflation:inflation " +
+  "två:2 tre:3 fyra:4 fem:5 sju:7 åtta:8 nio:9 tio:10 elva:11 tolv:12 tjugo:20 hundra:100 hundratals:100 tusen:1000 tusentals:1000"],
+ ["en", "british:britain swedish:sweden estonian:estonia ukrainian:ukraine russian:russia german:germany french:france chinese:china israeli:israel iranian:iran european:europe american:usa america:usa " +
+  "dead:kill dies:kill died:kill death:kill deaths:kill killing:kill killed:kill kills:kill injured:injure wounded:injure hurt:injure " +
+  "attack:attack attacks:attack elections:election election:election vote:election president:president quake:earthquake floods:flood flooding:flood blast:explosion " +
+  "arrested:arrest arrests:arrest detained:arrest detains:arrest protest:protest protests:protest protesters:protest truce:ceasefire jail:prison jailed:prison hostages:hostage " +
+  "agreement:deal refugees:refugee soldiers:soldier troops:soldier drones:drone missiles:missile tariffs:tariff " +
+  "two:2 three:3 four:4 five:5 seven:7 eight:8 nine:9 ten:10 eleven:11 twelve:12 twenty:20 hundred:100 hundreds:100 thousand:1000 thousands:1000"]
+].forEach(function (d) { d[1].split(" ").forEach(function (p) { var kv = p.split(":"); XL[d[0]][kv[0]] = kv[1]; }); });
+function fold(w) { return w.normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+// Words that say what KIND of thing happened. Sharing one of these counts for more than sharing an ordinary word.
+var EVW = {};
+"kill injure attack earthquake hurricane storm flood fire wildfire explosion shooting arrest protest ceasefire election verdict charge hostage summit sanctions".split(" ").forEach(function (w) { EVW[w] = 1; });
+var XLSV = Object.keys(XL.sv).filter(function (k) { return k.length >= 5; });
+// One headline as a list of words to compare: lower case, small words dropped, endings cut ("attacks" / "attacken" -> "attack"),
+// Swedish written the English way where the list above knows the word, Swedish compounds split ("flygplatsattack" ->
+// airport + attack). Each word has a kind: n = a name, p = a country or an everyday name, e = an event word, d = a number, "" = ordinary.
+function tokz(t, lg) {
+  var s = String(t).replace(/\s[-|–—]\s[^-|–—]{2,40}$/, "").replace(/[’']s\b/g, ""), words = s.split(/[^\p{L}\p{N}]+/u).filter(Boolean), out = [], seen = {};
+  var caps = words.filter(function (w, i) { return i > 0 && /^\p{Lu}/u.test(w); }).length, titleCase = words.length >= 5 && caps / (words.length - 1) > 0.65;
+  var dict = XL[lg === "sv" ? "sv" : "en"];
+  var push = function (st, kind) { if (st && !seen[st]) { seen[st] = 1; out.push({ w: st, k: kind }); } };
+  words.forEach(function (w, i) {
+    var lw = w.toLowerCase(), num = /^\d+$/.test(w), acr = /^\p{Lu}{2,5}$/u.test(w), x = dict[lw];
+    if (!x && !num && !acr && (lw.length < 4 || STOP[lw])) return;
+    if (num) { if (w.length <= 4 && !/^(19|20)\d\d$/.test(w)) push(w, "d"); return; }
+    if (x) { push(x, /^\d+$/.test(x) ? "d" : EVW[x] ? "e" : WEAK[x] ? "p" : ""); return; }
+    // a capital letter makes a name, except on the first word, which always has one: that one is a name when the
+    // second word has a capital too ("Christa Pike ..."); otherwise it is marked "?" and settled later (see groupNews)
+    var first = i === 0 && !titleCase && /^\p{Lu}/u.test(w), name = acr || (!titleCase && i > 0 && /^\p{Lu}/u.test(w)) || (first && words.length > 1 && /^\p{Lu}\p{Ll}/u.test(words[1]) && !STOP[words[1].toLowerCase()]), st = fold(lw);
+    if (lg === "sv" && !name && lw.length >= 9) {
+      // a compound: take the parts the word list knows, and what is left of it
+      var parts = XLSV.filter(function (k) { return k.length < lw.length && (lw.indexOf(k) === 0 || lw.slice(-k.length) === k); });
+      if (parts.length) {
+        var rest = lw;
+        parts.forEach(function (k) { var m = XL.sv[k]; push(m, EVW[m] ? "e" : WEAK[m] ? "p" : ""); rest = rest.replace(k, ""); });
+        if (rest.length >= 4) push(fold(rest), "");
+        return;
+      }
+    }
+    if (lg === "sv") st = st.replace(/(arna|erna|orna|ande|ade|ar|er|or|en|et|na|s)$/, function (m) { return st.length - m.length >= 4 ? "" : m; });
+    else st = st.replace(/(ing|ed|es|s)$/, function (m) { return st.length - m.length >= 4 ? "" : m; });
+    push(st, name ? (WEAK[st] || WEAK[st.slice(0, 7)] || WEAK[st.slice(0, 6)] ? "p" : "n") : first ? "?" : "");
   });
-  return { set: set, strong: strong };
+  return out;
+}
+// "zelensky" / "zelenskyy", "postpone" / "postpon", "ukraine" / "ukraina": the same word with another ending
+function tokSame(a, b) {
+  if (a === b) return true;
+  var n = Math.min(a.length, b.length);
+  if (n < 5) return false;
+  var i = 0; while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  return i >= Math.max(5, n - 1);
+}
+function outlet(name) { return String(name).toLowerCase().replace(/^the\s+/, "").split(/\s+/)[0]; }   // "BBC" and "BBC World" are one outlet
+function artKey(x) { return String(x.u || "").replace(/[?#].*$/, "").replace(/\/+$/, "").replace(/^https?:\/\/(www\.)?/, ""); }
+// How alike two headlines are, in points: a shared name that belongs to one story (Riyadh, Isaias) 3, a shared
+// event word (killed, earthquake) 2, a shared country, everyday name (Trump) or number 1.5, any other shared word 1.
+// Two headlines that both give numbers but share none lose 1.5 ("12 killed" against "20 killed").
+// The same story = at least 4.5 points from at least two shared words, one of them more than an ordinary word,
+// covering at least a third of the shorter headline.
+var KPTS = { n: 3, e: 2, p: 1.5, d: 1.5, "": 1, "?": 1 };
+function likeness(A, B) {
+  var sh = 0, pts = 0, special = 0, numA = 0, numB = 0, numSh = 0, used = {};
+  for (var j0 = 0; j0 < B.length; j0++) if (B[j0].k === "d") numB++;
+  for (var i = 0; i < A.length; i++) {
+    if (A[i].k === "d") numA++;
+    for (var j = 0; j < B.length; j++) {
+      if (used[j] || !tokSame(A[i].w, B[j].w)) continue;
+      used[j] = 1; sh++;
+      var k = A[i].k === "n" || B[j].k === "n" ? (A[i].k === "p" || B[j].k === "p" ? "p" : "n") : A[i].k || B[j].k;
+      pts += KPTS[k]; if (k) special++;
+      if (k === "d") numSh++;
+      break;
+    }
+  }
+  if (numA && numB && !numSh) pts -= 1.5;
+  var cov = sh / (Math.min(A.length, B.length) || 1);
+  // ...or, for short headlines: three shared words that are three quarters of the shorter one ("Nytt skoldåd i Polen")
+  return { sh: sh, pts: pts, cov: cov, ok: sh >= 2 && special >= 1 && ((pts >= 4.5 && cov >= 0.34) || (sh >= 3 && cov >= 0.75 && pts >= 3.5)) };
 }
 function groupNews(items) {
-  var tk = items.map(function (n) { return tokz(n.t); }), par = items.map(function (_, i) { return i; }), gs = items.map(function (n) { var o = {}; o[n.s] = 1; return o; });
-  function find(x) { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; }
-  for (var i = 0; i < items.length; i++) for (var j = i + 1; j < items.length; j++) {
-    if (items[i].s === items[j].s || Math.abs(items[i].ts - items[j].ts) > 64800000) continue;
-    var A = tk[i], B = tk[j], sh = 0, strongSh = 0;
-    A.set.forEach(function (w) { if (B.set.indexOf(w) >= 0) { sh++; if (A.strong[w] || B.strong[w]) strongSh++; } });
-    if (sh < 3 || strongSh < 1 || sh / Math.min(A.set.length, B.set.length) < 0.5) continue;
-    var ra = find(i), rb = find(j);
-    if (ra === rb || Object.keys(gs[ra]).some(function (k) { return gs[rb][k]; })) continue;   // never two headlines from one source in a group
-    par[ra] = rb; Object.keys(gs[ra]).forEach(function (k) { gs[rb][k] = 1; });
+  // 1) the very same article from two feeds (same address, or word for word the same headline) is one article
+  var seenU = {}, seenT = {};
+  items = items.filter(function (n) {
+    var ku = artKey(n), kt = String(n.t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if ((ku && seenU[ku]) || (kt.length > 20 && seenT[kt])) return false;
+    seenU[ku] = 1; seenT[kt] = 1;
+    return true;
+  }).sort(function (a, b) { return a.ts - b.ts; });
+  var tk = items.map(function (n) { return tokz(n.t, n.lg); });
+  // 2) a first word is a name when some other headline has the same word with a capital in mid-sentence
+  var known = {};
+  tk.forEach(function (list) { list.forEach(function (t) { if (t.k === "n" || t.k === "p") known[t.w] = t.k; }); });
+  tk.forEach(function (list) { list.forEach(function (t) { if (t.k === "?") t.k = known[t.w] || ""; }); });
+  //    names one source uses again and again are not story names
+  var use = {};
+  items.forEach(function (n, i) { tk[i].forEach(function (t) { if (t.k !== "n") return; var k = t.w.slice(0, 6); use[k] = use[k] || {}; use[k][n.s] = (use[k][n.s] || 0) + 1; }); });
+  tk.forEach(function (list) {
+    list.forEach(function (t) {
+      if (t.k !== "n") return;
+      var u = use[t.w.slice(0, 6)], ks = Object.keys(u);
+      if (ks.some(function (s) { return u[s] >= 4; }) || ks.filter(function (s) { return u[s] >= 2; }).length >= 3) t.k = "p";
+    });
+  });
+  // 3) oldest first, each headline joins the story it fits best, or starts a new one. A story stays open for 18 hours
+  //    after its first report. To join a story that already has three or more articles it must fit at least two of
+  //    them, and at least 40% of them (otherwise one loosely related headline could chain unrelated stories together).
+  var cl = [];
+  items.forEach(function (n, i) {
+    var best = null, bestScore = 0;
+    for (var c = cl.length - 1; c >= 0; c--) {
+      var g = cl[c];
+      if (n.ts - g.t0 > 64800000) continue;
+      var hits = 0, top = 0;
+      for (var m = 0; m < g.ix.length; m++) {
+        var k = g.ix[m], L = likeness(tk[i], tk[k]);
+        // the same outlet again: only when it is clearly the same story retold
+        if (L.ok && (outlet(items[k].s) !== outlet(n.s) || (L.sh >= 3 && L.cov >= 0.6))) { hits++; if (L.pts > top) top = L.pts; }
+      }
+      if (hits >= (g.ix.length <= 2 ? 1 : Math.max(2, Math.ceil(g.ix.length * 0.4))) && top > bestScore) { best = g; bestScore = top; }
+    }
+    if (best) best.ix.push(i); else cl.push({ t0: n.ts, ix: [i] });
+  });
+  // 4) two stories that turn out to be one (each grew from a different first report): joined when at least two
+  //    articles, and at least half, of the smaller one fit an article of the other
+  for (var a = 0; a < cl.length; a++) for (var b = a + 1; b < cl.length; b++) {
+    var A = cl[a], B = cl[b];
+    if (!A.ix.length || !B.ix.length || Math.abs(A.t0 - B.t0) > 64800000) continue;
+    if (A.ix.length < 2 || B.ix.length < 2) continue;
+    var S = A.ix.length <= B.ix.length ? A : B, G = S === A ? B : A, fit = 0;
+    for (var x = 0; x < S.ix.length; x++) for (var y = 0; y < G.ix.length; y++) {
+      var p = S.ix[x], q = G.ix[y], L2 = likeness(tk[p], tk[q]);
+      if (L2.ok && (outlet(items[p].s) !== outlet(items[q].s) || (L2.sh >= 3 && L2.cov >= 0.6))) { fit++; break; }
+    }
+    if (fit >= Math.max(2, Math.ceil(S.ix.length / 2))) { A.ix = A.ix.concat(B.ix); A.t0 = Math.min(A.t0, B.t0); B.ix = []; }
   }
-  var by = {};
-  items.forEach(function (n, i) { var r = find(i); (by[r] = by[r] || []).push(n); });
-  return Object.keys(by).map(function (k) { return by[k].sort(function (a, b) { return b.ts - a.ts; }); });
+  cl = cl.filter(function (g) { return g.ix.length; });
+  return cl.map(function (g) {
+    var list = g.ix.map(function (k) { return items[k]; }).sort(function (a, b) { return b.ts - a.ts; }), seen = {};
+    list.t0 = g.t0;
+    list.src = list.map(function (x) { return x.s; }).filter(function (s) { var o = outlet(s); if (seen[o]) return false; seen[o] = 1; return true; });   // each outlet once
+    return list;
+  });
 }
 
 // ---- Your own sources (Settings) ----
@@ -1146,7 +1370,7 @@ function addNewsSrc(name, addr) {
   var urls = feedUrls(addr);
   if (!urls) { srcMsg("Could not use that address. Enter a feed address (starting with http:// or https://) or a website like reuters.com"); return false; }
   ownSrc();
-  if (P.news.length >= 12) { srcMsg("That is the maximum (12 news sources)."); return false; }
+  if (P.news.length >= 15) { srcMsg("That is the maximum (15 news sources)."); return false; }
   var nm = name || addr.replace(/^https?:\/\//i, "").replace(/^www\./, "").split("/")[0];
   if (P.news.some(function (x) { return x.name.toLowerCase() === nm.toLowerCase(); })) { srcMsg("You already have a source called " + nm + "."); return false; }
   P.news.push({ name: nm, urls: urls });
@@ -1991,10 +2215,12 @@ document.addEventListener("click", function (e) {
   if (a === "boxoff") { setBoxOff(k, true); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") { spToggleFav(k, SP_OPEN); return; }
+  if (a === "fighter") { openFighter(k); return; }
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
   if (a === "setfind") { setFind(+k); return; }
+  if (a === "langtoggle") { setLang(k, b.checked); return; }
   if (a === "bcreset") { delete P.bc; persist(); if (document.activeElement) document.activeElement.blur(); applyBoxCols(); return; }
   if (a === "pastesave") { pasteSave(k); return; }
   if (a === "keyset") { e.preventDefault(); KEYCAP = KEYCAP === k ? "" : k; renderKeys(); return; }
@@ -2152,7 +2378,7 @@ function signOut() {
   if (sb) sb.auth.signOut();
   try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
   P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, shadow: P.shadow, fav: {}, hidden: {} };
-  TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null;
+  TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; NEWSALL = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null;
   FIRST = { _i: {} };
   loadMailForm(); loadExtraForm(); renderSide(); renderAccount();
   applyWall(); MENU_OPEN = ""; render();
@@ -2384,7 +2610,7 @@ function bigNews() {
   newsGroups().forEach(function (g) {
     var newest = g[0].ts;
     if (now - newest > 7200000) return;
-    var close = g.filter(function (x) { return newest - x.ts < 7200000; });
+    var seenO = {}, close = g.filter(function (x) { var o = outlet(x.s); if (newest - x.ts >= 7200000 || seenO[o]) return false; seenO[o] = 1; return true; });   // each outlet counts once
     if (close.length < Math.max(2, n.srcN) || sent >= 2 || !once("bn:" + g[g.length - 1].u)) return;
     sent++;
     toast("news", g[0].t, close.length + " sources · " + close.map(function (x) { return x.s; }).join(", "), { a: "news", k: g[0].u });
@@ -2558,15 +2784,17 @@ function showMailPeek(el, i) {
   }).join("") || '<p class="mut">No unread mail.</p>') + "</div>";
   placePeek(el, true);
 }
-function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; }
-var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"]';
+function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; $("peek").classList.remove("fpk"); }
+var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"]';
 document.addEventListener("mouseover", function (e) {
-  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", k = b && (mail ? "mail:" + b.dataset.k : b.dataset.k);
-  if (!b || !(mail || /^[amrpt]:/.test(k))) return;
+  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : b.dataset.k);
+  if (!b || !(mail || ftr || /^[amrpt]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
   peekT = setTimeout(function () {
-    if (peekKey !== k || !document.contains(b) || !$("modal").hidden) return;
+    if (peekKey !== k || !document.contains(b)) return;
+    if (ftr) { showFighterPeek(b, b.dataset.k); return; }   // a fighter's name in a card or fight window
+    if (!$("modal").hidden) return;
     if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else if (k.charAt(0) === "t") showTwPeek(b, k.slice(2)); else showPeek(b, k);
   }, 350);
 });
@@ -2601,15 +2829,21 @@ var BRIEF_T = "Since yesterday";
 // is broken into words; a story scores by how often its words turn up elsewhere (names and numbers count extra), plus a
 // bonus for several sources reporting it and for your highlight words. Near-duplicates and a fourth story on the same
 // name are skipped, so the list covers different topics.
+// a headline's words as a plain list, and which of them are names or numbers
+function tokSet(t, lg) {
+  var o = { set: [], strong: {} };
+  tokz(t, lg).forEach(function (x) { o.set.push(x.w); if (x.k === "n" || x.k === "p" || x.k === "d") o.strong[x.w] = 1; });
+  return o;
+}
 function topStories(n) {
   var now = Date.now(), cut = now - 86400000, df = {};
   NEWS.concat(TGP, RD).forEach(function (x) {
     if (x.ts < cut) return;
     var seen = {};
-    tokz(x.t).set.forEach(function (w) { if (!seen[w]) { seen[w] = 1; df[w] = (df[w] || 0) + 1; } });
+    tokSet(x.t, x.lg).set.forEach(function (w) { if (!seen[w]) { seen[w] = 1; df[w] = (df[w] || 0) + 1; } });
   });
   var pool = newsGroups().filter(function (g) { return g[0].ts > cut; }).map(function (g) {
-    var tk = tokz(g[0].t), uniq = {}, heat = 0;
+    var tk = tokSet(g[0].t, g[0].lg), uniq = {}, heat = 0;
     tk.set.forEach(function (w) {
       if (uniq[w]) return;
       uniq[w] = 1;
@@ -2617,7 +2851,7 @@ function topStories(n) {
       if (extra > 0) heat += Math.min(extra, 12) * (tk.strong[w] ? 1.5 : 1);
     });
     var words = Object.keys(uniq);
-    return { g: g, words: words, strong: words.filter(function (w) { return tk.strong[w]; }), score: (g.length - 1) * 4 + heat / Math.sqrt(Math.max(4, words.length)) + (g.hi ? 3 : 0) - (now - g[0].ts) / 3600000 * 0.08 };
+    return { g: g, words: words, strong: words.filter(function (w) { return tk.strong[w]; }), score: ((g.src ? g.src.length : g.length) - 1) * 4 + heat / Math.sqrt(Math.max(4, words.length)) + (g.hi ? 3 : 0) - (now - g[0].ts) / 3600000 * 0.08 };
   }).sort(function (a, b) { return b.score - a.score; });
   var out = [], used = {};
   pool.forEach(function (p) {
@@ -2689,8 +2923,11 @@ function spSports() {
   return out;
 }
 var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["fav", "Favorites"]];
-function spView() { return P.spView === "up" || P.spView === "fav" ? P.spView : "now"; }
-function spSport() { var s = P.spSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
+// Your favorite sport (Settings > Sports) gets a view of its own in the box: everything on now, today and coming up
+function spFavSport() { var s = P.spFavSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
+function spViews() { var f = spFavSport(); return SP_VIEWS.concat(f ? [["sport", "★ " + (SP_NAME[f] || f)]] : []); }
+function spView() { return P.spView === "up" || P.spView === "fav" || (P.spView === "sport" && spFavSport()) ? P.spView : "now"; }
+function spSport() { if (spView() === "sport") return spFavSport(); var s = P.spSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
 function spFavs() { return P.spFav || []; }
 function spIsFav(name) { return spFavs().indexOf(name) >= 0; }
 function spParse(lg, j, pri) {
@@ -2700,11 +2937,15 @@ function spParse(lg, j, pri) {
     var o = { id: lg.id + ":" + e.id, lg: lg.n, sp: lg.sp, kind: lg.kind || "team", pri: pri, ts: Date.parse(e.date), state: st.state || "pre", detail: st.shortDetail || "", link: link, names: [] };
     var pair = function (c, label, detail) {
       var a = (c.competitors || [])[0] || {}, b = (c.competitors || [])[1] || {}, cs = (c.status && c.status.type) || {};
-      return { a: (a.athlete || {}).displayName || "?", b: (b.athlete || {}).displayName || "?", aw: !!a.winner, bw: !!b.winner, state: cs.state || "pre", detail: detail != null ? detail : cs.shortDetail || "", wc: label, ts: Date.parse(c.date) };
+      var rec = function (x) { return (((x.records || [])[0]) || {}).summary || ""; }, st = c.status || {};
+      return { a: (a.athlete || {}).displayName || "?", b: (b.athlete || {}).displayName || "?", aw: !!a.winner, bw: !!b.winner, state: cs.state || "pre", detail: detail != null ? detail : cs.shortDetail || "", wc: label, ts: Date.parse(c.date),
+        // for the fight window: ESPN's numbers for the fight and the two fighters, their records, the round and the clock
+        cid: String(c.id || ""), aid: String(a.id || ""), bid: String(b.id || ""), ar: rec(a), br: rec(b), per: +st.period || 0, clk: st.displayClock || "", rounds: +(((c.format || {}).regulation || {}).periods) || 0 };
     };
     if (o.kind === "card") {
       o.title = String(e.name || e.shortName || "UFC").replace(/^UFC Fight Night:/, "UFC FN:");
       o.cardTitle = "Fight card (main event first)";
+      o.eid = String(e.id || "");
       // the main event is the last fight on the card
       o.fights = (e.competitions || []).map(function (c) { return pair(c, (c.type || {}).abbreviation || ""); }).reverse();
       if (o.fights.some(function (f) { return f.state === "in"; })) o.state = "in";
@@ -2895,6 +3136,9 @@ function spEvents() {
   var live = function (e) { return e.state === "in" ? 1 : 0; }, day = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); };
   if (view === "up") return all.filter(function (e) { return e.state === "pre" && e.ts > now - 3600000; }).sort(function (a, b) { return a.ts - b.ts || a.pri - b.pri; }).slice(0, 60);
   if (view === "fav") return all.filter(function (e) { return e.fav && (e.state !== "post" || now - e.ts < 86400000); }).sort(function (a, b) { return live(b) - live(a) || a.ts - b.ts; }).slice(0, 60);
+  // your favorite sport: what is on now, then everything today and coming up (soonest first), then today's results
+  if (view === "sport") return all.filter(function (e) { return e.state === "in" || (e.state === "pre" && e.ts > now - 10800000) || (e.state === "post" && (day(e.ts) === day(now) || now - e.ts < 43200000)); })
+    .sort(function (a, b) { return live(b) - live(a) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || (a.state === "post" ? b.ts - a.ts : a.ts - b.ts); }).slice(0, 60);
   return all.filter(function (e) { return e.state === "in" || day(e.ts) === day(now) || (e.state === "post" && now - e.ts < 43200000 && e.kind === "team") || (e.kind !== "team" && e.state === "pre" && e.ts - now < 172800000); })
     .sort(function (a, b) { return live(b) - live(a) || (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || a.pri - b.pri || a.ts - b.ts; }).slice(0, 60);
 }
@@ -2937,7 +3181,7 @@ function spCrest(t) {
 function sportsBody() {
   var ev = spEvents(), view = spView();
   if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
-  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
+  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : view === "sport" ? "Nothing on or coming up in " + esc(SP_NAME[spFavSport()] || "your sport") + " right now." : "No games today in these leagues. Try Upcoming.") + "</div>";
   // The score and time columns are sized PER SPORT, for that sport's longest entry on screen: all football rows share
   // one set of columns, all basketball rows another. (One width for the whole list would let a "104–98" or a long
   // badge steal the room the team names need on every football row.) The names get all the width that is left.
@@ -2949,6 +3193,8 @@ function sportsBody() {
     w.st = Math.max(w.st, e.state === "in" ? len * 0.55 + 0.75 : len * 0.5 + 0.1);   // a live badge has padding, plain text does not
   });
   return lst("sports", '<div class="spl">' + ev.map(function (e) {
+    // a UFC card that is on: one row per fight (in the cage first, then what is next, then the results)
+    if (e.kind === "card" && e.state === "in" && e.fights && e.fights.length) return fightsLive(e).map(function (f) { return fightRow(e, f); }).join("");
     var w = W[e.sp], vars = e.kind === "team" ? ' style="--scw:' + (w.sc * 0.6 + 0.2).toFixed(2) + "em;--stw:" + Math.min(w.st, 4).toFixed(2) + 'em"' : "";
     return '<div class="row sprow' + (e.kind === "team" ? "" : " spx") + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"' + vars + '><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
       '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e) + "</span></div>";
@@ -3059,8 +3305,20 @@ function spTabLoad(e) {
 }
 // Hover card for a game: the score line, then the short story of it
 function showSportPeek(el, id) {
+  if (EDIT) return;
+  // one fight of a card: both fighters with their records and the odds, the weight class and where the fight stands
+  if (id.indexOf("#") > 0) {
+    var x = fightFind(id);
+    if (!x) return;
+    var side = function (s) { return "<span>" + esc(x.f[s]) + "<br><small>" + esc(x.f[s + "r"] || "") + ' <b class="od" data-od="' + esc(x.e.eid + ":" + x.f.cid + ":" + x.f[s + "id"]) + '"></b></small></span>'; };
+    $("peek").innerHTML = '<div class="pk sppk"><div class="pkscore fpkh">' + side("a") + '<b class="mut">v</b>' + side("b") + "</div><small>" + esc(x.f.wc || "") + (x.f.rounds ? " · " + x.f.rounds + " rounds" : "") +
+      " · " + (x.f.state === "in" ? "LIVE" + (x.f.per ? ", round " + x.f.per + (x.f.clk && x.f.clk !== "-" ? " " + esc(x.f.clk) : "") : "") : x.f.state === "post" ? (x.f.aw ? esc(lastName(x.f.a)) + " won" : x.f.bw ? esc(lastName(x.f.b)) + " won" : "no winner") + (x.f.per ? ", round " + x.f.per : "") : "not started") + "</small><small>" + esc(x.e.title) + "</small></div>";
+    placePeek(el);
+    if (x.f.state !== "post") fillOdds($("peek"));
+    return;
+  }
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
-  if (!e || EDIT) return;
+  if (!e) return;
   var h;
   if (e.kind === "team") {
     h = '<div class="pkscore"><span>' + esc(e.home.n) + "</span><b>" + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b><span>" + esc(e.away.n) + "</span></div>" +
@@ -3077,6 +3335,7 @@ function showSportPeek(el, id) {
   placePeek(el);
 }
 function openSport(id) {
+  if (String(id).indexOf("#") > 0) { openFight(id); return; }
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
   if (!e) { Object.keys(SP_NOW).concat(Object.keys(SP_UP)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); }); }
   if (!e) return;
@@ -3085,6 +3344,13 @@ function openSport(id) {
   var body, head = '<h2 class="mh">' + esc(e.title || "") + '</h2><div class="mut">' + spWhen(e) + "</div>";
   if (e.fights) {
     body = head + "<h3>" + e.cardTitle + "</h3>" + (e.fights.map(function (f) {
+      // UFC: each name opens the fighter (hover for a small card), the number after it is the odds to win,
+      // and the right-hand side opens the fight itself
+      if (e.kind === "card" && f.cid) {
+        var who = function (s) { return '<button class="lnk fname' + (f[s + "w"] ? " win" : "") + '" data-a="fighter" data-k="' + esc(f[s + "id"]) + '"><b>' + esc(f[s]) + "</b></button>" + (f.state === "post" ? "" : ' <small class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + f[s + "id"]) + '"></small>'); };
+        return '<div class="row frow' + (f.state === "post" ? " rd" : "") + '"><span>' + favBtn(f.a) + " " + who("a") + ' <span class="mut">v</span> ' + who("b") + " " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") +
+          '</span><span class="r"><button class="lnk" data-a="open" data-k="' + esc("p:" + fightKey(e, f)) + '" title="Open this fight">' + (fightWhen(e, f).replace(/<span class="mut"><\/span>/, "") || "") + " ›</button></span></div>";
+      }
       var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "No result") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' + (e.kind === "tour" && f.detail ? " " + esc(f.detail) : "") : "";
       return '<div class="row"><span>' + favBtn(f.a) + " <b" + (f.aw ? ' class="win"' : "") + ">" + esc(f.a) + '</b> <span class="mut">vs</span> <b' + (f.bw ? ' class="win"' : "") + ">" + esc(f.b) + "</b> " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") + '</span><span class="r mut">' + res + "</span></div>";
     }).join("") || '<p class="mut sn">No matches in the next day and a half.</p>');
@@ -3102,6 +3368,7 @@ function openSport(id) {
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
   if (e.kind === "team") spTabLoad(e);
+  if (e.kind === "card") fillOdds($("mBody"));
 }
 // Settings > Sports: one switch per league, grouped by sport
 function renderSpList() {
@@ -3113,7 +3380,14 @@ function renderSpList() {
       return "<label>" + esc(l.n) + ' <input type="checkbox" data-a="sptoggle" data-k="' + l.id + '"' + (on[l.id] ? " checked" : "") + "></label>";
     }).join("") + "</div>";
   }).join("");
+  // favorite sport: one of the sports you follow a league of
+  var mine = spSports().slice(1);
+  $("spFavSel").innerHTML = '<option value="">None</option>' + mine.map(function (s) { return '<option value="' + s[0] + '"' + (s[0] === spFavSport() ? " selected" : "") + ">" + s[1] + "</option>"; }).join("");
 }
+$("spFavSel").onchange = function () {
+  if (this.value) { P.spFavSport = this.value; P.spView = "sport"; } else { delete P.spFavSport; if (P.spView === "sport") delete P.spView; }
+  persist(); render(); fetchSports(true);
+};
 function spToggleLeague(id, onNow) {
   var cur = spLeagues().map(function (l) { return l.id; }).filter(function (x) { return x !== id; });
   if (onNow) cur.push(id);
@@ -3126,6 +3400,181 @@ function spToggleFav(name, openId) {
   if (i >= 0) P.spFav.splice(i, 1); else if (P.spFav.length < 60) P.spFav.push(name);
   persist(); render();
   if (openId) openSport(openId);
+}
+
+// ---- UFC: every fight of a live card as its own row, a window per fight, fighter cards, and the odds ----
+// Everything comes from ESPN's public data, read straight from the browser: the scoreboard (already loaded for the
+// box) has the card; fighter details, the odds and the numbers of a fight are fetched when you open or hover them.
+var CORE = "https://sports.core.api.espn.com/v2/sports/mma/", UFCC = {};
+function coreGet(path, ttl) {
+  var c = UFCC[path];
+  if (c && Date.now() - c.t < ttl) return c.p;
+  var p = fetch(CORE + path).then(function (r) { if (!r.ok) throw new Error("ESPN answered " + r.status); return r.json(); });
+  UFCC[path] = { t: Date.now(), p: p };
+  p.catch(function () { delete UFCC[path]; });
+  return p;
+}
+function lastName(n) { var p = String(n || "").trim().split(/\s+/); while (p.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(p[p.length - 1])) p.pop(); return p.length > 1 ? p.slice(1).join(" ").length > 14 ? p[p.length - 1] : p.slice(1).join(" ") : p[0] || "?"; }
+function fightKey(e, f) { return e.id + "#" + f.cid; }
+// "LIVE R2 3:14", "A won" or the start time of the card
+function fightWhen(e, f) {
+  if (f.state === "in") return '<span class="pill live">' + (f.per > 0 ? "R" + f.per + (f.clk && f.clk !== "-" ? " " + esc(f.clk) : "") : "LIVE") + "</span>";
+  if (f.state === "post") return '<span class="mut">' + (f.aw || f.bw ? "R" + (f.per || "") + (f.clk && f.clk !== "-" ? " " + esc(f.clk) : "") : "Draw") + "</span>";
+  return '<span class="mut">' + (e.state === "in" ? "next" : "") + "</span>";
+}
+// the fights of a card in the order that matters while it is on: the one in the cage, then what is next, then the results
+function fightsLive(e) {
+  var chron = e.fights.slice().reverse();   // e.fights has the main event first; this is the order they happen
+  return chron.filter(function (f) { return f.state === "in"; }).concat(chron.filter(function (f) { return f.state === "pre"; }), chron.filter(function (f) { return f.state === "post"; }).reverse());
+}
+function fightRow(e, f) {
+  var fav = spIsFav(f.a) || spIsFav(f.b), nm = function (n, w) { return "<b" + (w ? ' class="win"' : "") + ">" + esc(lastName(n)) + "</b>"; };
+  return '<div class="row sprow spx' + (f.state === "in" ? " splive" : "") + (f.state === "post" ? " rd" : "") + '"><span><button class="lnk spt" data-a="open" data-k="' + esc("p:" + fightKey(e, f)) + '">' + spIcon(e.sp) +
+    '<span class="spn">' + nm(f.a, f.aw) + ' <i class="vs">v</i> ' + nm(f.b, f.bw) + (f.wc ? " <small>" + esc(f.wc.replace(/weight$/i, "")) + "</small>" : "") + "</span></button></span>" +
+    '<span class="r">' + (fav ? '<i class="fv">★</i>' : "") + fightWhen(e, f) + "</span></div>";
+}
+function spFind(id) {
+  var e = null;
+  Object.keys(SP_UP).concat(Object.keys(SP_NOW)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); });
+  Object.keys(SP_NOW).forEach(function (k) { (SP_NOW[k].ev || []).forEach(function (x) { if (x.id === id) e = x; }); });   // today's data is fresher
+  return e;
+}
+function fightFind(key) {
+  var p = key.split("#"), e = spFind(p[0]), f = e && e.fights ? e.fights.filter(function (x) { return String(x.cid) === p[1]; })[0] : null;
+  return f ? { e: e, f: f } : null;
+}
+// ---- A fighter: record, measurements and career numbers (kept for six hours) ----
+var FTR = {};
+function fighterGet(aid) {
+  if (!/^\d{3,12}$/.test(String(aid))) return Promise.reject(new Error("no fighter"));
+  if (FTR[aid] && Date.now() - FTR[aid].t < 21600000) return Promise.resolve(FTR[aid]);
+  return Promise.all([coreGet("athletes/" + aid, 21600000), coreGet("athletes/" + aid + "/records", 21600000).catch(function () { return null; }), coreGet("athletes/" + aid + "/statistics", 21600000).catch(function () { return null; })]).then(function (r) {
+    var a = r[0] || {}, rec = {}, st = {};
+    (((r[1] && r[1].items) || [])[0] || { stats: [] }).stats.forEach(function (s) { rec[s.name] = +s.value || 0; });
+    ((((r[2] || {}).splits || {}).categories) || []).forEach(function (c) { (c.stats || []).forEach(function (s) { st[s.name] = s.displayValue; }); });
+    var link = ((a.links || []).filter(function (l) { return (l.rel || []).indexOf("playercard") >= 0; })[0] || {}).href;
+    return (FTR[aid] = {
+      t: Date.now(), id: String(aid), n: a.displayName || a.fullName || "?", nick: a.nickname || "", age: a.age || 0,
+      // ESPN gives inches and pounds: shown as centimetres and kilos
+      ht: a.height ? Math.round(a.height * 2.54) + " cm" : "", wt: a.weight ? Math.round(a.weight * 0.4536) + " kg" : "", reach: a.reach ? Math.round(a.reach * 2.54) + " cm" : "",
+      stance: (a.stance || {}).text || "", country: a.citizenship || "", gym: (a.association || {}).name || "", wc: (a.weightClass || {}).text || "", img: safeUrl((a.headshot || {}).href), flag: safeUrl((a.flag || {}).href),
+      rec: rec, st: st, link: safeUrl(link)
+    });
+  });
+}
+function recText(r) { return r && (r.wins || r.losses) ? r.wins + "-" + r.losses + "-" + (r.draws || 0) + (r.noContests ? " (" + r.noContests + " NC)" : "") : ""; }
+// ---- The odds of a fight (decimal, from ESPN's listed bookmaker; kept for ten minutes) ----
+function oddsGet(eid, cid) {
+  return coreGet("leagues/ufc/events/" + eid + "/competitions/" + cid + "/odds", 600000).then(function (j) {
+    var it = ((j && j.items) || [])[0], out = { by: {}, prov: "" };
+    if (!it) return out;
+    out.prov = (it.provider || {}).name || "";
+    [it.homeAthleteOdds, it.awayAthleteOdds].forEach(function (o) {
+      if (!o) return;
+      var id = ((String((o.athlete || {}).$ref || "").match(/athletes\/(\d+)/)) || [])[1], dec = ((o.current || {}).moneyLine || {}).decimal || ((o.open || {}).moneyLine || {}).decimal;
+      if (!dec && o.moneyLine) dec = o.moneyLine > 0 ? 1 + o.moneyLine / 100 : 1 + 100 / Math.abs(o.moneyLine);   // from the American figure
+      if (id && dec) out.by[id] = { dec: +dec, fav: !!o.favorite };
+    });
+    return out;
+  });
+}
+function oddsTxt(o) { return o ? o.dec.toFixed(2) : ""; }
+// fills every <small data-od="eventId:fightId:fighterId"> that is on screen with its odds
+function fillOdds(root) {
+  var want = {};
+  Array.prototype.forEach.call((root || document).querySelectorAll("[data-od]"), function (el) { var p = el.dataset.od.split(":"); (want[p[0] + ":" + p[1]] = want[p[0] + ":" + p[1]] || []).push(el); });
+  Object.keys(want).forEach(function (k, i) {
+    var p = k.split(":");
+    setTimeout(function () {
+      oddsGet(p[0], p[1]).then(function (o) {
+        want[k].forEach(function (el) { var x = o.by[el.dataset.od.split(":")[2]]; if (x && document.contains(el)) { el.textContent = oddsTxt(x); el.title = "Odds to win" + (o.prov ? " (" + o.prov + ")" : "") + (x.fav ? " · favorite" : ""); el.classList.toggle("odf", x.fav); } });
+      }).catch(function () {});
+    }, i * 120);   // a card has a dozen fights: ask for them one after another, not all at once
+  });
+}
+// ---- Window for one fight ----
+var FIGHT_ROWS = [["knockDowns", "Knockdowns"], ["sig", "Sig. strikes"], ["tot", "Total strikes"], ["td", "Takedowns"], ["submissions", "Sub. attempts"], ["timeInControl", "Control time"]];
+var TAPE_ROWS = [["rec", "Record"], ["age", "Age"], ["ht", "Height"], ["wt", "Weight"], ["reach", "Reach"], ["stance", "Stance"], ["country", "Country"], ["gym", "Gym"], ["ko", "Wins by KO / TKO"], ["sub", "Wins by submission"],
+  ["strikeLPM", "Sig. strikes per min"], ["strikeAccuracy", "Strike accuracy %"], ["takedownAvg", "Takedowns per 15 min"], ["takedownAccuracy", "Takedown accuracy %"], ["submissionAvg", "Sub. attempts per 15 min"]];
+function tapeVal(x, k) { return k === "rec" ? recText(x.rec) : k === "ko" ? (x.rec.tkos != null ? String(x.rec.tkos) : "") : k === "sub" ? (x.rec.submissions != null ? String(x.rec.submissions) : "") : x[k] != null && typeof x[k] !== "object" ? String(x[k] || "") : x.st[k] || ""; }
+function cmpTable(rows, get) {
+  var h = rows.map(function (r) { var a = get(0, r[0]), b = get(1, r[0]); return a || b ? "<tr><td>" + esc(a || "–") + "</td><th>" + r[1] + "</th><td>" + esc(b || "–") + "</td></tr>" : ""; }).join("");
+  return h ? '<table class="tape">' + h + "</table>" : "";
+}
+function fighterHead(f, side, e) {
+  var n = f[side], id = f[side + "id"], w = f[side + "w"], fav = spIsFav(n);
+  return '<div class="spteam fgt">' + (id ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + esc(id) + '.png&w=160&h=116">' : "") +
+    '<button class="lnk' + (w ? " win" : "") + '" data-a="fighter" data-k="' + esc(id) + '"><b>' + esc(n) + "</b></button>" +
+    '<span class="mut sn">' + esc(f[side + "r"] || "") + ' <small class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + id) + '"></small></span>' +
+    '<button class="ib sm' + (fav ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (fav ? "Remove from favorites" : "Add to favorites") + '">' + (fav ? "★" : "☆") + "</button></div>";
+}
+function openFight(key) {
+  var x = fightFind(key);
+  if (!x) return;
+  var e = x.e, f = x.f;
+  SP_OPEN = key;
+  openModal(e.title, '<div class="spwin"><div class="spscore">' + fighterHead(f, "a", e) + '<div class="spmid"><span class="mut sn">' + esc(f.wc || "") + (f.rounds ? " · " + f.rounds + " rounds" : "") + "</span>" + fightWhen(e, f) + '<span id="fgRes" class="sn"></span></div>' + fighterHead(f, "b", e) + "</div>" +
+    '<div id="fgStats"></div><div id="fgTape"><p class="mut sn">Loading the fighters…</p></div>' +
+    '<p class="tools"><button data-a="open" data-k="' + esc("p:" + e.id) + '">‹ Whole card</button>' + (e.link ? linkBtn(e.link, "Details on ESPN") : "") + "</p></div>");
+  fillOdds($("mBody"));
+  var live = function () { return SP_OPEN === key && !$("modal").hidden; };
+  // how it ended
+  if (f.state === "post") coreGet("leagues/ufc/events/" + e.eid + "/competitions/" + f.cid + "/status", 3600000).then(function (s) {
+    var r = s && s.result;
+    if (live() && r && $("fgRes")) $("fgRes").textContent = (f.aw ? lastName(f.a) + " by " : f.bw ? lastName(f.b) + " by " : "") + (r.displayName || r.name || "") + (r.displayDescription ? " (" + r.displayDescription + ")" : "");
+  }).catch(function () {});
+  // the numbers of this fight (while it is on, and afterwards)
+  if (f.state !== "pre" && f.aid && f.bid) Promise.all([f.aid, f.bid].map(function (id) {
+    return coreGet("leagues/ufc/events/" + e.eid + "/competitions/" + f.cid + "/competitors/" + id + "/statistics", f.state === "in" ? 25000 : 3600000).then(function (j) {
+      var s = {}; ((((j || {}).splits || {}).categories) || []).forEach(function (c) { (c.stats || []).forEach(function (q) { s[q.name] = q.displayValue; }); });
+      s.sig = s.sigStrikesLanded != null ? s.sigStrikesLanded + " of " + s.sigStrikesAttempted : ""; s.tot = s.totalStrikesLanded != null ? s.totalStrikesLanded + " of " + s.totalStrikesAttempted : ""; s.td = s.takedownsLanded != null ? s.takedownsLanded + " of " + s.takedownsAttempted : "";
+      return s;
+    }).catch(function () { return {}; });
+  })).then(function (st) {
+    if (!live() || !$("fgStats")) return;
+    var t = cmpTable(FIGHT_ROWS, function (i, k) { return st[i][k] != null ? String(st[i][k]) : ""; });
+    $("fgStats").innerHTML = t ? "<h3>This fight" + (f.state === "in" ? " so far" : "") + "</h3>" + t : "";
+  });
+  // tale of the tape
+  Promise.all([fighterGet(f.aid).catch(function () { return null; }), fighterGet(f.bid).catch(function () { return null; })]).then(function (p) {
+    if (!live() || !$("fgTape")) return;
+    var t = p[0] || p[1] ? cmpTable(TAPE_ROWS, function (i, k) { return p[i] ? tapeVal(p[i], k) : ""; }) : "";
+    $("fgTape").innerHTML = t ? "<h3>Tale of the tape</h3>" + t : '<p class="mut sn">No fighter details available.</p>';
+  });
+}
+// ---- Window and hover card for one fighter ----
+function fighterCard(x, od) {
+  var bits = [x.age ? x.age + " yrs" : "", x.ht, x.wt, x.reach ? "reach " + x.reach : "", x.stance].filter(Boolean).join(" · ");
+  return (x.img ? '<img class="fhead" alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(x.img.replace("https://a.espncdn.com/i/", "https://a.espncdn.com/combiner/i?img=/i/") + (x.img.indexOf("espncdn.com/i/") > 0 ? "&w=300&h=218" : "")) + '">' : "") +
+    '<div class="pk"><b>' + esc(x.n) + (x.nick ? ' <span class="mut">“' + esc(x.nick) + "”</span>" : "") + "</b><span>" + esc(recText(x.rec) || "No record") + (x.wc ? " · " + esc(x.wc) : "") + (od ? ' · odds <b class="od' + (od.fav ? " odf" : "") + '">' + oddsTxt(od) + "</b>" : "") + "</span>" +
+    (bits ? "<small>" + esc(bits) + "</small>" : "") + (x.country || x.gym ? "<small>" + esc([x.country, x.gym].filter(Boolean).join(" · ")) + "</small>" : "") + "</div>";
+}
+// the odds for a fighter in the fight or card that is open (if there is one, and it has not been fought yet)
+function fighterOdds(aid) {
+  var e = spFind(String(SP_OPEN).split("#")[0]), f = e && e.fights ? e.fights.filter(function (x) { return String(x.aid) === String(aid) || String(x.bid) === String(aid); })[0] : null;
+  return f && f.state !== "post" ? oddsGet(e.eid, f.cid).then(function (o) { return o.by[aid] || null; }).catch(function () { return null; }) : Promise.resolve(null);
+}
+function showFighterPeek(el, aid) {
+  Promise.all([fighterGet(aid), fighterOdds(aid)]).then(function (r) {
+    if (peekKey !== "f:" + aid || !document.contains(el)) return;
+    $("peek").innerHTML = fighterCard(r[0], r[1]);
+    $("peek").classList.add("fpk");
+    placePeek(el, true);
+  }).catch(function () {});
+}
+function openFighter(aid) {
+  var back = SP_OPEN;
+  fighterGet(aid).then(function (x) {
+    return fighterOdds(aid).then(function (od) {
+      // the career numbers (age, height and so on are already in the lines above)
+      var t = TAPE_ROWS.slice(8).map(function (r) { var v = tapeVal(x, r[0]); return v ? "<tr><th>" + r[1] + "</th><td>" + esc(v) + "</td></tr>" : ""; }).join("");
+      t = t ? '<table class="tape">' + t + "</table>" : "";
+      var fav = spIsFav(x.n);
+      openModal(x.n, '<div class="spwin fwin">' + fighterCard(x, od) + (t ? "<h3>Career numbers</h3>" + t : "") +
+        '<p class="tools">' + (back ? '<button data-a="open" data-k="' + esc("p:" + back) + '">‹ Back</button>' : "") + '<button data-a="spfav" data-k="' + esc(x.n) + '">' + (fav ? "★ Favorite" : "☆ Add to favorites") + "</button>" + (x.link ? linkBtn(x.link, "Full profile on ESPN") : "") + "</p></div>");
+      SP_OPEN = back;
+    });
+  }).catch(function () { openModal("Fighter", '<p class="mut">No details available for this fighter.</p>'); });
 }
 
 // ---- First-time setup guide: pick your boxes, then one page per box that needs setting up ----
@@ -3424,6 +3873,7 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
+  renderLangs();
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
