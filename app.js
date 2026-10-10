@@ -1,4 +1,4 @@
-var VERSION = 57;
+var VERSION = 59;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2583,7 +2583,7 @@ function spEvents() {
     .sort(function (a, b) { return live(b) - live(a) || (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || a.pri - b.pri || a.ts - b.ts; }).slice(0, 60);
 }
 function spWhen(e) {
-  if (e.state === "in") return '<span class="pill live">' + esc(e.detail || "LIVE") + "</span>";
+  if (e.state === "in") return '<span class="pill live">' + esc(String(e.detail || "LIVE").replace("'+", "+")) + "</span>";   // 45'+2' -> 45+2'
   if (e.state === "post") return '<span class="mut">' + esc(e.kind === "team" ? (e.detail || "FT") : "Finished") + "</span>";
   var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
   // today: the time. This week: weekday and time. Later: the date. (Short, so the column stays narrow.)
@@ -2621,15 +2621,19 @@ function sportsBody() {
   var ev = spEvents(), view = spView();
   if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
   if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
-  // The score column and the time column get one width for the whole list (sized for the longest entry),
-  // so every row has the same columns whatever its score or status is.
-  var scMax = 1, stMax = 3;
+  // The score and time columns are sized PER SPORT, for that sport's longest entry on screen: all football rows share
+  // one set of columns, all basketball rows another. (One width for the whole list would let a "104–98" or a long
+  // badge steal the room the team names need on every football row.) The names get all the width that is left.
+  var W = {};
   ev.forEach(function (e) {
-    if (e.kind === "team" && e.state !== "pre") scMax = Math.max(scMax, (String(e.home.s != null ? e.home.s : "") + "–" + String(e.away.s != null ? e.away.s : "")).length);
-    stMax = Math.max(stMax, spWhen(e).replace(/<[^>]+>/g, "").length);
+    if (e.kind !== "team") return;
+    var w = W[e.sp] = W[e.sp] || { sc: 1, st: 1.6 }, len = spWhen(e).replace(/<[^>]+>/g, "").length;
+    if (e.state !== "pre") w.sc = Math.max(w.sc, (String(e.home.s != null ? e.home.s : "") + "–" + String(e.away.s != null ? e.away.s : "")).length);
+    w.st = Math.max(w.st, e.state === "in" ? len * 0.55 + 0.75 : len * 0.5 + 0.1);   // a live badge has padding, plain text does not
   });
-  return lst("sports", '<div class="spl" style="--scw:' + (scMax * 0.62 + 0.3).toFixed(2) + "em;--stw:" + (stMax * 0.56 + 1.4).toFixed(2) + 'em">' + ev.map(function (e) {
-    return '<div class="row sprow' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
+  return lst("sports", '<div class="spl">' + ev.map(function (e) {
+    var w = W[e.sp], vars = e.kind === "team" ? ' style="--scw:' + (w.sc * 0.6 + 0.2).toFixed(2) + "em;--stw:" + Math.min(w.st, 4).toFixed(2) + 'em"' : "";
+    return '<div class="row sprow' + (e.kind === "team" ? "" : " spx") + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"' + vars + '><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
       '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e) + "</span></div>";
   }).join("") + "</div>", 6);
 }

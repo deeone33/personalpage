@@ -515,16 +515,26 @@ body.dockslim #dockGrip{display:none}
 /* Sports rows in fixed columns so icons, names, scores and times line up down the list.
    Columns: sport icon | home crest | home short name | score | away short name | away crest */
 .sprow>span:first-child{flex:1 1 auto;min-width:0}
-.sprow .r{flex:none;width:var(--stw,3.4em);min-width:0;justify-content:flex-end}
+.sprow .r{flex:0 1 auto;width:var(--stw,3.4em);min-width:0;overflow:hidden;justify-content:flex-end}
+.sprow.spx .r{width:auto;flex:none}
+.sprow{gap:4px}
+.sprow .pill{padding:0 5px}
+.list[data-list=sports]{overflow-x:hidden;container-type:inline-size}
+/* a very narrow Sports box has no room for everything: the sport icon and crests step aside so the names and score stay */
+@container (max-width:185px){
+  .sprow .lnk.spg{grid-template-columns:0 0 minmax(1.9em,1fr) var(--scw,2em) minmax(1.9em,1fr) 0;column-gap:.15em}
+  .sprow .spg .spi,.sprow .spg .tlc{visibility:hidden;width:0;overflow:hidden}
+  .sprow:not(.spx) .r{max-width:3em}
+  .sprow{gap:2px}
+}
 /* the two name columns share whatever width the box has (so the row shrinks and grows with the box, and every row
    still lines up because all rows are the same width); the icons, crests and score keep their size */
-.lnk.spg{display:grid;grid-template-columns:1.25em 1.35em minmax(0,1fr) var(--scw,2.4em) minmax(0,1fr) 1.35em;align-items:center;column-gap:.35em;white-space:nowrap;width:100%}
+.lnk.spg{display:grid;grid-template-columns:1.25em 1.35em minmax(1.9em,1fr) var(--scw,2em) minmax(1.9em,1fr) 1.35em;align-items:center;column-gap:.25em;white-space:nowrap;width:100%}
 .lnk.spt{display:grid;grid-template-columns:1.25em minmax(0,1fr);align-items:center;column-gap:.35em;width:100%}
 .spg .spi,.spt .spi{margin:0;vertical-align:0}
 .spg .tlc{display:flex;align-items:center;justify-content:center;height:1.3em}
 .spg .tl,.spg .tl:last-child{margin:0;vertical-align:0}
 .spg .ab{font-weight:600;overflow:hidden;text-overflow:ellipsis;text-align:left}
-.sprow{gap:6px}
 .spg .ab.aw{text-align:right}
 .spg .ab.fvn{color:var(--ac)}
 .spg .sc{text-align:center;font-variant-numeric:tabular-nums}
