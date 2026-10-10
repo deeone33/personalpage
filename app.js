@@ -1,4 +1,4 @@
-var VERSION = 49;
+var VERSION = 50;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -216,10 +216,10 @@ function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
-var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit"];
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6 };
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6 };
 var COMPACT = ["weather", "mail", "live", "menu"];
-var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit"];
+var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
 function LAY() {
   if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
   var L = P.layout;
@@ -242,13 +242,14 @@ function adjust(a, id, d) {
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
   else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
   else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
-  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" ? 6 : 10)) + d));
+  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" || id === "sports" ? 6 : 10)) + d));
   persist(); render();
 }
 // Every list box gets a small reload button in its top-right corner. To give a new box one, add its id and loader here.
 var REFRESH = {
   news: function () { fetchNews(); }, telegram: function () { fetchTG(); }, twitch: function () { fetchTwitch(); },
-  youtube: function () { fetchYT(); }, stocks: function () { fetchQuotes(true); }, reddit: function () { fetchReddit(); }
+  youtube: function () { fetchYT(); }, stocks: function () { fetchQuotes(true); }, reddit: function () { fetchReddit(); },
+  sports: function () { fetchSports(true); }
 };
 var SPIN = {};
 function boxBusy(id) { return (SPIN[id] && Date.now() - SPIN[id] < 1200) || (id === "news" && nBusy) || (id === "reddit" && rBusy); }
@@ -270,7 +271,8 @@ function tile(id, title, body, click, hx) {
     t = '<div class="tools">' + bt("mv", -1, "◀", "Move earlier") + bt("mv", 1, "▶", "Move later") +
       (noW ? "" : bt("w", -1, "W−", "Narrower") + bt("w", 1, "W+", "Wider")) +
       bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text") +
-      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") + "</div>";
+      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") +
+      (id === "menu" ? "" : '<button data-a="boxoff" data-k="' + id + '" title="Hide this whole box. Bring it back in Settings, Layout.">Hide</button>') + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
@@ -320,14 +322,14 @@ function render() {
     var nowN = Date.now();
     NG = newsGroups();
     var gRead = function (g) { return g.some(function (x) { return READ[x.u]; }); };
-    nNew = NG.filter(function (g) { return isNewTs(g[0].ts) && !gRead(g); }).length;
+    nNew = NG.filter(function (g) { return isNewTs(g[0].ts, "news") && !gRead(g); }).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
     nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, 80).map(function (g) {
       var n = g[0], srcs = g.map(function (x) { return x.s; }), b = g.fav ? "★ Favorite sources" : bucket(n.ts);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
-      var cls = (isNewTs(n.ts) && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
+      var cls = (isNewTs(n.ts, "news") && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
     }).join(""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
@@ -335,23 +337,23 @@ function render() {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
     }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
-  var newBtn = function (n) { return n ? '<button class="pill ac newp" data-a="nseen" title="Mark everything as seen">' + n + " new</button>" : ""; };
+  var newBtn = function (n, box) { return n ? '<button class="pill ac newp" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + " new</button>" : ""; };
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Filter headlines" aria-label="Filter headlines">⌕</button>' : "";
-  T.news = tile("news", "News", nb, 0, newBtn(nNew) + fltBtn + ctlN);
+  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + fltBtn + ctlN);
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
   var tgMulti = allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
-  var tNew = tp.filter(function (g) { return isNewTs(g.ts) && !READ[g.u]; }).length;
+  var tNew = tp.filter(function (g) { return isNewTs(g.ts, "tg") && !READ[g.u]; }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
-    var cls = (isNewTs(g.ts) && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
+    var cls = (isNewTs(g.ts, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew) + ctlG);
+  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -390,14 +392,16 @@ function render() {
   var rSubs = rdSrc(), RS = rdSort();
   var rp = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); });
   if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
-  var rNew = RS === "new" ? rp.filter(function (x) { return isNewTs(x.ts) && !READ[x.u]; }).length : 0;
+  var rNew = RS === "new" ? rp.filter(function (x) { return isNewTs(x.ts, "rd") && !READ[x.u]; }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
-    var cls = (RS === "new" && isNewTs(x.ts) && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
+    var cls = (RS === "new" && isNewTs(x.ts, "rd") && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
-  }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew) + ctlR);
+  }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
+
+  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(SP_SPORTS, P.spSport || "") + '</select><select data-s="spview" aria-label="Which games">' + opts(SP_VIEWS, spView()) + "</select>");
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
@@ -430,8 +434,9 @@ function render() {
   var pp = pairPct();
   var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
   var menuBox = T.menu.replace('style="--fs:', 'style="flex:' + (100 - pp) + ' 1 0%;--fs:');
-  T.live = '<div class="pairwrap">' + liveBox +
-    (EDIT ? '<button class="paird" data-a="paird" title="Drag to resize" aria-label="Resize Convert and Menu" role="separator" aria-orientation="vertical" tabindex="0">⋮</button>' : "") +
+  // The converter and the menu share one grid cell. With the converter hidden, the menu has the cell to itself.
+  T.live = '<div class="pairwrap">' + (boxOff("live") ? "" : liveBox +
+    (EDIT ? '<button class="paird" data-a="paird" title="Drag to resize" aria-label="Resize Convert and Menu" role="separator" aria-orientation="vertical" tabindex="0">⋮</button>' : "")) +
     menuBox + "</div>";
   T.menu = "";
 
@@ -440,7 +445,7 @@ function render() {
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { scrolls[n.dataset.list] = n.scrollTop; });
   $("grid").querySelectorAll("input[id]").forEach(function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
   if (actId) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
-  $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
+  $("grid").innerHTML = orderIds().map(function (id) { return id !== "live" && boxOff(id) ? "" : T[id] || ""; }).join("");
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { if (scrolls[n.dataset.list]) n.scrollTop = scrolls[n.dataset.list]; });
   Object.keys(typed).forEach(function (id) { var n = $(id); if (n && n.value !== typed[id]) n.value = typed[id]; });
   if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
@@ -476,6 +481,20 @@ function renderHidden() {
   $("hiddenList").innerHTML = keys.length ? keys.map(function (k) {
     return '<div class="row"><span>' + esc(k.slice(2)) + '</span><button data-a="show" data-k="' + esc(k) + '">Restore</button></div>';
   }).join("") : "Nothing hidden.";
+  // Settings > Layout: one switch per box
+  $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu"; }).map(function (id) {
+    return "<label>" + BOX_NAMES[id] + ' <input type="checkbox" data-a="boxtoggle" data-k="' + id + '"' + (boxOff(id) ? "" : " checked") + "></label>";
+  }).join("");
+}
+// ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
+var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Currency converter", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
+function boxOff(id) { var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
+function setBoxOff(id, off) {
+  var L = LAY();
+  L.off = L.off || {};
+  if (off) L.off[id] = 1; else delete L.off[id];
+  persist(); render();
+  if (!off && REFRESH[id]) REFRESH[id]();
 }
 
 // ---- Details window ----
@@ -484,7 +503,7 @@ function closeModal() { $("modal").hidden = true; $("mBody").innerHTML = ""; }
 $("mClose").onclick = closeModal;
 $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
 document.addEventListener("keydown", function (e) {
-  if (e.key === "Escape") { closeModal(); closeMenus(); }
+  if (e.key === "Escape") { if (!$("modal").hidden) closeModal(); else $("panel").hidden = true; closeMenus(); }
   if ((e.key === "Enter" || e.key === " ") && e.target.getAttribute && e.target.getAttribute("role") === "button" && e.target.tagName !== "BUTTON") { e.preventDefault(); e.target.click(); }
 });
 
@@ -621,6 +640,7 @@ document.addEventListener("change", function (e) {
     P.sort = P.sort || {};
     var q = ds.split(":");
     if (q[0] === "sort") P.sort[q[1]] = e.target.value; else if (q[0] === "tcat") P.tcat = e.target.value;
+    else if (q[0] === "spsport" || q[0] === "spview") { P[q[0] === "spsport" ? "spSport" : "spView"] = e.target.value; persist(); render(); fetchSports(); return; }
     else if (q[0] === "rdsort") { P.rdSort = e.target.value; RD = []; persist(); render(); fetchReddit(true); return; }
     persist(); render(); return;
   }
@@ -696,10 +716,14 @@ function fetchNews() {
 }
 
 // ---- What's new since you last looked, what you've opened, and word filters ----
+// Each box (news, tg, rd) has its own "seen up to here" time, so clearing one does not clear the others
 var NSEEN = load("sp_nseen", 0), READ = load("sp_nread", {}), NQ = "", NFILT = false;
-if (!NSEEN) { NSEEN = Date.now(); save("sp_nseen", NSEEN); }
-function isNewTs(ts) { return ts > NSEEN; }
-function markSeen(t) { NSEEN = t || Date.now(); save("sp_nseen", NSEEN); }
+if (!NSEEN || typeof NSEEN !== "object") { var ns0 = +NSEEN || Date.now(); NSEEN = { news: ns0, tg: ns0, rd: ns0 }; save("sp_nseen", NSEEN); }
+function isNewTs(ts, box) { return ts > (NSEEN[box] || 0); }
+function markSeen(box, t) {
+  (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = t || Date.now(); });
+  save("sp_nseen", NSEEN);
+}
 function markReadUrl(u) {
   if (!u) return;
   READ[u] = Date.now();
@@ -847,7 +871,7 @@ function addRdSrc(v) {
   P.rd.push(m[1]); srcMsg("Added r/" + m[1] + "."); return true;
 }
 function fetchReddit() {
-  if (!sb || !USER || rBusy) return;
+  if (!sb || !USER || rBusy || boxOff("reddit")) return;
   var subs = rdSrc();
   if (!subs.length) { RD = []; return; }
   rBusy = true;
@@ -1097,9 +1121,13 @@ var CE = (function () { try { var d = document.createElement("div"); d.setAttrib
 function openTodos() { return (P.notes || []).filter(function (n) { return n.todo && !n.done; }).length; }
 function noteTab() { return P.noteTab === "note" ? "note" : "todo"; }
 function openNotes(focus) {
+  var draft = $("noteIn") ? $("noteIn").value : "";
+  putWidget("notes");
+  if ($("noteIn")) { $("noteIn").value = draft; if (focus !== false) $("noteIn").focus(); }
+}
+function notesHtml() {
   var L = P.notes || [], tab = noteTab(), byNew = function (a, b) { return (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.ts - a.ts; };
   var open = L.filter(function (n) { return n.todo && !n.done; }).sort(byNew), done = L.filter(function (n) { return n.todo && n.done; }).sort(byNew), notes = L.filter(function (n) { return !n.todo; }).sort(byNew);
-  var draft = $("noteIn") ? $("noteIn").value : "";
   var acts = function (n, pin) {
     return '<span class="nact">' + (pin ? '<button data-a="notepin" data-k="' + n.id + '" title="' + (n.pin ? "Unpin" : "Pin to the top") + '" aria-label="Pin">' + (n.pin ? "★" : "☆") + "</button>" : "") +
       '<button data-a="notedel" data-k="' + n.id + '" title="Delete" aria-label="Delete">✕</button></span>';
@@ -1120,8 +1148,36 @@ function openNotes(focus) {
         return '<div class="ncard' + (n.pin ? " pin" : "") + '">' + text(n) + '<div class="nfoot"><small>' + new Date(n.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + "</small>" + acts(n, true) + "</div></div>";
       }).join("") + "</div>";
   }
-  openModal("Notes", '<div class="nt2"><div class="seg">' + seg("todo", "To-do", open.length) + seg("note", "Notes", notes.length) + "</div>" + body + "</div>");
-  if ($("noteIn")) { $("noteIn").value = draft; if (focus !== false) $("noteIn").focus(); }
+  return '<div class="nt2"><div class="seg">' + seg("todo", "To-do", open.length) + seg("note", "Notes", notes.length) + "</div>" + body + "</div>";
+}
+
+// ---- Notes and the calendar can live in a window, or stay docked on the left or right side of the page ----
+var WIDGETS = { notes: { t: "Notes", html: function () { return notesHtml(); } }, cal: { t: "Calendar", html: function () { return calHtml(); } } };
+function sideOf(w) { var s = P.side && P.side[w]; return s === "left" || s === "right" ? s : ""; }
+function putWidget(w) {
+  var W = WIDGETS[w];
+  if (!sideOf(w)) {
+    openModal(W.t, W.html() + '<div class="dockbtns"><button data-a="sidedock" data-k="' + w + ':left" title="Keep this open on the left side of the page">◧ Dock left</button><button data-a="sidedock" data-k="' + w + ':right" title="Keep this open on the right side of the page">Dock right ◨</button></div>');
+    return;
+  }
+  var b = document.querySelector('.sw[data-sw="' + w + '"] .swb');
+  if (b) b.innerHTML = W.html(); else renderSide();
+}
+function renderSide() {
+  ["left", "right"].forEach(function (side) {
+    $(side === "left" ? "sideL" : "sideR").innerHTML = Object.keys(WIDGETS).filter(function (w) { return sideOf(w) === side; }).map(function (w) {
+      return '<div class="sw" data-sw="' + w + '"><div class="swh"><b>' + WIDGETS[w].t + '</b><span><button data-a="sidedock" data-k="' + w + ":" + (side === "left" ? "right" : "left") + '" title="Move to the other side" aria-label="Move to the other side">⇄</button>' +
+        '<button data-a="sidedock" data-k="' + w + ':" title="Undock (it opens as a window again)" aria-label="Undock">✕</button></span></div><div class="swb">' + WIDGETS[w].html() + "</div></div>";
+    }).join("");
+  });
+  syncDock();
+}
+function sideDock(w, side) {
+  P.side = P.side || {};
+  if (side) P.side[w] = side; else delete P.side[w];
+  persist();
+  if (!$("modal").hidden && $("mTitle").textContent === WIDGETS[w].t) closeModal();
+  renderSide(); render();
 }
 function noteAct(a, k) {
   var L = P.notes = P.notes || [], n = L.filter(function (x) { return x.id === k; })[0];
@@ -1202,7 +1258,12 @@ function setDockW(w) { document.documentElement.style.setProperty("--dock-w", w 
     grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up);
   });
 })();
-function syncDock() { $("dock").hidden = !DOCK.length; document.body.classList.toggle("docked", DOCK.length > 0); }
+function syncDock() {
+  var l = DOCK.length > 0 || $("sideL").children.length > 0, r = $("sideR").children.length > 0;
+  $("dock").hidden = !l; $("dockR").hidden = !r;
+  document.body.classList.toggle("docked", l); document.body.classList.toggle("dockedr", r);
+  document.body.classList.toggle("dockslim", l && !DOCK.length);
+}
 function dockAdd(k) {
   var kind = k.charAt(0), id = k.slice(2);
   if (DOCK.some(function (d) { return d.kind === kind && d.id === id; })) { closeModal(); return; }
@@ -1217,7 +1278,7 @@ function dockAdd(k) {
   w.innerHTML = '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div><div class="dkc">' +
     (kind === "t" ? '<button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button>' : "") +
     '<button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
-  $("dock").appendChild(w);
+  $("dockP").appendChild(w);
   if (kind === "t" && P.dockChat) dockChat(d.uid);
   syncDock(); closeModal();
 }
@@ -1523,7 +1584,7 @@ document.addEventListener("click", function (e) {
     try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
     P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, fav: {}, hidden: {} };
     TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; NG = []; USER = null;
-    loadMailForm(); loadExtraForm();
+    loadMailForm(); loadExtraForm(); renderSide();
     applyWall(); MENU_OPEN = ""; render();
     return;
   }
@@ -1557,6 +1618,11 @@ document.addEventListener("click", function (e) {
   if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
+  if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
+  if (a === "boxoff") { setBoxOff(k, true); return; }
+  if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
+  if (a === "spfav") { spToggleFav(k, SP_OPEN); return; }
+  if (a === "setsec") { setSec(+k); return; }
   if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); return; }
   if (a === "bellgo") { var be = NLOG[+k]; MENU_OPEN = ""; render(); if (be) runAct(be.act); return; }
   if (a === "bellclear") { NLOG = []; save("sp_nlog", NLOG); MENU_OPEN = ""; render(); return; }
@@ -1571,10 +1637,10 @@ document.addEventListener("click", function (e) {
   if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
   if (a === "twpop") { twPop(k); return; }
   if (a === "twchat") { twChat(k); return; }
-  if (a === "nseen") { markSeen(); render(); return; }
+  if (a === "nseen") { markSeen(k); render(); return; }
   if (a === "refresh") { refreshBox(k); return; }
   if (a === "nsearch") { window.open("https://news.google.com/search?q=" + encodeURIComponent(k), "_blank", "noopener"); return; }
-  if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else openStock(k.slice(2)); return; }
+  if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else if (ch === "p") openSport(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -1582,6 +1648,26 @@ document.addEventListener("click", function (e) {
   render();
 });
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
+// ---- Settings window: sections listed on the left, one section shown at a time ----
+var SETSEC = 0;
+function buildSetNav() {
+  var cat = "";
+  $("setNav").innerHTML = '<div class="navtitle">Settings</div>' + Array.prototype.map.call(document.querySelectorAll("#panel .setgrp"), function (g, i) {
+    var h = g.dataset.cat !== cat ? '<div class="navcat">' + esc(g.dataset.cat) + "</div>" : "";
+    cat = g.dataset.cat;
+    return h + '<button data-a="setsec" data-k="' + i + '">' + esc(g.dataset.sec) + "</button>";
+  }).join("");
+  setSec(SETSEC);
+}
+function setSec(i) {
+  var gs = document.querySelectorAll("#panel .setgrp"), bs = document.querySelectorAll("#setNav button");
+  SETSEC = Math.max(0, Math.min(gs.length - 1, i || 0));
+  Array.prototype.forEach.call(gs, function (g, k) { g.classList.toggle("on", k === SETSEC); });
+  Array.prototype.forEach.call(bs, function (b, k) { b.classList.toggle("on", k === SETSEC); });
+  $("setTitle").textContent = gs[SETSEC].dataset.sec;
+  document.querySelector("#panel .setbody").scrollTop = 0;
+}
+$("panel").addEventListener("mousedown", function (e) { if (e.target.id === "panel") $("panel").hidden = true; });
 $("themeBtn").onclick = function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); };
 $("accent").oninput = function (e) { P.accent = e.target.value; persist(); applyTheme(); };
 $("cBg").oninput = function (e) { setCol("bg", e.target.value); };
@@ -1624,7 +1710,7 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); fetchWeather(); fetchClockTz();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz();
   });
 }
 function auth(fn) {
@@ -1653,7 +1739,7 @@ function openHelp() {
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
     ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["convert", "Currency converter"],
     ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
-    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
+    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
   ];
   var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
     toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
@@ -1731,6 +1817,8 @@ function openHelp() {
 
   html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or press <code>n</code>). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>';
   html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit sources</b>. In the box, choose <b>Hot</b> or <b>New</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview, click for the text and links. Move and resize the box in Edit mode like the others.</p>';
+  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures for football (Champions League, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Europa League), NBA basketball and UFC. Pick a sport and a view in the box: <b>Live &amp; today</b>, <b>Upcoming</b> or <b>Favorites</b>. Click a game for the score or the full UFC fight card, and press ☆ next to a team or fighter to make it a favorite; favorites are marked ★, listed first, and have their own view. Scores update every minute while a game is in play.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab.</p>';
   html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks and Twitch updating while the tab is in the background).</p>' +
     '<p><b>Summary:</b> on your first visit each day a small "Since yesterday" window shows weather warnings, today\'s events, top stories, biggest movers, mail and who is live. Open it any time from the cogwheel menu or with <code>b</code>.</p>' +
@@ -1860,6 +1948,11 @@ function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, d
 var CALV = null, REPS = { "": "Once", d: "Daily", w: "Weekly", m: "Monthly", y: "Yearly" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
 function openCal() {
+  var draft = $("calT") ? $("calT").value : "";
+  putWidget("cal");
+  if ($("calT")) $("calT").value = draft;
+}
+function calHtml() {
   var now = new Date(), today = ymd(now);
   if (!CALV) CALV = { y: now.getFullYear(), m: now.getMonth(), sel: today };
   var start = (new Date(CALV.y, CALV.m, 1).getDay() + 6) % 7, days = new Date(CALV.y, CALV.m + 1, 0).getDate(), cells = "";
@@ -1879,14 +1972,12 @@ function openCal() {
     var uds = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + k));
     evsOn(uds).forEach(function (e) { if (up.length < 5) up.push(evRow(e, uds, true)); });
   }
-  var draft = $("calT") ? $("calT").value : "";
-  openModal("Calendar", '<div class="calwrap"><div><div class="calh"><button data-a="calnav" data-k="-1" aria-label="Previous month">◀</button><b>' +
+  return '<div class="calwrap"><div><div class="calh"><button data-a="calnav" data-k="-1" aria-label="Previous month">◀</button><b>' +
     new Date(CALV.y, CALV.m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + '</b><button data-a="calnav" data-k="1" aria-label="Next month">▶</button><button data-a="calnav" data-k="0">Today</button></div><div class="calg">' + cells + "</div></div>" +
     '<div class="calr"><h3>' + (CALV.sel === today ? "Today · " : "") + dayLabel(CALV.sel) + "</h3>" + (evsOn(CALV.sel).map(function (e) { return evRow(e, CALV.sel); }).join("") || '<p class="mut sn">Nothing planned.</p>') +
     '<form id="calAdd" class="cadd"><input type="text" id="calT" placeholder="Add an event…" maxlength="120"><input type="time" id="calTm" aria-label="Time (empty = all day)" title="Time (leave empty for all day)">' +
     '<select id="calRem" aria-label="Reminder">' + opts(REMS, "") + '</select><select id="calRep" aria-label="Repeat">' + opts(Object.keys(REPS).map(function (r) { return [r, REPS[r]]; }), "") + '</select><button class="pri">Add</button></form>' +
-    (up.length ? "<h3>Coming up</h3>" + up.join("") : "") + "</div></div>");
-  if ($("calT")) $("calT").value = draft;
+    (up.length ? "<h3>Coming up</h3>" + up.join("") : "") + "</div></div>";
 }
 function calAct(a, k) {
   if (a === "calday" || a === "caljump") { CALV.sel = k; CALV.y = +k.slice(0, 4); CALV.m = +k.slice(5, 7) - 1; }
@@ -2046,6 +2137,123 @@ function maybeBrief() {
   openBrief();
 }
 
+// ---- Sports: live scores and fixtures from ESPN's public scoreboard (read straight from the browser, no key) ----
+// Order = importance: with several games on at once, earlier leagues are listed first.
+var SP_LEAGUES = [
+  { id: "soccer/uefa.champions", sp: "football", n: "Champions League" }, { id: "soccer/eng.1", sp: "football", n: "Premier League" },
+  { id: "soccer/esp.1", sp: "football", n: "La Liga" }, { id: "soccer/ita.1", sp: "football", n: "Serie A" },
+  { id: "soccer/ger.1", sp: "football", n: "Bundesliga" }, { id: "soccer/fra.1", sp: "football", n: "Ligue 1" },
+  { id: "soccer/uefa.europa", sp: "football", n: "Europa League" }, { id: "basketball/nba", sp: "basketball", n: "NBA" }, { id: "mma/ufc", sp: "ufc", n: "UFC" }
+];
+var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_SPORTS = [["", "All sports"], ["football", "Football"], ["basketball", "Basketball"], ["ufc", "UFC"]], SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["fav", "Favorites"]];
+function spView() { return P.spView === "up" || P.spView === "fav" ? P.spView : "now"; }
+function spFavs() { return P.spFav || []; }
+function spIsFav(name) { return spFavs().indexOf(name) >= 0; }
+function spParse(lg, j, pri) {
+  return ((j && j.events) || []).map(function (e) {
+    var st = (e.status && e.status.type) || {}, link = safeUrl(((e.links || [])[0] || {}).href);
+    var o = { id: lg.id + ":" + e.id, lg: lg.n, sp: lg.sp, pri: pri, ts: Date.parse(e.date), state: st.state || "pre", detail: st.shortDetail || "", link: link };
+    if (lg.sp === "ufc") {
+      o.title = String(e.name || e.shortName || "UFC").replace(/^UFC Fight Night:/, "UFC FN:");
+      // the main event is the last fight on the card
+      o.fights = (e.competitions || []).map(function (c) {
+        var a = (c.competitors || [])[0] || {}, b = (c.competitors || [])[1] || {}, cs = (c.status && c.status.type) || {};
+        return { a: (a.athlete || {}).displayName || "?", b: (b.athlete || {}).displayName || "?", aw: !!a.winner, bw: !!b.winner, state: cs.state || "pre", detail: cs.shortDetail || "", wc: (c.type || {}).abbreviation || "", ts: Date.parse(c.date) };
+      }).reverse();
+      if (o.fights.some(function (f) { return f.state === "in"; })) o.state = "in";
+      o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
+    } else {
+      var cs2 = ((e.competitions || [])[0] || {}).competitors || [];
+      var side = function (ha) { var c = cs2.filter(function (x) { return x.homeAway === ha; })[0] || {}, t = c.team || {}; return { n: t.shortDisplayName || t.displayName || "?", s: c.score, logo: safeUrl(t.logo), win: !!c.winner }; };
+      o.home = side("home"); o.away = side("away");
+      o.names = [o.home.n, o.away.n];
+    }
+    return o;
+  }).filter(function (o) { return !isNaN(o.ts); });
+}
+function spGet(lg, pri, month) {
+  var store = month ? SP_UP : SP_NOW, key = lg.id + (month || "");
+  store[key] = store[key] || { t: 0, ev: [] };
+  store[key].t = Date.now();
+  return fetch("https://site.api.espn.com/apis/site/v2/sports/" + lg.id + "/scoreboard" + (month ? "?dates=" + month + "&limit=200" : ""))
+    .then(function (r) { if (!r.ok) throw new Error("ESPN answered " + r.status); return r.json(); })
+    .then(function (j) { store[key].ev = spParse(lg, j, pri); store[key].ok = 1; SPERR = ""; })
+    .catch(function (e) { if (!store[key].ok) SPERR = String((e && e.message) || e); });
+}
+// Today's scoreboards: every minute for a league with a game in play, otherwise every 5 minutes.
+// Upcoming / Favorites also need the month's fixtures: those are fetched when you first open that view, then every 30 minutes.
+function fetchSports(force) {
+  if (boxOff("sports")) return;
+  var now = Date.now(), jobs = [], sport = P.spSport || "";
+  SP_LEAGUES.forEach(function (lg, pri) {
+    if (sport && lg.sp !== sport) return;
+    var c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in"; });
+    if (force || !c || now - c.t > (live ? 55000 : 290000)) jobs.push(spGet(lg, pri));
+    if (spView() !== "now") {
+      var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
+      if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
+      months.forEach(function (m) { var u = SP_UP[lg.id + m]; if (!u || now - u.t > 1800000) jobs.push(spGet(lg, pri, m)); });
+    }
+  });
+  if (jobs.length) Promise.all(jobs).then(render);
+}
+function spEvents() {
+  var by = {}, view = spView(), sport = P.spSport || "", now = Date.now();
+  Object.keys(SP_UP).forEach(function (k) { SP_UP[k].ev.forEach(function (e) { by[e.id] = e; }); });
+  Object.keys(SP_NOW).forEach(function (k) { SP_NOW[k].ev.forEach(function (e) { by[e.id] = e; }); });   // today's data is fresher, so it wins
+  var all = Object.keys(by).map(function (k) { return by[k]; }).filter(function (e) { return !sport || e.sp === sport; });
+  all.forEach(function (e) { e.fav = e.names.some(spIsFav); });
+  var live = function (e) { return e.state === "in" ? 1 : 0; }, day = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); };
+  if (view === "up") return all.filter(function (e) { return e.state === "pre" && e.ts > now - 3600000; }).sort(function (a, b) { return a.ts - b.ts || a.pri - b.pri; }).slice(0, 60);
+  if (view === "fav") return all.filter(function (e) { return e.fav && (e.state !== "post" || now - e.ts < 86400000); }).sort(function (a, b) { return live(b) - live(a) || a.ts - b.ts; }).slice(0, 60);
+  return all.filter(function (e) { return e.state === "in" || day(e.ts) === day(now) || (e.state === "post" && now - e.ts < 43200000) || (e.sp === "ufc" && e.state === "pre" && e.ts - now < 172800000); })
+    .sort(function (a, b) { return live(b) - live(a) || (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || a.pri - b.pri || a.ts - b.ts; }).slice(0, 60);
+}
+function spWhen(e) {
+  if (e.state === "in") return '<span class="pill live">' + esc(e.sp === "ufc" ? "LIVE" : e.detail || "LIVE") + "</span>";
+  if (e.state === "post") return '<span class="mut">' + esc(e.sp === "ufc" ? "Final" : (e.detail || "FT")) + "</span>";
+  var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+  return '<span class="mut">' + (today ? "" : d.toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" }) + " ") + d.toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }) + "</span>";
+}
+function spTitle(e) {
+  if (e.sp === "ufc") return esc(e.title);
+  var sc = e.state === "pre" ? " – " : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ";
+  return esc(e.home.n) + sc + esc(e.away.n);
+}
+function sportsBody() {
+  var ev = spEvents(), view = spView();
+  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or fighter.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
+  return lst("sports", ev.map(function (e) {
+    return '<div class="row' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span>' + (e.fav ? '<i class="fv">★</i>' : "") + '<button class="lnk" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spTitle(e) + "</button>" +
+      (P.hideSrc ? "" : " <small>" + esc(e.lg) + "</small>") + '</span><span class="r">' + spWhen(e) + "</span></div>";
+  }).join(""), 6);
+}
+function openSport(id) {
+  var e = spEvents().filter(function (x) { return x.id === id; })[0];
+  if (!e) { Object.keys(SP_NOW).concat(Object.keys(SP_UP)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); }); }
+  if (!e) return;
+  SP_OPEN = id;
+  var favBtn = function (n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; };
+  var body;
+  if (e.sp === "ufc") {
+    body = '<h2 class="mh">' + esc(e.title) + '</h2><div class="mut">' + spWhen(e) + "</div><h3>Fight card (main event first)</h3>" + e.fights.map(function (f) {
+      var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "Draw / no contest") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' : "";
+      return '<div class="row"><span>' + favBtn(f.a) + " <b" + (f.aw ? ' class="win"' : "") + ">" + esc(f.a) + '</b> <span class="mut">vs</span> <b' + (f.bw ? ' class="win"' : "") + ">" + esc(f.b) + "</b> " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") + '</span><span class="r mut">' + res + "</span></div>";
+    }).join("");
+  } else {
+    var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
+    body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>";
+  }
+  openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, "Details on ESPN") + "</p>" : "") + "</div>");
+}
+function spToggleFav(name, openId) {
+  P.spFav = spFavs().slice();
+  var i = P.spFav.indexOf(name);
+  if (i >= 0) P.spFav.splice(i, 1); else if (P.spFav.length < 60) P.spFav.push(name);
+  persist(); render();
+  if (openId) openSport(openId);
+}
+
 // ---- Search bar: plain words go to your search engine, a site name opens the site, !bangs pick a site to search ----
 var ENGINES = { google: "https://www.google.com/search?q=", ddg: "https://duckduckgo.com/?q=", brave: "https://search.brave.com/search?q=", bing: "https://www.bing.com/search?q=", kagi: "https://kagi.com/search?q=" };
 var BANGS = {
@@ -2143,7 +2351,7 @@ $("bkFile").onchange = function (e) {
     if (!P.fav || typeof P.fav !== "object") P.fav = {};
     if (!P.hidden || typeof P.hidden !== "object") P.hidden = {};
     if (tw) P.tw = tw;
-    persist(); applyTheme(); applyWall(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks();
+    persist(); applyTheme(); applyWall(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide();
     NEWS = []; TGP = []; NEWSV++; MAIL = [];
     render(); refreshAll(true);
     $("bkMsg").textContent = "Restored.";
@@ -2152,7 +2360,7 @@ $("bkFile").onchange = function (e) {
 };
 
 // ---- Keyboard shortcuts (when you are not typing in a box) ----
-function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchWeather(); fetchRates(); }
+function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); }
 document.addEventListener("keydown", function (e) {
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
   var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
@@ -2176,7 +2384,7 @@ document.addEventListener("visibilitychange", function () {
   if (document.hidden) { HIDDEN_AT = Date.now(); return; }
   tick(); tickClocks();
   // Away for more than 2 minutes: what was on screen when you left counts as seen, so only newer items are marked new
-  if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000) { markSeen(HIDDEN_AT); refreshAll(); }
+  if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000) { markSeen("", HIDDEN_AT); refreshAll(); }
   else render();
   HIDDEN_AT = 0;
 });
@@ -2184,12 +2392,12 @@ document.addEventListener("visibilitychange", function () {
 $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); fetchRates();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks();
+fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);
 // With desktop notifications on, the things that can notify keep updating while the tab is in the background
 function bg(kind) { return function () { var n = NTF(); return !!n.desktop && n[kind] !== false; }; }
 every(60000, fetchTwitch, bg("live"));
 every(120000, fetchNews, function () { return bg("news")() || bg("words")(); });
 every(60000, fetchTG, bg("words"));
-every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(300000, checkUpdate);
+every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(60000, fetchSports); every(300000, checkUpdate);
 setInterval(tick, 1000);

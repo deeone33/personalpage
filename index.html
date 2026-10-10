@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniRama</title>
@@ -13,7 +13,8 @@
 <div id="wall"></div>
 <div id="aurora" aria-hidden="true"></div>
 <div id="wallDragOverlay" hidden><div class="wdrow"><span>Drag to move the wallpaper.</span><button id="wallDoneBtn">Done</button></div></div>
-<aside id="dock" hidden aria-label="Docked players"></aside>
+<aside id="dock" hidden aria-label="Docked players and panels"><div id="dockP"></div><div id="sideL"></div></aside>
+<aside id="dockR" hidden aria-label="Docked panels"><div id="sideR"></div></aside>
 <div id="dockGrip" title="Drag to resize the players"></div>
 <main id="app">
   <header>
@@ -25,11 +26,14 @@
   <div id="grid"></div>
   <footer class="mut">OmniRama · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button></footer>
 </main>
-<aside id="panel" hidden>
-  <div class="ph"><b>Settings</b><button id="closeBtn">Close</button></div>
+<div id="panel" hidden>
+ <div class="setwin" role="dialog" aria-modal="true" aria-label="Settings">
+  <nav id="setNav" aria-label="Settings sections"></nav>
+  <div class="setmain">
+   <div class="ph"><b id="setTitle">Settings</b><button id="closeBtn" aria-label="Close settings">✕ Close</button></div>
+   <div class="setbody">
 
-  <div class="setgrp">
-    <h4>Appearance</h4>
+  <section class="setgrp" data-cat="Look" data-sec="Appearance">
     <label>Theme <button id="themeBtn"></button></label>
     <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
     <label>Background <input type="color" id="cBg"></label>
@@ -40,60 +44,32 @@
     <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
     <label>Glow background <input type="checkbox" id="auroraOn"></label>
     <label>Shadows behind boxes and logo <input type="checkbox" id="shadowOn"></label>
-    <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
     <button id="cReset">Reset colors</button>
-  </div>
+  </section>
 
-  <div class="setgrp">
-    <h4>Wallpaper</h4>
+  <section class="setgrp" data-cat="Look" data-sec="Wallpaper">
     <label>Image <span><label class="filebtn" for="wallFile">Choose image</label><input type="file" id="wallFile" accept="image/*" class="vis-hidden"> <button id="wallClear">Remove</button></span></label>
     <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
     <div class="mut sn">Press Reposition, then drag the screen to move the image. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
-  </div>
+  </section>
 
-  <div class="setgrp">
-    <h4>Search bar</h4>
+  <section class="setgrp" data-cat="Look" data-sec="Layout &amp; boxes">
+    <div class="mut sn">Switch whole boxes on or off. A box that is off is not loaded either. To move or resize boxes, close this window and choose Edit in the cogwheel menu.</div>
+    <div class="sub" id="boxList"></div>
+    <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
+    <div class="sub">
+      <b>Hidden streamers, sources and stocks</b>
+      <div id="hiddenList" class="mut"></div>
+    </div>
+    <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Look" data-sec="Search bar">
     <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
     <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
-  </div>
+  </section>
 
-  <div class="setgrp">
-    <h4>Account</h4>
-    <div id="pwSignedIn">
-      <label>New password <input type="password" id="pwNew" placeholder="8+ characters" autocomplete="new-password"></label>
-      <button id="pwSave">Update password</button>
-      <div id="pwMsg" class="mut sn" role="status"></div>
-    </div>
-    <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
-  </div>
-
-  <div class="setgrp">
-    <h4>Location &amp; alarms</h4>
-    <label>Location <button data-a="opensettingsloc">Change (day, date, time)</button></label>
-    <label>Alarm volume <input type="range" id="volSlider" min="0" max="100"></label>
-  </div>
-
-  <div class="setgrp">
-    <h4>Connections</h4>
-    <label>Twitch <button id="twBtn"></button></label>
-    <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
-    <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
-    <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
-    <div class="sub">
-      <b>Gmail accounts</b>
-      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
-      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt0" placeholder="Token" autocomplete="off">
-      <input type="text" id="mn1" placeholder="Name, e.g. Work">
-      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt1" placeholder="Token" autocomplete="off">
-      <button id="mailSave">Save Gmail accounts</button>
-      <div id="mailMsg" class="mut" role="status"></div>
-    </div>
-  </div>
-
-  <div class="setgrp">
-    <h4>News, Telegram &amp; Reddit sources</h4>
+  <section class="setgrp" data-cat="Content" data-sec="News, Telegram &amp; Reddit">
     <div class="sub">
       <b>News</b>
       <div id="srcNews"></div>
@@ -116,10 +92,47 @@
     </div>
     <button id="srcReset">Back to default sources</button>
     <div id="srcMsg" class="mut" role="status"></div>
-  </div>
+  </section>
 
-  <div class="setgrp nf">
-    <h4>Notifications</h4>
+  <section class="setgrp" data-cat="Content" data-sec="Stocks">
+    <div class="sub">
+      <form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>
+      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
+      <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
+    </div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Twitch">
+    <label>Twitch account <button id="twBtn"></button></label>
+    <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
+    <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
+    <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="YouTube">
+    <label>Subscriptions <span><label class="filebtn" for="ytFile">Choose subscriptions.csv</label><input type="file" id="ytFile" accept=".csv,text/csv" class="vis-hidden"></span></label>
+    <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Mail">
+    <div class="mut sn">Step-by-step instructions are in Help → Mail (Gmail).</div>
+    <div class="sub">
+      <b>First inbox</b>
+      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
+      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
+      <input type="password" id="mt0" placeholder="Token" autocomplete="off">
+    </div>
+    <div class="sub">
+      <b>Second inbox</b>
+      <input type="text" id="mn1" placeholder="Name, e.g. Work">
+      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
+      <input type="password" id="mt1" placeholder="Token" autocomplete="off">
+    </div>
+    <button id="mailSave">Save Gmail accounts</button>
+    <div id="mailMsg" class="mut" role="status"></div>
+  </section>
+
+  <section class="setgrp nf" data-cat="Alerts" data-sec="Notifications">
     <div class="mut sn">Small cards in the bottom-right corner. Click one to open it.</div>
     <label>Big news (same story, several sources) <input type="checkbox" id="nfNews"></label>
     <label class="in">Sources needed <input type="number" id="nfSrcN" min="2" max="6" step="1"></label>
@@ -134,35 +147,32 @@
     <label>Also as desktop notifications <input type="checkbox" id="nfDesktop"></label>
     <label>Morning summary on first visit of the day <input type="checkbox" id="briefOn"></label>
     <button data-a="nftest">Show a test notification</button>
-  </div>
+  </section>
 
-  <div class="setgrp">
-    <h4>Stocks</h4>
-    <div class="sub">
-      <form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>
-      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
-      <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
+  <section class="setgrp" data-cat="Alerts" data-sec="Clock &amp; alarms">
+    <label>Location for the date and time <button data-a="opensettingsloc">Change</button></label>
+    <label>Alarm volume <input type="range" id="volSlider" min="0" max="100"></label>
+  </section>
+
+  <section class="setgrp" data-cat="Account" data-sec="Password">
+    <div id="pwSignedIn">
+      <label>New password <input type="password" id="pwNew" placeholder="8+ characters" autocomplete="new-password"></label>
+      <button id="pwSave">Update password</button>
+      <div id="pwMsg" class="mut sn" role="status"></div>
     </div>
-  </div>
+    <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
+  </section>
 
-  <div class="setgrp">
-    <h4>YouTube</h4>
-    <label>Subscriptions <span><label class="filebtn" for="ytFile">Choose subscriptions.csv</label><input type="file" id="ytFile" accept=".csv,text/csv" class="vis-hidden"></span></label>
-    <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
-  </div>
-
-  <div class="setgrp">
-    <h4>Backup</h4>
+  <section class="setgrp" data-cat="Account" data-sec="Backup">
     <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
     <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
     <div id="bkMsg" class="mut sn" role="status"></div>
-  </div>
+  </section>
 
-  <div class="setgrp">
-    <h4>Hidden items</h4>
-    <div id="hiddenList" class="mut"></div>
+   </div>
   </div>
-</aside>
+ </div>
+</div>
 <div id="peek" hidden></div>
 <div id="toasts" aria-live="polite"></div>
 <div id="upd" hidden>A new version is available <button id="updBtn">Reload</button></div>
