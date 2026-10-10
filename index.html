@@ -19,7 +19,7 @@
 <main id="app">
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div></div>
-    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab · Also answers sums and conversions: 12*45, 100 usd in eur, 10 km in miles" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
+    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab · Also answers sums and conversions: 12*45, 100 usd in eur, 10 km in miles · note … or todo … saves it to Notes" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <img id="logoImg" alt="OmniRama" src="logo.png" width="512" height="109">
   </header>
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the converter, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
@@ -100,6 +100,10 @@
       <input type="text" id="nwMute" placeholder="Mute words, comma separated (hides headlines)">
       <input type="text" id="nwHi" placeholder="Highlight words, comma separated">
     </div>
+    <label>Headlines shown <select id="cntNews"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option></select></label>
+    <label>Telegram posts shown <select id="cntTg"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label>
+    <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
+    <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
     <button id="srcReset">Back to default sources</button>
     <div id="srcMsg" class="mut" role="status"></div>
   </section>
@@ -114,7 +118,7 @@
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Sports">
-    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders.</div>
+    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
     <div id="spList"></div>
     <button data-a="spreset">Back to the starting leagues</button>
     <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
@@ -125,6 +129,7 @@
     <label>Twitch account <button id="twBtn"></button></label>
     <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
     <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
+    <label>Show my ★ streamers who are offline <input type="checkbox" id="twOffOn"></label>
     <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
   </section>
 
@@ -185,6 +190,12 @@
       <div id="pwMsg" class="mut sn" role="status"></div>
     </div>
     <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Account" data-sec="Sign-in activity" id="actSec">
+    <div class="mut sn">Every device and browser that is signed in to your account right now, and the latest sign-ins. If something here is not you, change your password and sign the other devices out.</div>
+    <div id="actList"></div>
+    <span><button data-a="actload">Refresh</button> <button data-a="actout">Sign out everywhere else</button></span>
   </section>
 
   <section class="setgrp" data-cat="Account" data-sec="Delete account">

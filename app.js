@@ -1,4 +1,4 @@
-var VERSION = 64;
+var VERSION = 66;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -394,14 +394,14 @@ function render() {
     var gRead = function (g) { return g.some(function (x) { return READ[x.u]; }); };
     nNew = NG.filter(function (g) { return isNewItem(g[0], "news") && !gRead(g); }).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
-    nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, 80).map(function (g) {
+    nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
       var n = g[0], srcs = g.map(function (x) { return x.s; }), b = g.fav ? "★ Favorite sources" : bucket(n.ts);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
       var cls = (isNewItem(n, "news") && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
-    }).join(""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
+    }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : ""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
@@ -419,11 +419,11 @@ function render() {
   var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !READ[g.u]; }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
-  T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
+  T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.slice(0, cntOf("tg")).map(function (g) {
     var cls = (isNewItem(g, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
+  }).join("") + (PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -433,10 +433,16 @@ function render() {
   });
   var ctlT = '<select data-s="sort:twitch" aria-label="Sort streams">' + opts([["viewers", "Views"], ["name", "Name"], ["cat", "Cat."]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
     Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select>";
-  T.twitch = tile("twitch", "Twitch", (twv.length ? lst("twitch", twv.map(function (x) {
+  // ★ streamers who are offline come after the live ones, dimmed, most recently live first
+  var liveIds = {}; tw.forEach(function (x) { liveIds[x.id] = 1; });
+  var offRows = TWC && twOffOn() && !tcat ? twFavs().filter(function (l) { return !liveIds[l]; }).sort(function (a, b) { return ((TWOFF[b] || {}).last || 0) - ((TWOFF[a] || {}).last || 0); }).map(function (l) {
+    var o = TWOFF[l] || {};
+    return row("t:" + l, '<span class="dot off"></span>' + esc(o.n || l), o.last ? "last live " + ago(o.last) + " ago" : "offline", "", 1, " favr twoff");
+  }).join("") : "";
+  T.twitch = tile("twitch", "Twitch", (twv.length || offRows ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0, " favr");
-  }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
+  }).join("") + offRows) : '<div class="empty">Nobody you follow is live.</div>') +
     (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT);
 
   var yb;
@@ -686,13 +692,54 @@ function fetchTwitch() {
     .then(function (uid) { return twGet("streams/followed?first=100&user_id=" + uid, tok); })
     .then(function (j) {
       TWC = true;
-      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1, title: x.title }; });
+      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1, title: x.title, th: x.thumbnail_url, st: Date.parse(x.started_at) }; });
       if (LIVEPREV) TW.forEach(function (x) {
         if (!LIVEPREV[x.id] && P.fav["t:" + x.id]) toast("live", (x.name || x.id) + " is live", (x.sub ? x.sub + " · " : "") + (x.title || ""), { a: "tw", k: x.id });
       });
       LIVEPREV = {}; TW.forEach(function (x) { LIVEPREV[x.id] = 1; });
-      render();
+      render(); fetchTwOffline(tok);
     }).catch(function (e) { if (e.message === "expired") twDisconnect(); });
+}
+// ---- ★ streamers who are offline, with when they were last live (Settings > Twitch switches the rows off) ----
+// "Last live" is the later of: the last time this page saw them live, and the end of their newest past broadcast on
+// Twitch (looked up at most every 30 minutes; a channel that does not keep past broadcasts has none).
+var TWOFF = load("sp_twoff", {});
+function twOffOn() { return P.twOff !== false; }
+function twFavs() { return Object.keys(P.fav).filter(function (k) { return k.indexOf("t:") === 0 && P.fav[k] && !P.hidden[k] && /^t:[a-z0-9_]{2,25}$/i.test(k); }).map(function (k) { return k.slice(2); }).slice(0, 30); }
+function twDur(s) { var m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(s || ""); return m ? ((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0)) * 1000 : 0; }
+function fetchTwOffline(tok) {
+  if (!twOffOn() || !TW) return;
+  var now = Date.now(), live = {}, favs = twFavs();
+  TW.forEach(function (x) { live[x.id] = 1; if (P.fav["t:" + x.id]) { var o = TWOFF[x.id] = TWOFF[x.id] || {}; o.n = x.name || x.id; o.last = now; } });
+  var need = favs.filter(function (l) { return !live[l] && !(TWOFF[l] && now - (TWOFF[l].chk || 0) < 1800000); });
+  save("sp_twoff", TWOFF);
+  if (!need.length) return;
+  need.forEach(function (l) { (TWOFF[l] = TWOFF[l] || {}).chk = now; });
+  twGet("users?" + need.map(function (l) { return "login=" + encodeURIComponent(l); }).join("&"), tok).then(function (u) {
+    return Promise.all((u.data || []).map(function (usr) {
+      var o = TWOFF[usr.login] = TWOFF[usr.login] || {};
+      o.n = usr.display_name || usr.login;
+      return twGet("videos?type=archive&first=1&user_id=" + encodeURIComponent(usr.id), tok).then(function (v) {
+        var d = (v.data || [])[0], end = d ? Date.parse(d.created_at) + twDur(d.duration) : 0;
+        if (end > (o.last || 0)) o.last = end;
+      }).catch(function () {});
+    }));
+  }).then(function () { save("sp_twoff", TWOFF); render(); }).catch(function () {});
+}
+// Hover card for a stream: preview picture, title, game, how long it has been live. For an offline ★ row: when it was last live.
+function showTwPeek(el, login) {
+  if (EDIT || !TWC) return;
+  var s = (TW || []).filter(function (x) { return x.id === login; })[0], h;
+  if (s) {
+    var mins = s.st ? Math.max(0, Math.round((Date.now() - s.st) / 60000)) : -1, up = mins < 0 ? "" : "live for " + (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m");
+    var img = safeUrl(String(s.th || "").replace("{width}", "440").replace("{height}", "248"));
+    h = (img ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '">' : "") + '<div class="pk"><b>' + esc(s.title || s.name || login) + "</b><small>" + esc(s.name || login) + (s.sub ? " · " + esc(s.sub) : "") + (up ? " · " + up : "") + " · " + (+s.v || 0).toLocaleString("en-GB") + " watching</small></div>";
+  } else {
+    var o = TWOFF[login] || {};
+    h = '<div class="pk"><b>' + esc(o.n || login) + "</b><small>Offline" + (o.last ? " · last live " + ago(o.last) + " ago (" + when(o.last) + ")" : " · no past broadcast found") + "</small></div>";
+  }
+  $("peek").innerHTML = h;
+  placePeek(el);
 }
 // A pop-out window is twitch.tv itself (first-party), so your login cookie is sent and Turbo / subs count: no ads.
 // Embedded players are third-party, and browsers that block third-party cookies make Twitch think you're logged out.
@@ -862,6 +909,42 @@ var NEWS_SRC = [
 ];
 var TG_SRC = ["ClashReport"];
 var NEWS = [], TGP = [], NERR = "", NERRK = [], nBusy = false, NVIA = {}, NWHY = {}, FNVER = 0, NEWSV = 0, NLAST = 0;
+// How many headlines and Telegram posts the boxes show (Settings > News, Telegram & Reddit). The button at the end of a
+// list shows 20 more for now; for Telegram it also fetches older posts from the channels when the loaded ones run out.
+var CNT_DEF = { news: 80, tg: 40 }, MORE = { news: 0, tg: 0 };
+function cntOf(box) { var v = P.cnt && +P.cnt[box]; return (v >= 10 && v <= 200 ? v : CNT_DEF[box]) + MORE[box]; }
+function moreBtn(box, label) { return '<button class="more" data-a="more" data-k="' + box + '">' + label + "</button>"; }
+var TGX = [], TGEND = {}, tgOldBusy = false;   // older posts fetched so far; channels that have no older posts left
+function tgPostId(u) { var m = /\/(\d+)$/.exec(u || ""); return m ? +m[1] : 0; }
+// a refresh brings the newest posts; the older ones fetched earlier are kept under them
+function tgMerge(fresh) {
+  var have = {}, src = tgSrc();
+  fresh.forEach(function (x) { have[x.u] = 1; });
+  return fresh.concat(TGX.filter(function (x) { return !have[x.u] && src.indexOf(x.s) >= 0; })).sort(function (a, b) { return b.ts - a.ts; });
+}
+function tgVisible() { var mute = wordList(NW().mute); return TGP.filter(function (g) { return shown("g:" + g.s) && !(mute.length && hasWord(g.tx || g.t, mute)); }); }
+function tgCanOlder() { return tgSrc().some(function (n) { return !TGEND[n] && shown("g:" + n) && TGP.some(function (x) { return x.s === n; }); }); }
+function loadOlderTG() {
+  if (!sb || !USER || tgOldBusy) return;
+  var ask = tgSrc().filter(function (n) { return !TGEND[n] && shown("g:" + n); }).map(function (n) {
+    var ids = TGP.filter(function (x) { return x.s === n; }).map(function (x) { return tgPostId(x.u); }).filter(Boolean);
+    return ids.length ? { n: n, before: Math.min.apply(null, ids) } : null;
+  }).filter(Boolean);
+  if (!ask.length) return;
+  tgOldBusy = true; render();
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tgOld: ask } }).then(function (r) {
+    tgOldBusy = false;
+    var got = r.data && r.data.tgOld, have = {};
+    TGP.forEach(function (x) { have[x.u] = 1; });
+    var add = unentAll(Array.isArray(got) ? got : [], ["t", "tx"]).filter(function (x) { return x.u && !have[x.u]; });
+    ask.forEach(function (a) { if (!add.some(function (x) { return x.s === a.n; })) TGEND[a.n] = 1; });   // nothing older came back for this channel
+    TGX = TGX.concat(add).slice(-600);
+    TGP = TGP.concat(add).sort(function (a, b) { return b.ts - a.ts; });
+    render(); tgTopUp();
+  }).catch(function () { tgOldBusy = false; render(); });
+}
+// fetch older posts until the box has as many as it is set to show (or the channels have no more)
+function tgTopUp() { if (!tgOldBusy && tgVisible().length < cntOf("tg") && tgCanOlder()) loadOlderTG(); }
 // Telegram on its own, every minute: it is one light request, so posts show up quickly between the full news refreshes
 var tgBusy = false;
 function fetchTG() {
@@ -870,8 +953,8 @@ function fetchTG() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tg: tgSrc() } }).then(function (r) {
     tgBusy = false;
     if (r.error || !r.data || !r.data.tg || nBusy) return;
-    TGP = unentAll(r.data.tg, ["t", "tx"]); stampFirst(TGP, "tg");
-    newsAlerts(); render();
+    TGP = unentAll(r.data.tg, ["t", "tx"]); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
+    newsAlerts(); render(); tgTopUp();
   }).catch(function () { tgBusy = false; });
 }
 function fetchNews() {
@@ -882,7 +965,8 @@ function fetchNews() {
     if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
       NEWS = unentAll(r.data.news, ["t", "d"]); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
-      stampFirst(NEWS, "news"); stampFirst(TGP, "tg");
+      stampFirst(NEWS, "news"); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
+      setTimeout(tgTopUp, 0);
       var ne = r.data.news_err || {};
       NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
       NERRK = Object.keys(ne);
@@ -1084,10 +1168,35 @@ function openReddit(u) {
   var img = safeUrl(x.img);
   openModal("r/" + x.s, '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" +
     (img ? '<img class="mimg rdimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
-    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>" + (PREVIEW ? previewNote() : ""));
+    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>" + (PREVIEW ? previewNote() : rdComN() ? '<div id="rdCom"><p class="mut sn">Loading comments…</p></div>' : ""));
   render();
+  if (!PREVIEW && rdComN()) loadRdComments(u);
 }
-function srcChanged() { persist(); NEWS = []; TGP = []; NEWSV++; NERR = ""; renderSources(); render(); fetchNews(); }
+// Top comments under the post (through the feeds function, kept here for 5 minutes). Reddit's feed gives a flat list:
+// no vote counts and no reply threads, so the button above still opens the full discussion.
+var RDC = {};
+function rdComN() { var n = P.rdCom; return n === 0 ? 0 : [3, 5, 10, 20].indexOf(+n) >= 0 ? +n : 10; }   // how many comments a post's window shows (0 = none)
+function loadRdComments(u) {
+  var show = function (v) {
+    var box = $("rdCom");
+    if (!box || box.dataset.u !== u) return;
+    box.innerHTML = v.items.length ? "<h3>Top comments</h3>" + v.items.slice(0, rdComN()).map(function (c) {
+      return '<div class="rdc"><div class="mut"><b>' + esc(c.by) + "</b> · " + ago(c.ts) + ' ago</div><p class="nt">' + esc(unent(c.t)) + "</p></div>";
+    }).join("") : '<p class="mut sn">' + (v.err ? "Comments unavailable: " + esc(v.err) : "No comments yet.") + "</p>";
+  };
+  if ($("rdCom")) $("rdCom").dataset.u = u;
+  var c = RDC[u];
+  if (c && Date.now() - c.at < 300000) { show(c); return; }
+  if (!sb || !USER) { show({ items: [], err: "sign in first" }); return; }
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { rdc: u } }).then(function (r) {
+    var v = r.data && r.data.rdc;
+    if (r.error) v = { items: [], err: r.error.message };
+    else if (!v) v = { items: [], err: "it needs the updated feeds function (redeploy super-function in Supabase)" };
+    if (v.items && v.items.length) RDC[u] = { at: Date.now(), items: v.items, err: "" };
+    show({ items: v.items || [], err: v.err || "" });
+  }).catch(function (e) { show({ items: [], err: String((e && e.message) || e) }); });
+}
+function srcChanged() { persist(); NEWS = []; TGP = []; TGX = []; TGEND = {}; NEWSV++; NERR = ""; renderSources(); render(); fetchNews(); }
 function lastAge(name) {
   var t = 0; NEWS.forEach(function (n) { if (n.s === name && n.ts > t) t = n.ts; });
   return t ? "latest " + ago(t) + " ago" + (NVIA[name] ? " · via " + NVIA[name].replace(/api\.|www\./g, "") : "") : "";
@@ -1816,7 +1925,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
   if (a === "helpjump") { var sec = $("help-" + k); if (sec) sec.scrollIntoView({ block: "start" }); return; }
   if (a === "copycode") {
@@ -1875,6 +1984,9 @@ document.addEventListener("click", function (e) {
   if (a === "twchat") { twChat(k); return; }
   if (a === "nseen") { markSeen(k); render(); return; }
   if (a === "refresh") { refreshBox(k); return; }
+  if (a === "more") { if (k === "tg" || k === "news") { MORE[k] += 20; render(); if (k === "tg") tgTopUp(); } return; }
+  if (a === "actload") { loadActivity(); return; }
+  if (a === "actout") { if (sb && USER && confirm("Sign out every other device and browser that is signed in to this account? This one stays signed in.")) sb.auth.signOut({ scope: "others" }).then(loadActivity); return; }
   if (a === "nsearch") { window.open("https://news.google.com/search?q=" + encodeURIComponent(k), "_blank", "noopener"); return; }
   if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else if (ch === "p") openSport(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
@@ -1904,6 +2016,7 @@ function setSec(i) {
   Array.prototype.forEach.call(gs, function (g, k) { g.classList.toggle("on", k === SETSEC); });
   Array.prototype.forEach.call(bs, function (b) { b.classList.toggle("on", +b.dataset.k === SETSEC); });
   $("setTitle").textContent = gs[SETSEC].dataset.sec;
+  if (gs[SETSEC].id === "actSec" && !$("panel").hidden) loadActivity();
   document.querySelector("#panel .setbody").scrollTop = 0;
 }
 $("panel").addEventListener("mousedown", function (e) { if (e.target.id === "panel") $("panel").hidden = true; });
@@ -2407,12 +2520,12 @@ function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true
 var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"]';
 document.addEventListener("mouseover", function (e) {
   var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", k = b && (mail ? "mail:" + b.dataset.k : b.dataset.k);
-  if (!b || !(mail || /^[amrp]:/.test(k))) return;
+  if (!b || !(mail || /^[amrpt]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
   peekT = setTimeout(function () {
     if (peekKey !== k || !document.contains(b) || !$("modal").hidden) return;
-    if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else showPeek(b, k);
+    if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else if (k.charAt(0) === "t") showTwPeek(b, k.slice(2)); else showPeek(b, k);
   }, 350);
 });
 document.addEventListener("mouseout", function (e) {
@@ -2520,9 +2633,13 @@ var SP_CATALOG = [
   { id: "baseball/mlb", sp: "baseball", n: "MLB" },
   { id: "tennis/atp", sp: "tennis", n: "ATP tennis", kind: "tour" }, { id: "tennis/wta", sp: "tennis", n: "WTA tennis", kind: "tour" },
   { id: "racing/f1", sp: "racing", n: "Formula 1", kind: "race" },
-  { id: "golf/pga", sp: "golf", n: "PGA Tour", kind: "race" }
+  { id: "golf/pga", sp: "golf", n: "PGA Tour", kind: "race" },
+  // Not on ESPN: these come through the feeds function (x = its name for the source), so they need you to be signed in.
+  // SHL from shl.se; esports from bo3.gg (the two top tiers of tournaments).
+  { id: "x/shl", sp: "hockey", n: "SHL (Sweden)", x: "shl" },
+  { id: "x/cs2", sp: "esports", n: "Counter-Strike 2", x: "cs2" }, { id: "x/lol", sp: "esports", n: "League of Legends", x: "lol" }, { id: "x/dota2", sp: "esports", n: "Dota 2", x: "dota2" }
 ];
-var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC", hockey: "Ice hockey", amfootball: "American football", baseball: "Baseball", tennis: "Tennis", racing: "Formula 1", golf: "Golf" };
+var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC", hockey: "Ice hockey", amfootball: "American football", baseball: "Baseball", tennis: "Tennis", racing: "Formula 1", golf: "Golf", esports: "Esports" };
 function spLeagues() { var on = P.spLeagues; return SP_CATALOG.filter(function (l) { return on ? on.indexOf(l.id) >= 0 : l.on; }); }
 function spSports() {
   var seen = {}, out = [["", "All sports"]];
@@ -2625,18 +2742,43 @@ function spAlertsOn() { return NTF().sport !== false && spFavs().length > 0; }
 function fetchSports(force) {
   var alerts = spAlertsOn();
   if (boxOff("sports") && !alerts) return;
-  var now = Date.now(), jobs = [], sport = spSport();
+  var now = Date.now(), jobs = [], xs = [], sport = spSport();
   spLeagues().forEach(function (lg) {
     if (sport && lg.sp !== sport && !alerts) return;
     var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in" || (e.state === "pre" && e.ts - now < 90000 && now - e.ts < 1200000); });
-    if (force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000)) jobs.push(spGet(lg, pri));
-    if ((spView() !== "now" || SPCALWANT) && lg.kind !== "tour") {
+    var due = force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000);
+    if (lg.x) { if (due && sb && USER) xs.push(lg); return; }
+    if (due) jobs.push(spGet(lg, pri));
+    if ((spView() !== "now" || SPCALWANT) && lg.kind !== "tour" && !lg.x) {
       var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
       if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
       months.forEach(function (m) { var u = SP_UP[lg.id + m]; if (!u || now - u.t > 1800000) jobs.push(spGet(lg, pri, m)); });
     }
   });
+  if (xs.length) jobs.push(spGetX(xs));
   if (jobs.length) Promise.all(jobs).then(function () { spAlerts(); render(); refreshCal(); });
+}
+// Leagues that are not on ESPN, all in one request to the feeds function, which answers every game in one simple shape
+function spGetX(list) {
+  list.forEach(function (lg) { SP_NOW[lg.id] = SP_NOW[lg.id] || { t: 0, ev: [] }; SP_NOW[lg.id].t = Date.now(); });
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { sportsx: list.map(function (lg) { return lg.x; }) } }).then(function (r) {
+    var d = r.data && r.data.sportsx;
+    if (!d) return;   // an older feeds function: these leagues stay empty until it is redeployed
+    list.forEach(function (lg) {
+      if (!Array.isArray(d[lg.x])) return;
+      var pri = SP_CATALOG.indexOf(lg), side = function (s) {
+        s = s || {};
+        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: "", lines: [], st: {}, lead: [] };
+      };
+      SP_NOW[lg.id].ev = d[lg.x].map(function (g) {
+        var o = { id: lg.id + ":" + g.id, lg: lg.n, sp: lg.sp, kind: "team", pri: pri, ts: +g.ts, state: g.state === "in" || g.state === "post" ? g.state : "pre", detail: String(g.detail || ""), link: safeUrl(g.link),
+          home: side(g.home), away: side(g.away), ev: [], venue: String(g.venue || ""), att: 0, recap: String(g.note || "") };
+        o.names = [o.home.n, o.away.n];
+        return o;
+      }).filter(function (o) { return !isNaN(o.ts); });
+      SP_NOW[lg.id].ok = 1; SPV++;
+    });
+  }).catch(function () {});
 }
 // ---- Favorites: a notification when a ★ team's game starts, when a goal is scored (football and ice hockey; in other
 // sports the score changes all the time) and when it ends. Also when a ★ fighter or tennis player goes on and finishes.
@@ -2740,7 +2882,8 @@ var SP_ICON = {
   baseball: '<circle cx="12" cy="12" r="9"/><path d="M6.2 5.2c2.6 3.6 2.6 10 0 13.6M17.8 5.2c-2.6 3.6-2.6 10 0 13.6"/>',
   tennis: '<circle cx="12" cy="12" r="9"/><path d="M3.6 8.5c5.5 1 9 5.5 8.9 12.4M20.4 15.5c-5.500-1-9-5.500-8.900-12.400"/>',
   racing: '<path d="M5 21V4M5 4h13l-2.500 4L18 12H5"/><path d="M9.300 4v8M13.600 4v8M5 8h10.500"/>',
-  golf: '<path d="M11 21V3l7 3.500-7 3.500"/><path d="M6 21c0-1.700 2.700-3 5-3s5 1.300 5 3z"/>'
+  golf: '<path d="M11 21V3l7 3.500-7 3.500"/><path d="M6 21c0-1.700 2.700-3 5-3s5 1.300 5 3z"/>',
+  esports: '<rect x="2.500" y="7.500" width="19" height="10" rx="5"/><path d="M7.500 10.500v4M5.500 12.500h4M15.500 11.300h.01M18 13.700h.01"/>'
 };
 function spIcon(sp) { return '<i class="spi sp-' + sp + '" title="' + (SP_NAME[sp] || "") + '"><svg ' + SP_SVG + ">" + (SP_ICON[sp] || SP_ICON.baseball) + "</svg></i>"; }
 function spCrest(t) {
@@ -2850,7 +2993,7 @@ function spTabHtml(groups, e) {
 }
 function spTabLoad(e) {
   var box = $("spTab"), lgId = e.id.slice(0, e.id.lastIndexOf(":"));
-  if (!box) return;
+  if (!box || lgId.indexOf("x/") === 0) return;   // ESPN has no table for the leagues that come from elsewhere
   spTabGet(lgId).then(function (g) {
     box = $("spTab");
     if (!box || SP_OPEN !== e.id) return;
@@ -2901,7 +3044,7 @@ function openSport(id) {
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
-  openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, "Details on ESPN") + "</p>" : "") + "</div>");
+  openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
   if (e.kind === "team") spTabLoad(e);
 }
 // Settings > Sports: one switch per league, grouped by sport
@@ -3165,14 +3308,30 @@ function calcAnswer(q) {
   return v == null ? null : { show: "= " + ansNum(v), raw: ansNum(v), soft: /^\d+[-\/]\d+$/.test(q.replace(/\s/g, "")) };
 }
 var SRCHANS = null;
+// "note buy milk" or "todo call the bank": Enter saves it straight into Notes (Ctrl+Enter still searches the web for it)
+function scratch(q) {
+  var m = /^(note|todo)[:\s]\s*(\S.*)$/i.exec(q.trim());
+  return m ? { save: { todo: m[1].toLowerCase() === "todo", t: m[2].trim().slice(0, 2000) }, show: (m[1].toLowerCase() === "todo" ? "New to-do: " : "New note: ") + m[2].trim() } : null;
+}
 function srchShow() {
-  var a = SRCHANS = calcAnswer($("srchIn").value), box = $("srchAns");
+  var a = SRCHANS = scratch($("srchIn").value) || calcAnswer($("srchIn").value), box = $("srchAns");
   box.hidden = !a;
-  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.soft ? "click to copy" : "Enter to copy") + "</small>";
+  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
 }
 // Enter (or a click on the answer): the answer goes into the box, selected, and onto the clipboard
 function srchTake() {
   if (!SRCHANS) return;
+  if (SRCHANS.save) {
+    var s = SRCHANS.save;
+    SRCHANS = null;
+    (P.notes = P.notes || []).push({ id: "n" + Date.now().toString(36), t: s.t, ts: Date.now(), todo: s.todo });
+    persist(); render();
+    if (sideOf("notes")) putWidget("notes");
+    $("srchAns").innerHTML = "<b>" + (s.todo ? "Saved to your to-dos" : "Saved to your notes") + "</b><small>✓</small>";
+    $("srchIn").value = ""; $("srchIn").focus();
+    setTimeout(function () { if (!SRCHANS) $("srchAns").hidden = true; }, 1800);
+    return;
+  }
   var raw = SRCHANS.raw, box = $("srchAns"), inp = $("srchIn");
   box.innerHTML = "<b>" + esc(SRCHANS.show) + "</b><small>copied</small>";
   SRCHANS = null;
@@ -3209,6 +3368,8 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
+  $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
+  $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn();
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
   renderKeys();
 }
@@ -3230,6 +3391,10 @@ $("briefOn").onchange = function () { P.brief = this.checked; persist(); };
 $("sparkSel").onchange = function () { P.spark = this.value !== "off"; if (P.spark) P.sparkR = this.value; persist(); if (sparkRange() !== SPARKR) SPARK = {}; render(); fetchSparks(true); };
 $("spCalOn").onchange = function () { P.spCal = this.checked; persist(); render(); refreshCal(); };
 $("keysOn").onchange = function () { P.keysOff = !this.checked; persist(); renderKeys(); };
+$("cntNews").onchange = function () { P.cnt = P.cnt || {}; P.cnt.news = +this.value; MORE.news = 0; persist(); render(); };
+$("cntTg").onchange = function () { P.cnt = P.cnt || {}; P.cnt.tg = +this.value; MORE.tg = 0; persist(); render(); tgTopUp(); };
+$("rdComSel").onchange = function () { P.rdCom = +this.value; persist(); };
+$("twOffOn").onchange = function () { P.twOff = this.checked; persist(); render(); if (this.checked && twToken()) fetchTwOffline(twToken()); };
 // a click anywhere else cancels "Press a key…"
 document.addEventListener("click", function (e) { if (KEYCAP && !(e.target.closest && e.target.closest(".kbd"))) { KEYCAP = ""; renderKeys(); } }, true);
 $("engineSel").onchange = function () { P.engine = this.value; persist(); };
@@ -3242,6 +3407,37 @@ document.addEventListener("input", function (e) {
   if (e.target.id !== "newsQ") return;
   debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase() : ""; render(); });
 });
+
+// ---- Sign-in activity (Settings > Account): where this account is signed in, and its recent sign-ins ----
+// Read from Supabase's own sign-in records by a small database function that only ever answers for the caller's account.
+function devName(ua) {
+  ua = String(ua || "");
+  if (!ua) return "Unknown device";
+  var br = /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  var os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad|iPod/.test(ua) ? "iPhone / iPad" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  return br + (os ? " on " + os : "");
+}
+var ACT_WHAT = { login: "Signed in", logout: "Signed out", user_recovery_requested: "Password reset requested", user_modified: "Account changed (password or email)", user_signedup: "Account created" };
+function loadActivity() {
+  var box = $("actList");
+  if (!sb || !USER) { box.innerHTML = '<p class="mut sn">Sign in first.</p>'; return; }
+  box.innerHTML = '<p class="mut sn">Loading…</p>';
+  Promise.all([sb.rpc("my_activity"), sb.auth.getSession()]).then(function (r) {
+    var a = r[0], sid = "";
+    try { var p = r[1].data.session.access_token.split(".")[1]; sid = JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/"))).session_id || ""; } catch (e) {}
+    if (a.error || !a.data) {
+      box.innerHTML = '<p class="mut sn">' + (a.error && !/my_activity|schema cache|PGRST202|404/i.test((a.error.message || "") + (a.error.code || "")) ? "Could not load it: " + esc(a.error.message) : "This needs a one-time setup: open the Supabase dashboard, SQL Editor, New query, paste the contents of <code>activity-setup.sql</code> and press Run.") + "</p>";
+      return;
+    }
+    var ses = a.data.sessions || [], log = a.data.logins || [];
+    box.innerHTML = '<div class="sub"><b>Signed in right now</b>' + (ses.map(function (s) {
+      return '<div class="row"><span>' + esc(devName(s.ua)) + (s.id === sid ? ' <span class="pill ac">this one</span>' : "") + (s.ip ? " <small>" + esc(s.ip) + "</small>" : "") + '</span><span class="r mut" title="Signed in ' + esc(when(Date.parse(s.at))) + '">active ' + ago(Date.parse(s.last)) + " ago</span></div>";
+    }).join("") || '<p class="mut sn">Nothing found.</p>') + "</div>" +
+      '<div class="sub"><b>Recent activity</b>' + (log.map(function (l) {
+        return '<div class="row"><span>' + esc(ACT_WHAT[l.what] || l.what) + (l.ip ? " <small>" + esc(l.ip) + "</small>" : "") + '</span><span class="r mut">' + esc(when(Date.parse(l.at))) + "</span></div>";
+      }).join("") || '<p class="mut sn">No history available (Supabase may not be keeping its sign-in log).</p>') + "</div>";
+  }).catch(function (e) { box.innerHTML = '<p class="mut sn">Could not load it: ' + esc(String((e && e.message) || e)) + "</p>"; });
+}
 
 // ---- Backup and restore ----
 $("bkExport").onclick = function () {
