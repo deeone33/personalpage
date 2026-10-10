@@ -83,6 +83,8 @@ body.editing .card{border-style:dashed;border-color:color-mix(in srgb,var(--ac) 
 .th h3::before{content:"";width:3px;height:12px;border-radius:3px;background:var(--ac);box-shadow:0 0 10px var(--acglow)}
 .hc{display:flex;gap:6px;min-width:0;align-items:center}
 .hc select{min-width:0;max-width:130px;text-overflow:ellipsis}
+.hc select[data-s=tcat]{max-width:104px}
+.hc .rf{flex:none;padding:2px 6px}
 .click{cursor:pointer}
 .click:hover{border-color:var(--ac)}
 .big{font-size:calc(38px*var(--fs,1));font-weight:800;line-height:1;letter-spacing:-.5px;font-variant-numeric:tabular-nums}

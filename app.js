@@ -1,4 +1,4 @@
-var VERSION = 46;
+var VERSION = 48;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -237,6 +237,19 @@ function adjust(a, id, d) {
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" ? 6 : 10)) + d));
   persist(); render();
 }
+// Every list box gets a small reload button in its top-right corner. To give a new box one, add its id and loader here.
+var REFRESH = {
+  news: function () { fetchNews(); }, telegram: function () { fetchTG(); }, twitch: function () { fetchTwitch(); },
+  youtube: function () { fetchYT(); }, stocks: function () { fetchQuotes(true); }, reddit: function () { fetchReddit(); }
+};
+var SPIN = {};
+function boxBusy(id) { return (SPIN[id] && Date.now() - SPIN[id] < 1200) || (id === "news" && nBusy) || (id === "reddit" && rBusy); }
+function refreshBox(id) {
+  if (!REFRESH[id]) return;
+  SPIN[id] = Date.now();
+  REFRESH[id](); render();
+  setTimeout(render, 1300);
+}
 function tile(id, title, body, click, hx) {
   var c = LAY().c[id] || DEF_C[id] || 3, t = "", at = "", cp = COMPACT.indexOf(id) >= 0;
   if (click) {
@@ -252,7 +265,8 @@ function tile(id, title, body, click, hx) {
       (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
-  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx ? '<div class="hc">' + hx + "</div>" : "") + "</div>";
+  var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
+  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb ? '<div class="hc">' + (hx || "") + rb + "</div>" : "") + "</div>";
   return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
@@ -313,11 +327,10 @@ function render() {
     }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
   var newBtn = function (n) { return n ? '<button class="pill ac newp" data-a="nseen" title="Mark everything as seen">' + n + " new</button>" : ""; };
-  var refBtn = '<button class="ib sm" data-a="refresh" data-k="news" title="Refresh' + (NLAST ? " (updated " + ago(NLAST) + " ago)" : "") + '" aria-label="Refresh news">' + (nBusy ? '<span class="spin">↻</span>' : "↻") + "</button>";
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Filter headlines" aria-label="Filter headlines">⌕</button>' : "";
-  T.news = tile("news", "News", nb, 0, newBtn(nNew) + fltBtn + refBtn + ctlN);
+  T.news = tile("news", "News", nb, 0, newBtn(nNew) + fltBtn + ctlN);
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
@@ -354,9 +367,10 @@ function render() {
     var per = {};
     vids = vids.filter(function (v) { per[v.n] = (per[v.n] || 0) + 1; return per[v.n] <= 2; });
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
-    yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") + (vids.length ? lst("youtube", vids.map(function (v) {
+    yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") +
+      (YTDOWN && vids.length ? '<div class="empty sn" title="YouTube\'s upload feed is not answering. This is on YouTube\'s side and comes back by itself.">YouTube\'s feed is down right now · showing the last loaded videos</div>' : "") + (vids.length ? lst("youtube", vids.map(function (v) {
       return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), "v:" + v.id);
-    }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : "Loading videos (you need to be signed in)...") + "</div>");
+    }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : USER ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
   } else {
     var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
     yb = lst("youtube", yt.map(function (v) { return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>"); }).join("")) +
@@ -369,7 +383,6 @@ function render() {
   if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
   var rNew = RS === "new" ? rp.filter(function (x) { return isNewTs(x.ts) && !READ[x.u]; }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
-    '<button class="ib sm" data-a="rdrefresh" title="Refresh" aria-label="Refresh Reddit">' + (rBusy ? '<span class="spin">↻</span>' : "↻") + "</button>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
@@ -570,7 +583,8 @@ document.addEventListener("submit", function (e) {
 });
 
 // ---- YouTube (Takeout subscriptions.csv + channel feeds through a Supabase function) ----
-var YTV = [], YTERR = "", ytBusy = false;
+// The last videos are kept on this device, so a YouTube feed outage (it happens) doesn't empty the box
+var YTV = load("sp_ytv", []), YTERR = "", YTDOWN = false, ytBusy = false;
 function fetchYT() {
   if (!sb || !USER || !P.yt || !P.yt.ch || !P.yt.ch.length || ytBusy) return;
   var chs = P.yt.ch.filter(function (c) { return shown("y:" + c.t); })
@@ -579,7 +593,13 @@ function fetchYT() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { yt: chs.map(function (c) { return c.id; }) } }).then(function (r) {
     ytBusy = false;
     if (r.error || !r.data || r.data._err) YTERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
-    else { YTERR = ""; YTV = r.data.videos || []; }
+    else {
+      var vids = r.data.videos || [], failed = r.data.yt_failed || 0;
+      YTERR = "";
+      // nothing came back, or most channels failed: YouTube's feed is down, so keep what we had
+      YTDOWN = !vids.length || failed > chs.length / 2;
+      if (vids.length && (!YTDOWN || !YTV.length)) { YTV = vids; save("sp_ytv", vids); }
+    }
     render();
   }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
@@ -901,7 +921,12 @@ function fetchMail() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: list } }).then(function (r) {
     mBusy = false;
     if (r.error || !r.data || !r.data.mail) list.forEach(function (c) { MAIL[c.i] = { error: (r.error && r.error.message) || "no data" }; });
-    else r.data.mail.forEach(function (m, k) { MAIL[list[k].i] = m; mailAlerts(list[k].i, m); });
+    else r.data.mail.forEach(function (m, k) {
+      var i = list[k].i, old = MAIL[i];
+      // one failed check (a slow Gmail script, usually) keeps the last good numbers instead of showing "Error"
+      if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
+      MAIL[i] = m; mailAlerts(i, m);
+    });
     render();
   }).catch(function () { mBusy = false; });
 }
@@ -1486,7 +1511,7 @@ document.addEventListener("click", function (e) {
   }
   if (a === "signout") {
     if (sb) sb.auth.signOut();
-    try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
+    try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
     P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, fav: {}, hidden: {} };
     TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; NG = []; USER = null;
     loadMailForm(); loadExtraForm();
@@ -1538,7 +1563,7 @@ document.addEventListener("click", function (e) {
   if (a === "twpop") { twPop(k); return; }
   if (a === "twchat") { twChat(k); return; }
   if (a === "nseen") { markSeen(); render(); return; }
-  if (a === "refresh") { if (k === "news") fetchNews(); return; }
+  if (a === "refresh") { refreshBox(k); return; }
   if (a === "nsearch") { window.open("https://news.google.com/search?q=" + encodeURIComponent(k), "_blank", "noopener"); return; }
   if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
