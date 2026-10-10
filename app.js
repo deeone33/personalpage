@@ -1,4 +1,4 @@
-var VERSION = 59;
+var VERSION = 60;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -497,8 +497,9 @@ function render() {
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
   T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
-    var c = x.c, up = c >= 0;
-    return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>", 1);
+    var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[tk(x.id)];
+    var spk = sparkOn() ? sparkSvg(pts, c != null ? up : pts && pts[pts.length - 1] >= pts[0]) : "";
+    return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), spk + (c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>"), 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
   var pp = pairPct();
@@ -699,8 +700,37 @@ function fetchQuotes(force) {
     if (r.error) QERR = r.error.message;
     else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
     else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); }
-    render();
+    render(); fetchSparks(force);
   }).catch(function (e) { qBusy = false; QERR = String((e && e.message) || e); render(); });
+}
+// ---- Small day chart on each stock row (Settings > Stocks switches it off). Fetched every 10 minutes. ----
+var SPARK = load("sp_spark", {}), spkBusy = false, spkLast = 0;
+function sparkOn() { return P.spark !== false; }
+function fetchSparks(force) {
+  if (!sb || !USER || spkBusy || !sparkOn() || boxOff("stocks")) return;
+  if (!force && Date.now() - spkLast < 540000) return;
+  spkBusy = true; spkLast = Date.now();
+  var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
+  sb.functions.invoke("quotes", { body: { spark: list } }).then(function (r) {
+    spkBusy = false;
+    // an older "quotes" function does not know this request and answers without "spark": then there are simply no charts
+    if (r.data && r.data.spark && typeof r.data.spark === "object") { SPARK = r.data.spark; save("sp_spark", SPARK); render(); }
+  }).catch(function () { spkBusy = false; });
+}
+// The line is drawn in a fixed 44 x 14 box and stretched to the size the stylesheet gives it, so it can never push a row wider.
+// A row without data gets an empty box of the same size, which keeps the percentages in one column.
+function sparkSvg(pts, up) {
+  if (!Array.isArray(pts) || pts.length < 2) return '<i class="spk"></i>';
+  var mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), span = mx - mn || 1, n = pts.length - 1;
+  var d = pts.map(function (v, i) { return (i ? "L" : "M") + (i / n * 44).toFixed(1) + " " + (13 - (v - mn) / span * 12).toFixed(1); }).join("");
+  return '<svg class="spk ' + (up ? "u" : "d") + '" viewBox="0 0 44 14" preserveAspectRatio="none" aria-hidden="true"><path d="' + d + '"/></svg>';
+}
+// The preview (not signed in) draws a made-up line for each sample stock, always the same one for the same name
+function sparkFake(id, c) {
+  var seed = 7, out = [], v = 100, i;
+  for (i = 0; i < id.length; i++) seed = (seed * 31 + id.charCodeAt(i)) % 2147483647;
+  for (i = 0; i < 24; i++) { seed = (seed * 48271) % 2147483647; v += (seed / 2147483647 - 0.5) * 2 + (c || 0) / 24; out.push(v); }
+  return out;
 }
 var SAMPLE_IDS = DATA.stocks.map(function (x) { return x.id; });
 function importSymbols(list) {
@@ -1482,7 +1512,7 @@ function fetchRates() {
   ]).then(function (r) {
     ratesBusy = false;
     var fx = r[0], cg = r[1];
-    if (fx && fx.rates) { RATES.USD = 1; CONV_LIST.forEach(function (x) { if (!x.g && fx.rates[x.c]) RATES[x.c] = 1 / fx.rates[x.c]; }); }
+    if (fx && fx.rates) { FXALL = fx.rates; RATES.USD = 1; CONV_LIST.forEach(function (x) { if (!x.g && fx.rates[x.c]) RATES[x.c] = 1 / fx.rates[x.c]; }); }
     if (cg) crypto.forEach(function (x) { if (cg[x.g] && cg[x.g].usd) RATES[x.c] = cg[x.g].usd; });
     RATESerr = (fx && fx.rates) || Object.keys(RATES).length ? "" : "Rates unavailable right now.";
     render();
@@ -1790,6 +1820,9 @@ document.addEventListener("click", function (e) {
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
+  if (a === "keyset") { e.preventDefault(); KEYCAP = KEYCAP === k ? "" : k; renderKeys(); return; }
+  if (a === "keyreset") { delete P.keys; KEYCAP = ""; persist(); renderKeys(); return; }
+  if (a === "srchans") { srchTake(); return; }
   if (a === "nfmailtest") {
     $("nfMailMsg").textContent = "Sending…";
     sendNtfMail([{ t: "Test email", b: "If you can read this in your inbox, email notifications work.", ts: Date.now() }]).then(function (err) {
@@ -2035,7 +2068,8 @@ function openHelp() {
     '<p>Tip: mark streamers with ★ (Edit mode) to get a notification when they go live.</p>';
 
   html += '<h3 id="help-keys">Search &amp; keyboard shortcuts</h3><p>Type in the small search box at the top (press <code>/</code> to jump to it) and press Enter. A site name like <code>reuters.com</code> opens the site; anything else goes to your search engine (choose it in Settings). Start or end with a &ldquo;bang&rdquo; to search a specific site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Google Maps, <code>!news</code> Google News, <code>!tv</code> TradingView symbol, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. Ctrl+Enter opens in a new tab.</p>' +
-    '<p>Shortcuts (when you are not typing in a box): <code>/</code> search · <code>r</code> refresh everything · <code>e</code> edit layout · <code>n</code> notes · <code>c</code> calendar · <code>b</code> summary · <code>s</code> settings · <code>t</code> light/dark · <code>?</code> this help · <code>Esc</code> close.</p>';
+    '<p>The search box also answers sums and conversions while you type: <code>12*45</code>, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>100 usd in eur</code>, <code>0.5 btc to usd</code>, <code>10 km in miles</code>, <code>72 f in c</code>. Press Enter to put the answer in the box and copy it; press Enter again to search for it.</p>' +
+    '<p>Shortcuts (when you are not typing in a box): ' + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close." : "switched off.") + ' Change any key, or switch them off, in Settings &rarr; Keyboard shortcuts.</p>';
 
   html += '<h3 id="help-youtube">YouTube</h3><p>This shows new uploads from channels you subscribe to (YouTube does not allow websites to read your personal recommended feed, so this is the closest available option).</p><ol>' +
     '<li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> while signed in to your YouTube account.</li>' +
@@ -2077,7 +2111,7 @@ function acctHtml() {
 }
 
 // ---- Notifications: small cards in the bottom-right corner ----
-function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
+function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sport: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
 var NOTIFIED = load("sp_notified", {});
 // true the first time a key is seen, so the same thing is never announced twice (also after a reload)
 function once(key) {
@@ -2088,7 +2122,7 @@ function once(key) {
   save("sp_notified", NOTIFIED);
   return true;
 }
-var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉" };
+var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉", sport: "⚑" };
 // What clicking a notification does. Kept as plain data (not a function) so the history still works after a reload.
 function runAct(act) {
   if (!act) return;
@@ -2099,6 +2133,7 @@ function runAct(act) {
   else if (a === "tw") watchTwitch(k);
   else if (a === "cal") { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); }
   else if (a === "mail") { if (MAIL[+k] && !MAIL[+k].error) openMail(+k); }
+  else if (a === "sport") openSport(k);
   else if (a === "settings") $("panel").hidden = false;
 }
 // History of the last 30 notifications (on this device). "seen" = you clicked or dismissed it, or opened the bell.
@@ -2212,7 +2247,7 @@ function evOn(e, ds) {
   var a = new Date(e.d + "T12:00:00"), b = new Date(ds + "T12:00:00");
   return e.rep === "w" ? a.getDay() === b.getDay() : e.rep === "m" ? a.getDate() === b.getDate() : e.rep === "y" ? a.getDate() === b.getDate() && a.getMonth() === b.getMonth() : false;
 }
-function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
+function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(spCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
 var CALV = null, REPS = { "": "Once", d: "Daily", w: "Weekly", m: "Monthly", y: "Yearly" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
 function openCal() {
@@ -2223,6 +2258,7 @@ function openCal() {
 function calHtml() {
   var now = new Date(), today = ymd(now);
   if (!CALV) CALV = { y: now.getFullYear(), m: now.getMonth(), sel: today };
+  if (!SPCALWANT && spCalOn()) { SPCALWANT = true; setTimeout(fetchSports, 0); }
   var start = (new Date(CALV.y, CALV.m, 1).getDay() + 6) % 7, days = new Date(CALV.y, CALV.m + 1, 0).getDate(), cells = "";
   ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].forEach(function (d) { cells += "<i>" + d + "</i>"; });
   for (var i = 0; i < start; i++) cells += "<span></span>";
@@ -2231,9 +2267,9 @@ function calHtml() {
     cells += '<button data-a="calday" data-k="' + ds + '" class="' + (ds === today ? "td " : "") + (ds === CALV.sel ? "on" : "") + '">' + d + (evsOn(ds).length ? "<u></u>" : "") + "</button>";
   }
   var evRow = function (e, ds, withDay) {
-    return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) +
+    return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + (e.sp ? '<button class="lnk calsp" data-a="open" data-k="' + esc("p:" + e.sp) + '" title="A favorite\'s game. Click for the details.">' + spIcon(e.spo) + esc(e.t) + "</button>" : esc(e.t)) +
       (e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
-      "</span>" + (withDay ? "" : '<button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button>') + "</div>";
+      "</span>" + (withDay || e.sp ? "" : '<button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button>') + "</div>";
   };
   var up = [];
   for (var k = 1; k <= 90 && up.length < 5; k++) {
@@ -2549,25 +2585,91 @@ function spGet(lg, pri, month) {
   store[key].t = Date.now();
   return fetch("https://site.api.espn.com/apis/site/v2/sports/" + lg.id + "/scoreboard" + (month ? "?dates=" + month + "&limit=200" : ""))
     .then(function (r) { if (!r.ok) throw new Error("ESPN answered " + r.status); return r.json(); })
-    .then(function (j) { store[key].ev = spParse(lg, j, pri); store[key].ok = 1; SPERR = ""; })
+    .then(function (j) { store[key].ev = spParse(lg, j, pri); store[key].ok = 1; SPERR = ""; SPV++; })
     .catch(function (e) { if (!store[key].ok) SPERR = String((e && e.message) || e); });
 }
 // Today's scoreboards: every minute for a league with a game in play (tennis every three: its file is large), otherwise
 // every 5 minutes. Upcoming / Favorites also need the month's fixtures: fetched when you open that view, then every 30 minutes.
+// With favorite alerts on, every league you follow keeps loading (also with the box filtered to one sport, or hidden),
+// and a league whose game is about to start is checked every minute so the kick-off is noticed on time.
+function spAlertsOn() { return NTF().sport !== false && spFavs().length > 0; }
 function fetchSports(force) {
-  if (boxOff("sports")) return;
+  var alerts = spAlertsOn();
+  if (boxOff("sports") && !alerts) return;
   var now = Date.now(), jobs = [], sport = spSport();
   spLeagues().forEach(function (lg) {
-    if (sport && lg.sp !== sport) return;
-    var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in"; });
+    if (sport && lg.sp !== sport && !alerts) return;
+    var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in" || (e.state === "pre" && e.ts - now < 90000 && now - e.ts < 1200000); });
     if (force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000)) jobs.push(spGet(lg, pri));
-    if (spView() !== "now" && lg.kind !== "tour") {
+    if ((spView() !== "now" || SPCALWANT) && lg.kind !== "tour") {
       var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
       if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
       months.forEach(function (m) { var u = SP_UP[lg.id + m]; if (!u || now - u.t > 1800000) jobs.push(spGet(lg, pri, m)); });
     }
   });
-  if (jobs.length) Promise.all(jobs).then(render);
+  if (jobs.length) Promise.all(jobs).then(function () { spAlerts(); render(); refreshCal(); });
+}
+// ---- Favorites: a notification when a ★ team's game starts, when a goal is scored (football and ice hockey; in other
+// sports the score changes all the time) and when it ends. Also when a ★ fighter or tennis player goes on and finishes.
+var SPPREV = {}, SPV = 0;
+function spAlerts() {
+  if (!spAlertsOn()) return;
+  Object.keys(SP_NOW).forEach(function (key) {
+    SP_NOW[key].ev.forEach(function (e) {
+      var go = { a: "sport", k: e.id };
+      if (e.kind === "team") {
+        if (!e.names.some(spIsFav)) return;
+        var cur = { st: e.state, h: +e.home.s || 0, a: +e.away.s || 0 }, p = SPPREV[e.id], foot = e.sp === "football";
+        SPPREV[e.id] = cur;
+        if (!p) return;   // first look at this game: nothing to compare with yet
+        var score = e.home.n + " " + cur.h + "–" + cur.a + " " + e.away.n;
+        if (p.st === "pre" && cur.st === "in" && once("spk:" + e.id)) toast("sport", (foot ? "Kick-off: " : "Started: ") + e.home.n + " – " + e.away.n, e.lg, go);
+        if (cur.st !== "pre" && (foot || e.sp === "hockey") && cur.h + cur.a > p.h + p.a && once("spg:" + e.id + ":" + cur.h + "-" + cur.a)) {
+          var side = cur.h > p.h ? "h" : "a", g = (e.ev || []).filter(function (x) { return x.k === "goal" && x.side === side; }).pop();
+          toast("sport", "Goal! " + score, (g && g.who ? g.who + (g.min ? " " + g.min : "") + (g.pen ? " (pen)" : "") + (g.og ? " (own goal)" : "") + " · " : "") + e.lg, go);
+        }
+        if (p.st === "in" && cur.st === "post" && once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go);
+      } else if (e.fights) {
+        e.fights.forEach(function (f) {
+          if (!spIsFav(f.a) && !spIsFav(f.b)) return;
+          var id = e.id + ":" + f.a + ":" + f.b, p = SPPREV[id];
+          SPPREV[id] = f.state;
+          if (!p) return;
+          if (p === "pre" && f.state === "in" && once("spk:" + id)) toast("sport", "On now: " + f.a + " vs " + f.b, e.title, go);
+          if (p === "in" && f.state === "post" && once("spf:" + id)) toast("sport", f.aw ? f.a + " beat " + f.b : f.bw ? f.b + " beat " + f.a : "Finished: " + f.a + " vs " + f.b, (f.detail ? f.detail + " · " : "") + e.title, go);
+        });
+      }
+    });
+  });
+}
+// ---- Favorites in the calendar: their games appear on the right day by themselves (they are not saved with your events).
+// The month's fixtures are only loaded once the calendar has been opened; today's games are always there.
+var SPCALWANT = false, spCalKey = "", spCalMemo = {};
+function spCalOn() { return P.spCal !== false && spFavs().length > 0; }
+function spCalMap() {
+  if (!spCalOn()) return {};
+  var key = SPV + "|" + spFavs().join("|") + "|" + (P.spLeagues || []).join("|");
+  if (key === spCalKey) return spCalMemo;
+  var by = {}, on = {}, m = {};
+  spLeagues().forEach(function (l) { on[l.n] = 1; });
+  [SP_UP, SP_NOW].forEach(function (store) { Object.keys(store).forEach(function (k) { store[k].ev.forEach(function (e) { by[e.id] = e; }); }); });
+  Object.keys(by).forEach(function (k) {
+    var e = by[k];
+    if (!on[e.lg] || !e.names.some(spIsFav)) return;
+    var d = new Date(e.ts), ds = ymd(d);
+    (m[ds] = m[ds] || []).push({ id: "sp:" + e.id, sp: e.id, spo: e.sp, d: ds, tm: pad2(d.getHours()) + ":" + pad2(d.getMinutes()),
+      t: e.kind === "team" ? e.home.n + " – " + e.away.n + (e.state === "pre" ? "" : " " + (+e.home.s || 0) + "–" + (+e.away.s || 0)) : e.title });
+  });
+  spCalKey = key; spCalMemo = m;
+  return m;
+}
+// the open calendar (window or docked at the side) is redrawn when new fixtures arrive, keeping what you were typing
+function refreshCal() {
+  if (!spCalOn()) return;
+  if (sideOf("cal") || (!$("modal").hidden && $("mTitle").textContent === WIDGETS.cal.t)) {
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#calAdd")) return;
+    openCal();
+  }
 }
 function spEvents() {
   var by = {}, view = spView(), sport = spSport(), now = Date.now(), on = {};
@@ -2670,6 +2772,65 @@ function spLeadersHtml(e) {
   var h = one(e.home), a = one(e.away);
   return h || a ? '<h3>Top performers</h3><div class="leads"><div>' + h + "</div><div>" + a + "</div></div>" : "";
 }
+// ---- League table in the game window (ESPN's standings, kept for 10 minutes). The two teams playing are highlighted. ----
+var SP_TAB = {};
+function spTabGet(lgId) {
+  var c = SP_TAB[lgId];
+  if (c && Date.now() - c.t < 600000) return Promise.resolve(c.g);
+  return fetch("https://site.api.espn.com/apis/v2/sports/" + lgId + "/standings")
+    .then(function (r) { if (!r.ok) throw new Error("no table"); return r.json(); })
+    .then(function (j) {
+      var groups = [], walk = function (n) {
+        var en = n && n.standings && n.standings.entries;
+        if (en && en.length) groups.push({
+          n: n.name || "", rows: en.map(function (x) {
+            var t = x.team || {}, s = {}, v = {};
+            (x.stats || []).forEach(function (q) { s[q.name] = q.displayValue != null ? String(q.displayValue) : ""; v[q.name] = +q.value; });
+            var col = String((x.note || {}).color || "");
+            return { id: String(t.id || ""), n: t.shortDisplayName || t.displayName || "?", logo: safeUrl(((t.logos || [])[0] || {}).href), s: s,
+              rank: v.rank || v.playoffSeed || 0, pct: v.winPercent || 0, note: (x.note || {}).description || "", col: /^#[0-9a-f]{6}$/i.test(col) ? col : "" };
+          })
+        });
+        (n && n.children || []).forEach(walk);
+      };
+      walk(j);
+      groups.forEach(function (g) {
+        g.rows.sort(function (a, b) { return (a.rank || 999) - (b.rank || 999) || b.pct - a.pct; });
+        g.rows.forEach(function (r, i) { r.pos = i + 1; });
+      });
+      SP_TAB[lgId] = { t: Date.now(), g: groups };
+      return groups;
+    });
+}
+function spTabHtml(groups, e) {
+  var ids = [e.home.id, e.away.id];
+  var mine = groups.filter(function (g) { return g.rows.some(function (r) { return ids.indexOf(r.id) >= 0; }); });
+  if (!mine.length) mine = groups.length === 1 ? groups : [];
+  if (!mine.length) return "";
+  // football: played, won, drawn, lost, goal difference, points. Other sports: won, lost, win share, games behind.
+  var foot = mine[0].rows[0].s.points != null && mine[0].rows[0].s.ties != null && mine[0].rows[0].s.gamesBehind == null;
+  var cols = foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]] : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["streak", "Strk"]];
+  cols = cols.filter(function (c) { return mine[0].rows.some(function (r) { return r.s[c[0]] != null && r.s[c[0]] !== ""; }); });
+  return mine.map(function (g) {
+    return "<h3>" + esc(mine.length > 1 || !foot ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
+      g.rows.map(function (r) {
+        return '<tr class="' + (ids.indexOf(r.id) >= 0 ? "me" : "") + '"' + (r.note ? ' title="' + esc(r.note) + '"' : "") + '><td class="ps"' + (r.col ? ' style="box-shadow:inset 3px 0 0 ' + r.col + '"' : "") + ">" + r.pos + '</td><td class="tn">' + spCrest({ logo: r.logo }) + esc(r.n) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" +
+          cols.map(function (c, i) { return "<td" + (i === cols.length - 1 && foot ? ' class="pt"' : "") + ">" + esc(r.s[c[0]] != null ? r.s[c[0]] : "") + "</td>"; }).join("") + "</tr>";
+      }).join("") + "</table></div>";
+  }).join("");
+}
+function spTabLoad(e) {
+  var box = $("spTab"), lgId = e.id.slice(0, e.id.lastIndexOf(":"));
+  if (!box) return;
+  spTabGet(lgId).then(function (g) {
+    box = $("spTab");
+    if (!box || SP_OPEN !== e.id) return;
+    box.innerHTML = spTabHtml(g, e);
+    // bring the first of the two teams into view inside the table's own scroll area
+    var me = box.querySelector("tr.me"), w = me && me.closest(".sptabw");
+    if (w) w.scrollTop = Math.max(0, me.offsetTop - w.clientHeight / 2 + me.offsetHeight);
+  }).catch(function () {});
+}
 // Hover card for a game: the score line, then the short story of it
 function showSportPeek(el, id) {
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
@@ -2709,9 +2870,10 @@ function openSport(id) {
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
-      (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "");
+      (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, "Details on ESPN") + "</p>" : "") + "</div>");
+  if (e.kind === "team") spTabLoad(e);
 }
 // Settings > Sports: one switch per league, grouped by sport
 function renderSpList() {
@@ -2900,8 +3062,101 @@ function searchUrl(q) {
   return (ENGINES[P.engine] || ENGINES.google) + encodeURIComponent(q);
 }
 function openSearch() { $("srchIn").focus(); $("srchIn").select(); }
+
+// ---- The search bar answers sums and conversions while you type: "12*45", "15% of 240", "100 usd in eur", "10 km in miles" ----
+// Sums are worked out by a small parser of our own (numbers, + - * / ^, brackets, a few functions); nothing typed is ever run as code.
+function calcMath(src) {
+  var s = src.toLowerCase().replace(/\s+/g, "").replace(/×/g, "*").replace(/÷/g, "/").replace(/(\d)x(?=[\d(])/g, "$1*")
+    .replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(/(\d),(\d)/g, "$1.$2").replace(/%of/g, "%*");
+  if (!/\d/.test(s) || !/[-+*\/^%(]|[a-z]/.test(s.slice(1)) && !/^[a-z]/.test(s)) return null;   // a plain number is not a sum
+  if (/^\d+(-\d+){2,}$/.test(s) || /^\d+(\/\d+){2}$/.test(s)) return null;                          // a date or a phone number
+  var i = 0, FN = { sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor, ceil: Math.ceil, ln: Math.log, log: function (x) { return Math.log(x) / Math.LN10; }, sin: Math.sin, cos: Math.cos, tan: Math.tan };
+  function fail() { throw new Error("no"); }
+  function expr() { var v = term(); while (s[i] === "+" || s[i] === "-") { var o = s[i++], r = term(); v = o === "+" ? v + r : v - r; } return v; }
+  function term() { var v = pow(); while (s[i] === "*" || s[i] === "/") { var o = s[i++], r = pow(); v = o === "*" ? v * r : v / r; } return v; }
+  function pow() { var v = unary(); if (s[i] === "^") { i++; return Math.pow(v, pow()); } return v; }
+  function unary() { if (s[i] === "-") { i++; return -unary(); } if (s[i] === "+") { i++; return unary(); } return pct(); }
+  function pct() { var v = atom(); while (s[i] === "%") { i++; v /= 100; } return v; }
+  function atom() {
+    if (s[i] === "(") { i++; var v = expr(); if (s[i++] !== ")") fail(); return v; }
+    var m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+    if (m) { i += m[0].length; return parseFloat(m[0]); }
+    m = /^[a-z]+/.exec(s.slice(i));
+    if (!m) fail();
+    i += m[0].length;
+    if (m[0] === "pi") return Math.PI;
+    if (!FN[m[0]] || s[i++] !== "(") fail();
+    var a = expr(); if (s[i++] !== ")") fail();
+    return FN[m[0]](a);
+  }
+  try { var out = expr(); return i === s.length && isFinite(out) ? out : null; } catch (e) { return null; }
+}
+// Units, as [what it measures, size in the base unit]. Temperatures are handled on their own.
+var UNITS = {};
+[["len", 0.001, "mm"], ["len", 0.01, "cm"], ["len", 1, "m meter meters metre metres"], ["len", 1000, "km"], ["len", 0.0254, "in inch inches"], ["len", 0.3048, "ft foot feet"], ["len", 0.9144, "yd yard yards"], ["len", 1609.344, "mi mile miles"],
+  ["mass", 0.001, "g gram grams"], ["mass", 1, "kg kilo kilos"], ["mass", 0.0283495, "oz ounce ounces"], ["mass", 0.453592, "lb lbs pound pounds"], ["mass", 6.35029, "st stone"], ["mass", 1000, "t tonne tonnes"],
+  ["vol", 0.001, "ml"], ["vol", 0.1, "dl"], ["vol", 1, "l liter liters litre litres"], ["vol", 3.78541, "gal gallon gallons"], ["vol", 0.236588, "cup cups"], ["vol", 0.473176, "pint pints"], ["vol", 0.0295735, "floz"],
+  ["spd", 1, "m/s"], ["spd", 1 / 3.6, "km/h kmh kph"], ["spd", 0.44704, "mph"], ["spd", 0.514444, "kn knot knots"],
+  ["time", 1, "s sec second seconds"], ["time", 60, "min minute minutes"], ["time", 3600, "h hr hour hours"], ["time", 86400, "day days"], ["time", 604800, "week weeks"], ["time", 31557600, "year years"],
+  ["data", 1, "kb"], ["data", 1024, "mb"], ["data", 1048576, "gb"], ["data", 1073741824, "tb"],
+  ["temp", 0, "c celsius °c"], ["temp", 1, "f fahrenheit °f"], ["temp", 2, "k kelvin"]
+].forEach(function (u) { u[2].split(" ").forEach(function (n) { UNITS[n] = { k: u[0], f: u[1], n: u[2].split(" ")[0] }; }); });
+var CUR_ALIAS = { "$": "USD", "€": "EUR", "£": "GBP", dollar: "USD", dollars: "USD", euro: "EUR", euros: "EUR", pound: "GBP", pounds: "GBP", bitcoin: "BTC", bitcoins: "BTC", ether: "ETH", sol: "SOL" };
+var FXALL = {};   // every currency of the rates service: how many of it one US dollar buys
+function usdOf(code) { code = CUR_ALIAS[code.toLowerCase()] || code.toUpperCase(); return RATES[code] ? { c: code, v: RATES[code] } : FXALL[code] ? { c: code, v: 1 / FXALL[code] } : null; }
+function ansNum(n) {
+  var a = Math.abs(n);
+  if (a && (a >= 1e15 || a < 1e-7)) return n.toExponential(4);
+  return String(+n.toPrecision(a >= 1 ? 12 : 8));
+}
+// returns { show: what the bar shows, raw: the bare number that Enter puts in the box } or null when it is just a search
+function calcAnswer(q) {
+  q = q.trim();
+  if (!q || q.length > 80 || q.charAt(0) === "!" || /^https?:/i.test(q)) return null;
+  var m = /^(.*?)\s*([a-z$€£°][a-z\/°]*)\s+(?:in|to|as)\s+([a-z$€£°][a-z\/°]*)$/i.exec(q) || /^(.*?)\s*([a-z$€£°][a-z\/°]*)\s*(?:=|->|→)\s*([a-z$€£°][a-z\/°]*)$/i.exec(q) || /^([$€£])\s*(.+?)\s+(?:in|to|as)\s+([a-z$€£]+)$/i.exec(q);
+  if (m) {
+    if (/^[$€£]$/.test(m[1])) m = [0, m[2], m[1], m[3]];
+    var amt = m[1] === "" ? 1 : /^[\d.,\s]+$/.test(m[1]) ? parseFloat(m[1].replace(/\s/g, "").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(",", ".")) : calcMath(m[1]);
+    if (amt == null || isNaN(amt)) return null;
+    var a = UNITS[m[2].toLowerCase()], b = UNITS[m[3].toLowerCase()], ca = usdOf(m[2]), cb = usdOf(m[3]), out;
+    if (ca && cb && !(a && b && a.k === b.k)) {
+      out = amt * ca.v / cb.v;
+      return { show: fmtNum(amt) + " " + ca.c + " = " + fmtNum(out) + " " + cb.c, raw: String(+out.toPrecision(8)) };
+    }
+    if (a && b && a.k === b.k) {
+      if (a.k === "temp") { var kel = a.f === 0 ? amt + 273.15 : a.f === 1 ? (amt - 32) * 5 / 9 + 273.15 : amt; out = b.f === 0 ? kel - 273.15 : b.f === 1 ? (kel - 273.15) * 9 / 5 + 32 : kel; }
+      else out = amt * a.f / b.f;
+      out = +out.toPrecision(6);
+      return { show: ansNum(amt) + " " + a.n + " = " + ansNum(out) + " " + b.n, raw: ansNum(out) };
+    }
+    return null;
+  }
+  var v = calcMath(q);
+  // "24/7" or "9-5" may just as well be something to search for: the answer is shown, but Enter still searches
+  return v == null ? null : { show: "= " + ansNum(v), raw: ansNum(v), soft: /^\d+[-\/]\d+$/.test(q.replace(/\s/g, "")) };
+}
+var SRCHANS = null;
+function srchShow() {
+  var a = SRCHANS = calcAnswer($("srchIn").value), box = $("srchAns");
+  box.hidden = !a;
+  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.soft ? "click to copy" : "Enter to copy") + "</small>";
+}
+// Enter (or a click on the answer): the answer goes into the box, selected, and onto the clipboard
+function srchTake() {
+  if (!SRCHANS) return;
+  var raw = SRCHANS.raw, box = $("srchAns"), inp = $("srchIn");
+  box.innerHTML = "<b>" + esc(SRCHANS.show) + "</b><small>copied</small>";
+  SRCHANS = null;
+  inp.value = raw; inp.focus(); inp.select();
+  try { if (navigator.clipboard) navigator.clipboard.writeText(raw).catch(function () { box.lastChild.textContent = ""; }); } catch (e) {}
+}
+$("srchIn").addEventListener("input", srchShow);
+$("srchIn").addEventListener("focus", srchShow);
+$("srchIn").addEventListener("blur", function () { setTimeout(function () { if (document.activeElement !== $("srchIn")) $("srchAns").hidden = true; }, 200); });
 $("srch").addEventListener("submit", function (e) {
   e.preventDefault();
+  if (SRCHANS && !SRCHANS.soft) { srchTake(); return; }
+  SRCHANS = null; $("srchAns").hidden = true;
   var u = safeUrl(searchUrl($("srchIn").value));
   if (!u) return;
   $("srchIn").value = ""; $("srchIn").blur();
@@ -2925,12 +3180,14 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
+  $("sparkOn").checked = sparkOn(); $("spCalOn").checked = P.spCal !== false;
+  renderKeys();
 }
 function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi").value.trim() }; persist(); render(); }
 $("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
 $("twPopOn").onchange = function () { P.twPop = this.checked; persist(); };
 // Notification settings: [input id, name in P.ntf, (for numbers) lowest, highest]
-var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
+var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSport", "sport"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
 var NF_NUM = [["nfSrcN", "srcN", 2, 6], ["nfPct", "pct", 0.5, 50], ["nfDay", "day", 1, 90]];
 function setNtf() {
   var n = {};
@@ -2941,6 +3198,11 @@ function setNtf() {
 }
 NF_BOX.concat(NF_NUM).forEach(function (x) { $(x[0]).onchange = setNtf; });
 $("briefOn").onchange = function () { P.brief = this.checked; persist(); };
+$("sparkOn").onchange = function () { P.spark = this.checked; persist(); render(); fetchSparks(true); };
+$("spCalOn").onchange = function () { P.spCal = this.checked; persist(); render(); refreshCal(); };
+$("keysOn").onchange = function () { P.keysOff = !this.checked; persist(); renderKeys(); };
+// a click anywhere else cancels "Press a key…"
+document.addEventListener("click", function (e) { if (KEYCAP && !(e.target.closest && e.target.closest(".kbd"))) { KEYCAP = ""; renderKeys(); } }, true);
 $("engineSel").onchange = function () { P.engine = this.value; persist(); };
 $("srchNewTab").onchange = function () { P.srchNew = this.checked; persist(); };
 $("auroraOn").onchange = function () { P.aurora = this.checked; persist(); applyTheme(); };
@@ -2987,20 +3249,79 @@ $("bkFile").onchange = function (e) {
 
 // ---- Keyboard shortcuts (when you are not typing in a box) ----
 function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); }
+// Every shortcut: [name, standard key, what it does, the action]. Your own keys are in P.keys (name -> key, "" = no key);
+// change them in Settings > Keyboard shortcuts.
+var KEY_ACTS = [
+  ["search", "/", "Jump to the search bar", function () { openSearch(); }],
+  ["refresh", "r", "Refresh everything", function () { refreshAll(true); }],
+  ["edit", "e", "Edit the layout", function () { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); render(); }],
+  ["notes", "n", "Notes and to-dos", function () { openNotes(); }],
+  ["cal", "c", "Calendar", function () { CALV = null; openCal(); }],
+  ["brief", "b", "Summary", function () { openBrief(); }],
+  ["weather", "w", "Weather", function () { openWeather(); }],
+  ["bell", "a", "Notification history", function () { MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); }],
+  ["seen", "x", "Mark everything as seen", function () { markSeen(""); render(); }],
+  ["filter", "f", "Filter the news", function () { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } }],
+  ["timer", "i", "New timer", function () { audio(); openClock("t"); }],
+  ["stopwatch", "o", "Start a stopwatch", function () { audio(); startStopwatch(); }],
+  ["undock", "u", "Close the docked players", function () { DOCK.slice().forEach(function (d) { undock(d.uid); }); }],
+  ["settings", "s", "Settings", function () { $("panel").hidden = !$("panel").hidden; }],
+  ["keys", "k", "Change these shortcuts", function () { openKeys(); }],
+  ["theme", "t", "Light / dark", function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); }],
+  ["help", "?", "Help", function () { openHelp(); }]
+];
+function keyOf(name) {
+  var own = P.keys && P.keys[name];
+  if (typeof own === "string") return own;
+  var d = KEY_ACTS.filter(function (x) { return x[0] === name; })[0];
+  // a standard key that you gave to another action is no longer this action's key
+  return d && !Object.keys(P.keys || {}).some(function (n) { return n !== name && P.keys[n] === d[1]; }) ? d[1] : "";
+}
+function keyLabel(k) { return !k ? "none" : k === " " ? "Space" : k.length === 1 ? k.toUpperCase() : k.replace(/^Arrow/, ""); }
+function keysOn() { return P.keysOff !== true; }
+var KEYCAP = "";   // the action that is waiting for its new key
+function renderKeys() {
+  $("keysOn").checked = keysOn();
+  $("keyList").innerHTML = KEY_ACTS.map(function (x) {
+    var k = keyOf(x[0]), cap = KEYCAP === x[0];
+    return "<label>" + x[2] + ' <button class="kbd' + (cap ? " cap" : "") + (k || cap ? "" : " none") + '" data-a="keyset" data-k="' + x[0] + '">' + (cap ? "Press a key…" : esc(keyLabel(k))) + "</button></label>";
+  }).join("");
+  var sk = keyOf("search");
+  $("srchIn").placeholder = "Search…" + (sk && keysOn() ? "  ( " + keyLabel(sk) + " )" : "");
+}
+function openKeys() {
+  var i = -1;
+  Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (g.id === "keysSec") i = n; });
+  $("panel").hidden = false;
+  if (i >= 0) setSec(i);
+}
+function setKey(name, key) {
+  P.keys = P.keys || {};
+  // one key, one action: the action that had this key loses it
+  if (key) KEY_ACTS.forEach(function (x) { if (x[0] !== name && keyOf(x[0]) === key) P.keys[x[0]] = ""; });
+  P.keys[name] = key;
+  persist();
+}
+// While an action waits for its new key, the next key press belongs to it: Esc cancels, Backspace or Delete removes the key.
 document.addEventListener("keydown", function (e) {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  if (!KEYCAP) return;
+  if (/^(Shift|Control|Alt|Meta|AltGraph|CapsLock)$/.test(e.key)) return;
+  e.preventDefault(); e.stopPropagation();
+  var name = KEYCAP, k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  KEYCAP = "";
+  if (k === "Backspace" || k === "Delete") setKey(name, "");
+  else if (k !== "Escape" && k !== "Tab" && k !== "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) setKey(name, k);
+  renderKeys();
+}, true);
+document.addEventListener("keydown", function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || !keysOn()) return;
   var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   if (typing || !$("modal").hidden) return;
-  var k = e.key;
-  if (k === "/") { e.preventDefault(); openSearch(); }
-  else if (k === "e") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); render(); }
-  else if (k === "n") openNotes();
-  else if (k === "c") { CALV = null; openCal(); }
-  else if (k === "b") openBrief();
-  else if (k === "s") $("panel").hidden = !$("panel").hidden;
-  else if (k === "r") refreshAll(true);
-  else if (k === "t") { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); }
-  else if (k === "?") openHelp();
+  var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  var act = KEY_ACTS.filter(function (x) { return keyOf(x[0]) === k; })[0];
+  if (!act) return;
+  e.preventDefault();
+  act[3]();
 });
 
 // ---- Only poll while the page is visible (saves your Supabase / API quotas); catch up when you come back ----
@@ -3025,5 +3346,5 @@ function bg(kind) { return function () { var n = NTF(); return !!(n.desktop || n
 every(60000, fetchTwitch, bg("live"));
 every(120000, fetchNews, function () { return bg("news")() || bg("words")(); });
 every(60000, fetchTG, bg("words"));
-every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(60000, fetchSports); every(300000, checkUpdate);
+every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(60000, fetchSports, bg("sport")); every(300000, checkUpdate);
 setInterval(tick, 1000);

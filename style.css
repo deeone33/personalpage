@@ -663,3 +663,42 @@ button.danger:hover{background:var(--down);color:#fff}
   #peek{display:none}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
+
+/* ---- Small day chart on a stock row. A fixed-size box in the right-hand group: it cannot push the row wider,
+   and when the Stocks box gets narrow (a docked stream, a small window) it is dropped before any text is cut ---- */
+.list[data-list=stocks]{container-type:inline-size}
+.spk{flex:none;display:block;width:3.1em;height:1.05em;overflow:visible}
+.spk path{fill:none;stroke-width:1.4;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
+.spk.u path{stroke:var(--up)}
+.spk.d path{stroke:var(--down)}
+/* with the charts on, the percentages share one width, so the charts start in the same place on every row */
+.spk+span{min-width:5.1em;text-align:right;box-sizing:border-box}
+@container (max-width:265px){.spk{display:none}.spk+span{min-width:0}}
+
+/* ---- League table in a game's window ---- */
+.sptabw{max-height:17.5em;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:10px}
+.sptab{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.sptab th{position:sticky;top:0;background:var(--solid);color:var(--mut);font-weight:600;font-size:11px;padding:4px 6px;text-align:right}
+.sptab td{padding:3px 6px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+.sptab td.ps{text-align:center;color:var(--mut);width:2.2em;padding-left:8px}
+.sptab td.tn{text-align:left;width:99%;overflow:hidden;text-overflow:ellipsis;max-width:0}
+.sptab td.tn img{width:16px;height:16px;object-fit:contain;vertical-align:-3px;margin-right:6px}
+.sptab td.pt{font-weight:700}
+.sptab tr.me td{background:var(--acsoft);font-weight:600}
+.calsp .spi{margin-right:4px;vertical-align:-2px}
+.toast.k-sport b i{color:var(--ac)}
+
+/* ---- Keyboard shortcut list in Settings ---- */
+#keyList label{font-size:13.5px}
+.kbd{min-width:2.4em;padding:1px 8px;font:600 12px ui-monospace,Consolas,monospace;border-radius:6px;border:1px solid var(--line);border-bottom-width:2px;background:var(--bg);color:var(--fg);cursor:pointer}
+.kbd.none{color:var(--mut);font-weight:400}
+.kbd.cap{border-color:var(--ac);color:var(--ac)}
+.setgrp code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:.92em}
+
+/* ---- Answer under the search bar (sums and conversions) ---- */
+#srch{position:relative}
+#srchAns{position:absolute;left:0;right:0;top:29px;z-index:40;display:flex;justify-content:space-between;align-items:baseline;gap:10px;background:var(--solid);border:1px solid var(--line);border-radius:10px;padding:4px 12px;font-size:13px;cursor:pointer;box-shadow:var(--shadow)}
+#srchAns[hidden]{display:none}
+#srchAns b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+#srchAns small{flex:none;color:var(--mut);font-size:11px}
+body.noshadow #srchAns{box-shadow:none}

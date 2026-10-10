@@ -19,7 +19,7 @@
 <main id="app">
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div></div>
-    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab" aria-label="Search the web" enterkeyhint="search"></form>
+    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab · Also answers sums and conversions: 12*45, 100 usd in eur, 10 km in miles" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <img id="logoImg" alt="OmniRama" src="logo.png" width="512" height="109">
   </header>
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the converter, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
@@ -69,6 +69,14 @@
   <section class="setgrp" data-cat="Look" data-sec="Search bar">
     <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
     <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
+    <div class="mut sn">The bar also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>. Enter copies the answer.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Look" data-sec="Keyboard shortcuts" id="keysSec">
+    <div class="mut sn">Shortcuts work when you are not typing in a box. To change one, click its key and press the new key. Backspace removes the key, Esc cancels.</div>
+    <label>Keyboard shortcuts <input type="checkbox" id="keysOn"></label>
+    <div class="sub" id="keyList"></div>
+    <button data-a="keyreset">Back to the standard keys</button>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="News, Telegram &amp; Reddit">
@@ -102,12 +110,15 @@
       <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
       <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
     </div>
+    <label>Small chart of the day on each row <input type="checkbox" id="sparkOn"></label>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Sports">
     <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders.</div>
     <div id="spList"></div>
     <button data-a="spreset">Back to the starting leagues</button>
+    <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
+    <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Twitch">
@@ -151,6 +162,7 @@
     <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
     <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
     <label>New mail <input type="checkbox" id="nfMail"></label>
+    <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
     <label>Ping sound <input type="checkbox" id="nfSound"></label>
     <label>Also as desktop notifications <input type="checkbox" id="nfDesktop"></label>
     <label>Also send them to my email <input type="checkbox" id="nfEmail"></label>
