@@ -739,3 +739,7 @@ body.noshadow #srchAns{box-shadow:none}
 .toast.pasteask .acts button{padding:2px 10px;font-size:12px}
 .toast.pasteask .tb{cursor:default}
 .spwatch{justify-content:center}
+/* the section list and the search results are each one column, like the menu was before the search field */
+#setNavL,#setRes{display:flex;flex-direction:column;gap:1px}
+#setNavL[hidden],#setRes[hidden]{display:none}
+@media(max-width:700px){#setNavL{flex-direction:row;flex-wrap:nowrap}#setQ{flex:none;width:130px;margin:0 6px 0 0}}
