@@ -1,10 +1,13 @@
-var VERSION = 42;
+var VERSION = 45;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
+// The state must match the random one we saved when the login started, so another site can't plant its own token here.
 (function () {
-  var h = location.hash || "", m = h.match(/access_token=([^&]+)/);
-  if (h.indexOf("state=twitch") < 0 || !m) return;
-  try { localStorage.setItem("sp_twitch", m[1]); } catch (e) {}
+  var h = location.hash || "", m = h.match(/access_token=([^&]+)/), s = h.match(/state=([^&]+)/);
+  if (!m || !s || decodeURIComponent(s[1]).indexOf("twitch") !== 0) return;
+  var want = null;
+  try { want = sessionStorage.getItem("sp_tw_state"); sessionStorage.removeItem("sp_tw_state"); } catch (e) {}
+  if (want && decodeURIComponent(s[1]) === want) { try { localStorage.setItem("sp_twitch", m[1]); } catch (e) {} }
   history.replaceState(null, "", location.pathname + location.search);
 })();
 
@@ -47,7 +50,26 @@ var DEFAULT_ACCENT = "#f5b942";
 var P = load("sp_prefs", { theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} });
 var EDIT = false;
 function $(id) { return document.getElementById(id); }
-function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+// Leftover HTML codes in feed text ("&#33;", "&amp;", "&hellip;") -> the real character
+var ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", mdash: "—", ndash: "–", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“" };
+function unent(s) {
+  if (!s || String(s).indexOf("&") < 0) return s;
+  var once = function (x) {
+    return x.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z]{2,8});/gi, function (m, c) {
+      if (c.charAt(0) !== "#") return ENT[c.toLowerCase()] || m;
+      var n = c.charAt(1).toLowerCase() === "x" ? parseInt(c.slice(2), 16) : parseInt(c.slice(1), 10);
+      return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    });
+  };
+  return once(once(String(s)));
+}
+function unentAll(list, keys) { (list || []).forEach(function (x) { keys.forEach(function (k) { if (x[k]) x[k] = unent(x[k]); }); }); return list || []; }
+// Links and images that come from feeds must be plain web addresses (never javascript: or data:)
+function safeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
+function linkBtn(u, label) { u = safeUrl(u); return u ? '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + label + "</a>" : ""; }
+// Broken logos remove themselves (instead of an inline onerror, which the security policy blocks)
+document.addEventListener("error", function (e) { var t = e.target; if (t && t.tagName === "IMG" && t.getAttribute("data-rm") === "1") t.remove(); }, true);
 
 // ---- Theme, accent, wallpaper ----
 var DEFC = { dark: { bg: "#10131a", card: "#181c26", fg: "#e9ecf2", mut: "#8c93a3", a: 84 }, light: { bg: "#eceff4", card: "#ffffff", fg: "#161a22", mut: "#5d6575", a: 86 } };
@@ -62,6 +84,8 @@ function setCol(k, v) {
 }
 function applyTheme() {
   var r = document.documentElement;
+  if (P.theme !== "light") P.theme = "dark";
+  if (!/^#[0-9a-f]{6}$/i.test(P.accent || "")) P.accent = DEFAULT_ACCENT;
   r.dataset.theme = P.theme;
   r.style.setProperty("--ac", P.accent);
   var h = P.accent.replace("#", ""), n = parseInt(h, 16);
@@ -75,13 +99,18 @@ function applyTheme() {
   r.style.setProperty("--bg", c.bg); r.style.setProperty("--fg", c.fg); r.style.setProperty("--mut", c.mut);
   r.style.setProperty("--card", rgba(c.card, c.a / 100)); r.style.setProperty("--solid", c.card);
   r.style.setProperty("--line", rgba(c.fg, 0.14));
+  r.style.setProperty("--acsoft", rgba(P.accent, 0.16)); r.style.setProperty("--acglow", rgba(P.accent, 0.35));
+  document.body.classList.toggle("noaurora", P.aurora === false);
+  $("auroraOn").checked = P.aurora !== false;
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
   $("volSlider").value = P.vol == null ? 70 : P.vol;
 }
 function applyWall() {
   var w = null;
   try { w = localStorage.getItem("sp_wall"); } catch (e) {}
-  $("wall").style.backgroundImage = w ? "url(" + w + ")" : "none";
+  w = w && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(w) ? w : null;
+  $("wall").style.backgroundImage = w ? 'url("' + w + '")' : "none";
+  document.body.classList.toggle("haswall", !!w);
   var pos = wallPos(), fit = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
   $("wall").style.backgroundSize = fit;
   $("wall").style.backgroundPosition = pos.x + "% " + pos.y + "%";
@@ -115,7 +144,7 @@ $("wallDoneBtn").onclick = function (e) { e.stopPropagation(); if (REPOS) toggle
 $("pwSave").onclick = function () {
   if (!sb || !USER) return;
   var v = $("pwNew").value;
-  if (v.length < 6) { $("pwMsg").textContent = "Use at least 6 characters."; return; }
+  if (v.length < 8) { $("pwMsg").textContent = "Use at least 8 characters."; return; }
   $("pwMsg").textContent = "Working...";
   sb.auth.updateUser({ password: v }).then(function (r) {
     $("pwMsg").textContent = r.error ? r.error.message : "Password updated.";
@@ -166,20 +195,20 @@ function tick() {
 }
 
 // ---- Rows with favorite / hide controls in edit mode ----
-function row(key, main, sub, right, op) {
+function row(key, main, sub, right, op, cls, attr) {
   var f = P.fav[key];
   var ed = EDIT ? '<button data-a="fav" data-k="' + esc(key) + '" aria-label="Favorite">' + (f ? "★" : "☆") + '</button><button data-a="hide" data-k="' + esc(key) + '" aria-label="Hide">✕</button>' : "";
-  return '<div class="row"><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
+  return '<div class="row' + (cls || "") + '"' + (attr || "") + '><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
     '</span><span class="r">' + right + ed + "</span></div>";
 }
 function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
-var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks"];
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4 };
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit"];
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6 };
 var COMPACT = ["weather", "mail", "live", "menu"];
-var LISTS = ["news", "telegram", "twitch", "youtube", "stocks"];
+var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit"];
 function LAY() {
   if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
   var L = P.layout;
@@ -202,7 +231,7 @@ function adjust(a, id, d) {
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
   else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
   else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
-  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" ? 6 : 10)) + d));
+  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" ? 6 : 10)) + d));
   persist(); render();
 }
 function tile(id, title, body, click, hx) {
@@ -229,7 +258,8 @@ function ico(id, logo) {
   for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 360;
   var cr = /^[A-Z0-9]{2,10}USDT?$/.test(t) ? t.replace(/USDT?$/, "").toLowerCase() : "";
   var src = logo || (cr ? "https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/" + cr + ".png" : "");
-  return '<span class="ic" style="--h:' + h + '"><i>' + esc(t.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)) + "</i>" + (src ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" src="' + esc(src) + '" onerror="this.remove()">' : "") + "</span>";
+  src = safeUrl(src);
+  return '<span class="ic" style="--h:' + h + '"><i>' + esc(t.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)) + "</i>" + (src ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(src) + '">' : "") + "</span>";
 }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
 function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
@@ -241,7 +271,8 @@ function render() {
   var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
-  T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + '°</b><span class="mut">' + esc(note) + "</span></div>", 1);
+  var wWarn = WX ? wxWarn(WX) : [];
+  T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + "°</b>" + (wWarn.length ? '<span class="warn" title="' + esc(wxWarnText(wWarn)) + '" aria-label="Weather warning">!</span>' : "") + '<span class="mut">' + esc(note) + "</span></div>", 1);
   T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
     if (!cfg || !cfg.url) val = '<span class="mut">Not connected</span>';
@@ -257,33 +288,45 @@ function render() {
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
   T.live = tile("live", "", convHtml());
   var allSrc = newsSrc().map(function (x) { return x.name; });
-  var nb;
+  var nb, nNew = 0;
+  var errNote = NERRK.length ? '<div class="empty sn">' + NERRK.length + " source" + (NERRK.length > 1 ? "s" : "") + ' unavailable right now (<button class="lnk2" data-a="setpanel" title="' + esc(NERR) + '">details</button>)</div>' : "";
   if (NEWS.length) {
     var nowN = Date.now();
-    var nn = NEWS.filter(function (n) { return shown("n:" + n.s); });
-    NG = groupNews(nn);
-    var favG = function (g) { return g.some(function (n) { return P.fav["n:" + n.s] && nowN - n.ts < 21600000; }) ? 1 : 0; };
-    NG.sort(function (a, b) { return favG(b) - favG(a) || b[0].ts - a[0].ts; });
-    nb = (NERR ? '<div class="empty">Some sources unavailable: ' + esc(NERR) + "</div>" : "") + (NG.length ? lst("news", NG.slice(0, 80).map(function (g) {
-      var n = g[0], srcs = g.map(function (x) { return x.s; });
-      return row("n:" + n.s, esc(n.t), srcs.join(" · "), '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac">' + srcs.length + " sources</span>" : ""), "a:" + n.u);
-    }).join(""), 6) : '<div class="empty">All news sources hidden. Use Sources below to bring one back.</div>');
+    NG = newsGroups();
+    var gRead = function (g) { return g.some(function (x) { return READ[x.u]; }); };
+    nNew = NG.filter(function (g) { return isNewTs(g[0].ts) && !gRead(g); }).length;
+    var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
+    nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, 80).map(function (g) {
+      var n = g[0], srcs = g.map(function (x) { return x.s; }), b = g.fav ? "★ Favorite sources" : bucket(n.ts);
+      // The time label sits on the divider line above the first headline of each period, so it takes no extra row
+      var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
+      var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
+      var cls = (isNewTs(n.ts) && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
+      return row("n:" + n.s, esc(n.t), srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
+    }).join(""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
     }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
+  var newBtn = function (n) { return n ? '<button class="pill ac newp" data-a="nseen" title="Mark everything as seen">' + n + " new</button>" : ""; };
+  var refBtn = '<button class="ib sm" data-a="refresh" data-k="news" title="Refresh' + (NLAST ? " (updated " + ago(NLAST) + " ago)" : "") + '" aria-label="Refresh news">' + (nBusy ? '<span class="spin">↻</span>' : "↻") + "</button>";
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
-  T.news = tile("news", "News", nb, 0, ctlN);
+  var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Filter headlines" aria-label="Filter headlines">⌕</button>' : "";
+  T.news = tile("news", "News", nb, 0, newBtn(nNew) + fltBtn + refBtn + ctlN);
 
-  var allTg = tgSrc();
-  var tp = TGP.filter(function (g) { return shown("g:" + g.s); });
+  var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
+  var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
+  var tgMulti = allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
+  var tNew = tp.filter(function (g) { return isNewTs(g.ts) && !READ[g.u]; }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
-    return row("g:" + g.s, esc(hd(g.t, 90)), g.s, '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u);
-  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, ctlG);
+    var cls = (isNewTs(g.ts) && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
+    // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
+    return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
+  }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew) + ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -318,6 +361,19 @@ function render() {
   }
   T.youtube = tile("youtube", "YouTube", yb);
 
+  var rSubs = rdSrc(), RS = rdSort();
+  var rp = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); });
+  if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
+  var rNew = RS === "new" ? rp.filter(function (x) { return isNewTs(x.ts) && !READ[x.u]; }).length : 0;
+  var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
+    '<button class="ib sm" data-a="rdrefresh" title="Refresh" aria-label="Refresh Reddit">' + (rBusy ? '<span class="spin">↻</span>' : "↻") + "</button>" +
+    (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
+      rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
+  T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
+    var cls = (RS === "new" && isNewTs(x.ts) && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
+    return row("r:" + x.s.toLowerCase(), esc(x.t), "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
+  }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew) + ctlR);
+
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) {
@@ -332,9 +388,12 @@ function render() {
   T.menu = tile("menu", "", '<div class="mrow menurow">' +
     '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
       (MENU_OPEN === "clock" ? '<div class="menu" role="menu"><button role="menuitem" data-a="clockmenu" data-k="t">Timer</button><button role="menuitem" data-a="clockmenu" data-k="c">Countdown</button><button role="menuitem" data-a="clockmenu" data-k="s">Stopwatch</button></div>' : "") + "</div>" +
-    '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (P.notes && P.notes.length ? "<span>" + P.notes.length + "</span>" : "") + "</button>" +
+    '<button data-a="opennotes" class="ib" aria-label="Notes"><svg ' + IC + '><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>' + (openTodos() ? "<span>" + openTodos() + "</span>" : "") + "</button>" +
+    '<button data-a="opencal" class="ib" aria-label="Calendar" title="Calendar"><svg ' + IC + '><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>' + (evsOn(ymd(new Date())).length ? "<span>" + evsOn(ymd(new Date())).length + "</span>" : "") + "</button>" +
+    '<div class="dd"><button data-a="bellmenu" class="ib" aria-label="Notifications" title="Notifications" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "bell") + '"><svg ' + IC + '><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg>' + (missed() ? "<span>" + missed() + "</span>" : "") + "</button>" +
+      (MENU_OPEN === "bell" ? bellHtml() : "") + "</div>" +
     '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
-      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
+      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="openbrief">Summary</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
@@ -351,11 +410,18 @@ function render() {
     menuBox + "</div>";
   T.menu = "";
 
-  var scrolls = {};
+  // A background refresh must not wipe what you are typing (sign-in form, converter, filter) or steal focus
+  var scrolls = {}, typed = {}, act = document.activeElement, actId = act && act.id && $("grid").contains(act) ? act.id : "", sel = null;
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { scrolls[n.dataset.list] = n.scrollTop; });
+  $("grid").querySelectorAll("input[id]").forEach(function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
+  if (actId) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
   $("grid").innerHTML = orderIds().map(function (id) { return T[id] || ""; }).join("");
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { if (scrolls[n.dataset.list]) n.scrollTop = scrolls[n.dataset.list]; });
+  Object.keys(typed).forEach(function (id) { var n = $(id); if (n && n.value !== typed[id]) n.value = typed[id]; });
+  if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   renderHidden();
+  refreshBrief();
+  if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
 }
 
 // Drag to rearrange: grab a box by its title in Edit mode
@@ -394,7 +460,7 @@ $("mClose").onclick = closeModal;
 $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") { closeModal(); closeMenus(); }
-  if (e.key === "Enter" && e.target.classList && e.target.classList.contains("click")) e.target.click();
+  if ((e.key === "Enter" || e.key === " ") && e.target.getAttribute && e.target.getAttribute("role") === "button" && e.target.tagName !== "BUTTON") { e.preventDefault(); e.target.click(); }
 });
 
 // ---- Twitch (browser login, needs only the Client ID) ----
@@ -402,26 +468,59 @@ var TW = null, TWC = false;
 function twToken() { try { var t = localStorage.getItem("sp_twitch"); if (t) return t; } catch (e) {} return P.tw || null; }
 function twBtn() { $("twBtn").textContent = twToken() ? "Disconnect" : "Connect"; }
 function twConnect() {
-  location.href = "https://id.twitch.tv/oauth2/authorize?client_id=" + TWITCH_CLIENT_ID + "&redirect_uri=" + encodeURIComponent(TWITCH_REDIRECT) + "&response_type=token&scope=user:read:follows&state=twitch";
+  var st = "twitch";
+  try {
+    var b = new Uint8Array(16); crypto.getRandomValues(b);
+    st = "twitch" + Array.prototype.map.call(b, function (x) { return ("0" + x.toString(16)).slice(-2); }).join("");
+    sessionStorage.setItem("sp_tw_state", st);
+  } catch (e) {}
+  location.href = "https://id.twitch.tv/oauth2/authorize?client_id=" + encodeURIComponent(TWITCH_CLIENT_ID) + "&redirect_uri=" + encodeURIComponent(TWITCH_REDIRECT) + "&response_type=token&scope=user:read:follows&state=" + encodeURIComponent(st);
 }
-function twDisconnect() { try { localStorage.removeItem("sp_twitch"); } catch (e) {} delete P.tw; persist(); TW = null; TWC = false; twBtn(); render(); }
+function twDisconnect() { try { localStorage.removeItem("sp_twitch"); } catch (e) {} delete P.tw; persist(); TW = null; TWC = false; LIVEPREV = null; twBtn(); render(); }
 function twGet(path, tok) {
   return fetch("https://api.twitch.tv/helix/" + path, { headers: { Authorization: "Bearer " + tok, "Client-Id": TWITCH_CLIENT_ID } })
     .then(function (r) { if (r.status === 401) throw new Error("expired"); return r.json(); });
+}
+// Twitch asks apps to check their token about once an hour
+var twChecked = 0, TWUID = null, LIVEPREV = null;
+function twValidate(tok) {
+  if (Date.now() - twChecked < 3600000) return;
+  twChecked = Date.now();
+  fetch("https://id.twitch.tv/oauth2/validate", { headers: { Authorization: "OAuth " + tok } })
+    .then(function (r) { if (r.status === 401) twDisconnect(); }).catch(function () {});
 }
 function fetchTwitch() {
   var tok = twToken(); twBtn();
   if (!tok || !window.TWITCH_CLIENT_ID) return;
   if (P.tw !== tok) { P.tw = tok; persist(); }
-  twGet("users", tok).then(function (u) { return twGet("streams/followed?first=100&user_id=" + u.data[0].id, tok); })
+  twValidate(tok);
+  (TWUID ? Promise.resolve(TWUID) : twGet("users", tok).then(function (u) { TWUID = u.data[0].id; return TWUID; }))
+    .then(function (uid) { return twGet("streams/followed?first=100&user_id=" + uid, tok); })
     .then(function (j) {
       TWC = true;
-      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1 }; });
+      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1, title: x.title }; });
+      if (LIVEPREV) TW.forEach(function (x) {
+        if (!LIVEPREV[x.id] && P.fav["t:" + x.id]) toast("live", (x.name || x.id) + " is live", (x.sub ? x.sub + " · " : "") + (x.title || ""), { a: "tw", k: x.id });
+      });
+      LIVEPREV = {}; TW.forEach(function (x) { LIVEPREV[x.id] = 1; });
       render();
     }).catch(function (e) { if (e.message === "expired") twDisconnect(); });
 }
+// A pop-out window is twitch.tv itself (first-party), so your login cookie is sent and Turbo / subs count: no ads.
+// Embedded players are third-party, and browsers that block third-party cookies make Twitch think you're logged out.
+function twPop(login) {
+  var w = Math.round(Math.min(1280, (screen.availWidth || 1280) * 0.6)), h = Math.round(w * 9 / 16);
+  window.open("https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=twitch.tv&player=popout&muted=false", "tw_" + login, "popup,width=" + w + ",height=" + h);
+}
+function twChat(login) { window.open("https://www.twitch.tv/popout/" + encodeURIComponent(login) + "/chat?popout=", "twc_" + login, "popup,width=380,height=680"); }
+function twEmbedSrc(login) { return "https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=true"; }
+function watchTwitch(login) { if (P.twPop) twPop(login); else openTwitch(login); }
 function openTwitch(login) {
-  openModal(login, '<div class="tw"><iframe allow="autoplay; fullscreen" allowfullscreen src="https://player.twitch.tv/?channel=' + encodeURIComponent(login) + "&parent=" + location.hostname + '&muted=true"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.twitch.tv/' + encodeURIComponent(login) + '">Open on Twitch</a> <button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button></p>');
+  var s = (TW || []).filter(function (x) { return x.id === login; })[0];
+  openModal((s && s.name) || login, (s && s.title ? '<p class="mut sn">' + esc(s.title) + (s.sub ? " · " + esc(s.sub) : "") + "</p>" : "") +
+    '<div class="tw"><iframe allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc(twEmbedSrc(login)) + '"></iframe></div>' +
+    '<p class="tools"><button class="pri" data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised">Pop out (no ads with Turbo/sub)</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button><button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch") + "</p>" +
+    '<p class="mut sn">Seeing ads in this embedded player even with Turbo or a sub? Your browser is hiding your Twitch login from embeds. Use Pop out, or allow third-party cookies for <code>[*.]twitch.tv</code> (Help → Twitch).</p>');
 }
 
 // ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
@@ -437,9 +536,9 @@ function fetchQuotes(force) {
     qBusy = false;
     if (r.error) QERR = r.error.message;
     else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
-    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; }
+    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); }
     render();
-  });
+  }).catch(function (e) { qBusy = false; QERR = String((e && e.message) || e); render(); });
 }
 var SAMPLE_IDS = DATA.stocks.map(function (x) { return x.id; });
 function importSymbols(list) {
@@ -479,7 +578,7 @@ function fetchYT() {
     if (r.error || !r.data || r.data._err) YTERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
     else { YTERR = ""; YTV = r.data.videos || []; }
     render();
-  });
+  }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
 function openYT(id) {
   openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock on the left</button></p>');
@@ -490,6 +589,7 @@ document.addEventListener("change", function (e) {
     P.sort = P.sort || {};
     var q = ds.split(":");
     if (q[0] === "sort") P.sort[q[1]] = e.target.value; else if (q[0] === "tcat") P.tcat = e.target.value;
+    else if (q[0] === "rdsort") { P.rdSort = e.target.value; RD = []; persist(); render(); fetchReddit(true); return; }
     persist(); render(); return;
   }
   if (e.target.id !== "ytFile" || !e.target.files[0]) return;
@@ -531,22 +631,88 @@ var NEWS_SRC = [
   { name: "Reuters", urls: siteUrls("reuters.com") }
 ];
 var TG_SRC = ["ClashReport"];
-var NEWS = [], TGP = [], NERR = "", nBusy = false, NVIA = {}, NWHY = {}, FNVER = 0;
+var NEWS = [], TGP = [], NERR = "", NERRK = [], nBusy = false, NVIA = {}, NWHY = {}, FNVER = 0, NEWSV = 0, NLAST = 0;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
-  nBusy = true;
+  nBusy = true; render();
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: newsSrc().map(function (x) { return { id: x.name, urls: x.urls }; }), tg: tgSrc() } }).then(function (r) {
     nBusy = false;
-    if (r.error || !r.data || r.data._err) NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data";
+    if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
-      NEWS = r.data.news || []; TGP = r.data.tg || [];
+      NEWS = unentAll(r.data.news, ["t", "d"]); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
       var ne = r.data.news_err || {};
       NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
-      NERR = Object.keys(ne).map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
+      NERRK = Object.keys(ne);
+      NERR = NERRK.map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
+      newsAlerts(); bigNews();
+      setTimeout(maybeBrief, 2500);
     }
     renderSources(); render();
-  });
+  }).catch(function (e) { nBusy = false; NERR = String((e && e.message) || e); render(); });
 }
+
+// ---- What's new since you last looked, what you've opened, and word filters ----
+var NSEEN = load("sp_nseen", 0), READ = load("sp_nread", {}), NQ = "", NFILT = false;
+if (!NSEEN) { NSEEN = Date.now(); save("sp_nseen", NSEEN); }
+function isNewTs(ts) { return ts > NSEEN; }
+function markSeen(t) { NSEEN = t || Date.now(); save("sp_nseen", NSEEN); }
+function markReadUrl(u) {
+  if (!u) return;
+  READ[u] = Date.now();
+  var k = Object.keys(READ);
+  if (k.length > 400) k.sort(function (a, b) { return READ[a] - READ[b]; }).slice(0, k.length - 400).forEach(function (x) { delete READ[x]; });
+  save("sp_nread", READ);
+}
+function NW() { return P.nwords || {}; }
+function wordList(s) { return String(s || "").toLowerCase().split(",").map(function (x) { return x.trim(); }).filter(Boolean); }
+function hasWord(t, list) { t = String(t || "").toLowerCase(); return list.some(function (w) { return t.indexOf(w) >= 0; }); }
+function bucket(ts) {
+  var d = Date.now() - ts;
+  if (d < 3600000) return "Last hour";
+  if (d < 21600000) return "Last 6 hours";
+  var day = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); };
+  return day(ts) === day(Date.now()) ? "Earlier today" : day(ts) === day(Date.now() - 86400000) ? "Yesterday" : "Older";
+}
+// Grouping compares every headline with every other one, so only redo it when the news or the filters change
+var NGKEY = "", NGMEMO = [];
+function newsGroups() {
+  var mute = wordList(NW().mute), hi = wordList(NW().hi);
+  var key = NEWSV + "|" + newsSrc().map(function (x) { return (P.hidden["n:" + x.name] ? "h" : "") + (P.fav["n:" + x.name] ? "f" : ""); }).join(",") + "|" + mute.join(",") + "|" + hi.join(",") + "|" + Math.floor(Date.now() / 600000);
+  if (key === NGKEY) return NGMEMO;
+  var now = Date.now();
+  var gs = groupNews(NEWS.filter(function (n) { return shown("n:" + n.s) && !(mute.length && hasWord(n.t, mute)); }));
+  gs.forEach(function (g) {
+    g.fav = g.some(function (n) { return P.fav["n:" + n.s] && now - n.ts < 21600000; });
+    g.hi = hi.length > 0 && g.some(function (n) { return hasWord(n.t, hi); });
+  });
+  gs.sort(function (a, b) { return (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b[0].ts - a[0].ts; });
+  NGKEY = key; NGMEMO = gs;
+  return gs;
+}
+function newsAlerts() {
+  var w = NW(), hi = wordList(w.hi);
+  if (!hi.length) return;
+  var last = load("sp_nalert", 0), top = last, sent = {}, n = 0;
+  if (!last) { save("sp_nalert", Date.now()); return; }
+  NEWS.concat(TGP).sort(function (a, b) { return b.ts - a.ts; }).forEach(function (x) {
+    if (x.ts <= last || !hasWord(x.tx || x.t, hi)) return;
+    if (x.ts > top) top = x.ts;
+    var k = String(x.t).toLowerCase().slice(0, 60);
+    if (sent[k] || n >= 3) return;
+    sent[k] = 1; n++;
+    var isTg = TGP.indexOf(x) >= 0;
+    toast("words", x.s, hd(x.t, 140), { a: isTg ? "tg" : "news", k: x.u });
+  });
+  save("sp_nalert", top);
+}
+function notifyTxt(title, body, onclick) {
+  try {
+    if (!window.Notification || Notification.permission !== "granted") return;
+    var n = new Notification(title, { body: body, icon: "favicon.png", tag: title + "|" + body });
+    n.onclick = function () { window.focus(); n.close(); if (onclick) onclick(); };
+  } catch (e) {}
+}
+function askNotify() { try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {} }
 
 // ---- Same story from different sources (plain word matching, no AI) ----
 var NG = [];
@@ -616,10 +782,51 @@ function addTgSrc(v) {
 function delSrc(k) {
   var p = k.split(":"), i = +p[1];
   ownSrc();
+  if (p[0] === "r") { P.rd = rdSrc().slice(); P.rd.splice(i, 1); rdChanged(); return; }
   if (p[0] === "n") P.news.splice(i, 1); else P.tg.splice(i, 1);
   srcChanged();
 }
-function srcChanged() { persist(); NEWS = []; TGP = []; NERR = ""; renderSources(); render(); fetchNews(); }
+
+// ---- Reddit (through the feeds function: Reddit does not let a web page read it directly) ----
+var RD_SRC = ["worldnews", "technology"], RD = [], RDERR = "", rBusy = false;
+function rdSrc() { return P.rd || RD_SRC; }
+// The same sort orders as on reddit.com ("top" = top of the last 24 hours)
+var RD_SORTS = ["best", "hot", "new", "top", "rising"];
+function rdSort() { return RD_SORTS.indexOf(P.rdSort) >= 0 ? P.rdSort : "hot"; }
+function rdChanged() { persist(); RD = []; RDERR = ""; renderSources(); render(); fetchReddit(true); }
+function addRdSrc(v) {
+  var m = v.trim().match(/(?:^|\/)(?:r\/)?([A-Za-z0-9_]{2,21})\/?$/);
+  if (!m) { srcMsg("Enter a subreddit name like worldnews, or a reddit.com/r/… link."); return false; }
+  P.rd = rdSrc().slice();
+  if (P.rd.length >= 12) { srcMsg("That is the maximum (12 subreddits)."); return false; }
+  if (P.rd.some(function (x) { return x.toLowerCase() === m[1].toLowerCase(); })) { srcMsg("Already added."); return false; }
+  P.rd.push(m[1]); srcMsg("Added r/" + m[1] + "."); return true;
+}
+function fetchReddit() {
+  if (!sb || !USER || rBusy) return;
+  var subs = rdSrc();
+  if (!subs.length) { RD = []; return; }
+  rBusy = true;
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { reddit: { subs: subs, sort: rdSort() } } }).then(function (r) {
+    rBusy = false;
+    var v = r.data && r.data.reddit;
+    if (r.error) RDERR = r.error.message;
+    else if (!v) RDERR = "it needs the updated feeds function (redeploy super-function in Supabase)";
+    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) RD = unentAll(v.items, ["t", "d"]); }
+    render();
+  }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
+}
+function openReddit(u) {
+  var x = RD.filter(function (p) { return p.u === u; })[0];
+  if (!x) return;
+  markReadUrl(u);
+  var img = safeUrl(x.img);
+  openModal("r/" + x.s, '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" +
+    (img ? '<img class="mimg rdimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
+    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>");
+  render();
+}
+function srcChanged() { persist(); NEWS = []; TGP = []; NEWSV++; NERR = ""; renderSources(); render(); fetchNews(); }
 function lastAge(name) {
   var t = 0; NEWS.forEach(function (n) { if (n.s === name && n.ts > t) t = n.ts; });
   return t ? "latest " + ago(t) + " ago" + (NVIA[name] ? " · via " + NVIA[name].replace(/api\.|www\./g, "") : "") : "";
@@ -631,12 +838,16 @@ function renderSources() {
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
   }).join("") || '<div class="mut">No Telegram channels.</div>';
+  $("srcRd").innerHTML = rdSrc().map(function (x, i) {
+    return '<div class="row"><span>r/' + esc(x) + '</span><button data-a="srcdel" data-k="r:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
+  }).join("") || '<div class="mut">No subreddits.</div>';
 }
 document.addEventListener("submit", function (e) {
+  if (e.target.id === "addRd") { e.preventDefault(); if (addRdSrc($("rdIn").value)) { $("rdIn").value = ""; rdChanged(); } }
   if (e.target.id === "addNews") { e.preventDefault(); if (addNewsSrc($("newsName").value.trim(), $("newsUrl").value.trim())) { $("newsName").value = ""; $("newsUrl").value = ""; srcChanged(); } }
   if (e.target.id === "addTg") { e.preventDefault(); if (addTgSrc($("tgIn").value)) { $("tgIn").value = ""; srcChanged(); } }
 });
-$("srcReset").onclick = function () { delete P.news; delete P.tg; srcMsg("Back to the default sources."); srcChanged(); };
+$("srcReset").onclick = function () { delete P.news; delete P.tg; delete P.rd; srcMsg("Back to the default sources."); srcChanged(); rdChanged(); };
 
 // ---- Details windows for news, Telegram and Gmail ----
 function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" }); }
@@ -644,19 +855,27 @@ function openNews(u) {
   var g = NG.filter(function (x) { return x.some(function (n) { return n.u === u; }); })[0];
   var n = g ? g.filter(function (x) { return x.u === u; })[0] : NEWS.filter(function (x) { return x.u === u; })[0];
   if (!n) return;
-  var more = g && g.length > 1 ? "<h3>" + g.length + " sources report this</h3>" + g.map(function (x) {
-    return '<div class="mi"><a target="_blank" rel="noopener" href="' + esc(x.u) + '">' + esc(x.t) + '</a><small class="mut">' + esc(x.s) + " · " + when(x.ts) + "</small></div>";
+  g = g || [n];
+  g.forEach(function (x) { markReadUrl(x.u); });
+  var more = g.length > 1 ? "<h3>" + g.length + " sources report this</h3>" + g.map(function (x) {
+    var xu = safeUrl(x.u);
+    return '<div class="mi">' + (xu ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(xu) + '">' + esc(x.t) + "</a>" : esc(x.t)) + '<small class="mut">' + esc(x.s) + " · " + when(x.ts) + "</small></div>";
   }).join("") : "";
+  var img = safeUrl(n.img);
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
-    (n.img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" src="' + esc(n.img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
-    '<p><a class="btn" target="_blank" rel="noopener" href="' + esc(n.u) + '">Read the full article</a></p>' + more);
+    (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
+    '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button></p>' + more);
+  render();
 }
 function openTG(u) {
   var g = TGP.filter(function (x) { return x.u === u; })[0];
   if (!g) return;
-  var media = g.vid ? '<video class="mvid" controls playsinline preload="metadata"' + (g.th ? ' poster="' + esc(g.th) + '"' : "") + ' src="' + esc(g.vid) + '"></video>'
-    : (g.img || g.th) ? '<img class="mimg" referrerpolicy="no-referrer" alt="" src="' + esc(g.img || g.th) + '">' : "";
-  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + "<p>" + esc(g.tx || g.t).replace(/\n/g, "<br>") + '</p><p><a class="btn" target="_blank" rel="noopener" href="' + esc(g.u) + '">Open on Telegram</a></p>');
+  markReadUrl(g.u);
+  var vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th;
+  var media = vid ? '<video class="mvid" controls playsinline preload="metadata"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
+    : img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
+  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + "</p><p>" + linkBtn(g.u, "Open on Telegram") + "</p>");
+  render();
 }
 var MAIL = [], mBusy = false;
 function fetchMail() {
@@ -667,9 +886,22 @@ function fetchMail() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: list } }).then(function (r) {
     mBusy = false;
     if (r.error || !r.data || !r.data.mail) list.forEach(function (c) { MAIL[c.i] = { error: (r.error && r.error.message) || "no data" }; });
-    else r.data.mail.forEach(function (m, k) { MAIL[list[k].i] = m; });
+    else r.data.mail.forEach(function (m, k) { MAIL[list[k].i] = m; mailAlerts(list[k].i, m); });
     render();
-  });
+  }).catch(function () { mBusy = false; });
+}
+// A card for each new email since the last check (the first check only notes where you are, so old mail is not announced)
+function mailAlerts(i, m) {
+  if (!m || m.error || !m.items) return;
+  var key = "sp_mailts" + i, last = load(key, 0), top = last, fresh = [];
+  m.items.forEach(function (x) { if (x.ts > last) fresh.push(x); if (x.ts > top) top = x.ts; });
+  if (!last) { save(key, top || Date.now()); return; }
+  if (!fresh.length) return;
+  save(key, top);
+  var nm = (P.mail[i] && P.mail[i].name) || "Mail", who = function (x) { return (x.from || "").replace(/<.*>/, "").replace(/"/g, "").trim() || x.from || "?"; };
+  fresh.sort(function (a, b) { return b.ts - a.ts; });
+  toast("mail", nm + " · " + who(fresh[0]), fresh[0].subject || "(no subject)", { a: "mail", k: i });
+  if (fresh.length > 1) toast("mail", nm + " · " + (fresh.length - 1) + " more new email" + (fresh.length > 2 ? "s" : ""), fresh.slice(1, 4).map(who).join(", "), { a: "mail", k: i });
 }
 function mailN(i) {
   var m = MAIL[i], seen = P.mail[i] && P.mail[i].seen, n = seen && m.fresh != null ? m.fresh : m.unread;
@@ -691,7 +923,7 @@ function openMail(i) {
   var rows = items.map(function (x) {
     var isNew = seen && x.ts > seen * 1000;
     return '<div class="mi"><div class="r2"><b>' + esc((x.from || "").replace(/<.*>/, "").trim() || x.from) + (isNew ? ' <span class="pill ac">new</span>' : "") + '</b><small class="mut">' + ago(x.ts) + "</small></div><div>" + esc(x.subject || "(no subject)") +
-      '</div><div class="mut sn">' + esc(x.snippet) + '</div><a class="btn" target="_blank" rel="noopener" href="' + esc(x.link) + '">Open in Gmail</a></div>';
+      '</div><div class="mut sn">' + esc(x.snippet || "") + "</div>" + linkBtn(x.link, "Open in Gmail") + "</div>";
   }).join("");
   var ctl = '<div class="tools">' + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '">Mark read (on this site only)</button>' : "") + (seen ? '<button data-a="mailall" data-k="' + i + '">Show all unread again</button>' : "") + "</div>";
   var note = seen && n.n === 0 ? '<p class="mut">Nothing new since you pressed Mark read. Your latest unread mail:</p>' : "";
@@ -810,20 +1042,71 @@ function startClock(kind) {
   try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
   closeModal(); renderClocks();
 }
-function openNotes() {
-  var N = (P.notes || []).slice().sort(function (a, b) { return b.ts - a.ts; });
-  openModal("Notes (" + N.length + ")", '<textarea id="noteIn" rows="3" placeholder="Write a note..."></textarea><p><button class="pri" data-a="noteadd">Add note</button></p>' +
-    (N.map(function (n) { return '<div class="mi"><div class="r2"><small class="mut">' + when(n.ts) + '</small><button data-a="notedel" data-k="' + n.id + '" aria-label="Delete note">✕</button></div><div class="nt">' + esc(n.t).replace(/\n/g, "<br>") + "</div></div>"; }).join("") || '<p class="mut">No notes yet.</p>'));
+// ---- Notes and to-dos: two tabs in one small window. Click any text to edit it in place. ----
+var DONE_OPEN = false;
+var CE = (function () { try { var d = document.createElement("div"); d.setAttribute("contenteditable", "plaintext-only"); return d.contentEditable === "plaintext-only" ? "plaintext-only" : "true"; } catch (e) { return "true"; } })();
+function openTodos() { return (P.notes || []).filter(function (n) { return n.todo && !n.done; }).length; }
+function noteTab() { return P.noteTab === "note" ? "note" : "todo"; }
+function openNotes(focus) {
+  var L = P.notes || [], tab = noteTab(), byNew = function (a, b) { return (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.ts - a.ts; };
+  var open = L.filter(function (n) { return n.todo && !n.done; }).sort(byNew), done = L.filter(function (n) { return n.todo && n.done; }).sort(byNew), notes = L.filter(function (n) { return !n.todo; }).sort(byNew);
+  var draft = $("noteIn") ? $("noteIn").value : "";
+  var acts = function (n, pin) {
+    return '<span class="nact">' + (pin ? '<button data-a="notepin" data-k="' + n.id + '" title="' + (n.pin ? "Unpin" : "Pin to the top") + '" aria-label="Pin">' + (n.pin ? "★" : "☆") + "</button>" : "") +
+      '<button data-a="notedel" data-k="' + n.id + '" title="Delete" aria-label="Delete">✕</button></span>';
+  };
+  var text = function (n) { return '<div class="ntx" contenteditable="' + CE + '" spellcheck="false" data-note="' + n.id + '">' + esc(n.t) + "</div>"; };
+  var trow = function (n) {
+    return '<div class="trow' + (n.done ? " done" : "") + (n.pin ? " pin" : "") + '"><button class="chk' + (n.done ? " on" : "") + '" role="checkbox" aria-checked="' + !!n.done + '" data-a="notedone" data-k="' + n.id + '" aria-label="' + (n.done ? "Mark as not done" : "Mark as done") + '"></button>' + text(n) + acts(n, !n.done) + "</div>";
+  };
+  var seg = function (k, label, n) { return '<button data-a="notetab" data-k="' + k + '"' + (tab === k ? ' class="on"' : "") + ">" + label + (n ? " <i>" + n + "</i>" : "") + "</button>"; };
+  var body;
+  if (tab === "todo") {
+    body = '<div class="tadd"><i>+</i><input type="text" id="noteIn" placeholder="Add a task and press Enter" maxlength="300" autocomplete="off"></div>' +
+      (open.map(trow).join("") || '<p class="nempty">' + (done.length ? "All done. Nice." : "Nothing to do yet. Add your first task above.") + "</p>") +
+      (done.length ? '<div class="tdh"><button class="lnk2" data-a="notedonetoggle">' + (DONE_OPEN ? "▾" : "▸") + " Completed (" + done.length + ")</button>" + (DONE_OPEN ? '<button class="lnk2" data-a="notecleardone">Clear</button>' : "") + "</div>" + (DONE_OPEN ? done.map(trow).join("") : "") : "");
+  } else {
+    body = '<div class="ngrid"><div class="ncard new"><textarea id="noteIn" rows="2" placeholder="Write a note…"></textarea><div class="nfoot"><small>Ctrl+Enter to save</small><button class="pri" data-a="noteadd">Save</button></div></div>' +
+      notes.map(function (n) {
+        return '<div class="ncard' + (n.pin ? " pin" : "") + '">' + text(n) + '<div class="nfoot"><small>' + new Date(n.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + "</small>" + acts(n, true) + "</div></div>";
+      }).join("") + "</div>";
+  }
+  openModal("Notes", '<div class="nt2"><div class="seg">' + seg("todo", "To-do", open.length) + seg("note", "Notes", notes.length) + "</div>" + body + "</div>");
+  if ($("noteIn")) { $("noteIn").value = draft; if (focus !== false) $("noteIn").focus(); }
 }
 function noteAct(a, k) {
+  var L = P.notes = P.notes || [], n = L.filter(function (x) { return x.id === k; })[0];
   if (a === "noteadd") {
-    var v = $("noteIn").value.trim(); if (!v) return;
-    (P.notes = P.notes || []).push({ id: "n" + Date.now().toString(36), t: v, ts: Date.now() });
-  } else P.notes = (P.notes || []).filter(function (n) { return n.id !== k; });
-  persist(); render(); openNotes();
+    var v = $("noteIn").value.trim();
+    if (!v) return;
+    L.push({ id: "n" + Date.now().toString(36), t: v, ts: Date.now(), todo: noteTab() === "todo" });
+    $("noteIn").value = "";
+  }
+  else if (a === "notetab") { P.noteTab = k; if ($("noteIn")) $("noteIn").value = ""; }
+  else if (a === "notedonetoggle") DONE_OPEN = !DONE_OPEN;
+  else if (a === "notecleardone") P.notes = L.filter(function (x) { return !x.done; });
+  else if (a === "notedel") P.notes = L.filter(function (x) { return x.id !== k; });
+  else if (n && a === "notedone") { n.done = !n.done; if (n.done) n.pin = false; }
+  else if (n && a === "notepin") n.pin = !n.pin;
+  persist(); render(); openNotes(a === "noteadd" || a === "notetab");
 }
+document.addEventListener("keydown", function (e) {
+  var t = e.target, isNote = t.getAttribute && t.getAttribute("data-note");
+  if (isNote && e.key === "Escape") { e.stopPropagation(); t.blur(); return; }
+  if (e.key !== "Enter") return;
+  if (t.id === "noteIn" && (t.tagName === "INPUT" || e.ctrlKey || e.metaKey)) { e.preventDefault(); noteAct("noteadd"); }
+  else if (isNote && !e.shiftKey && t.closest(".trow")) { e.preventDefault(); t.blur(); }
+}, true);
+document.addEventListener("focusout", function (e) {
+  var id = e.target.getAttribute && e.target.getAttribute("data-note");
+  if (!id) return;
+  var n = (P.notes || []).filter(function (x) { return x.id === id; })[0], v = (e.target.innerText || "").replace(/ /g, " ").trim();
+  if (!n || v === n.t) return;
+  if (!v) { P.notes = P.notes.filter(function (x) { return x.id !== id; }); var r = e.target.closest(".trow, .ncard"); if (r) r.remove(); } else n.t = v;
+  persist(); render();
+});
 var MENU_OPEN = "";
-function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } var f = $("filtNews"); if (f) f.hidden = true; var g = $("filttg"); if (g) g.hidden = true; }
+function closeMenus() { if (MENU_OPEN) { MENU_OPEN = ""; render(); } ["filtNews", "filttg", "filtRd"].forEach(function (id) { var f = $(id); if (f) f.hidden = true; }); }
 document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".dd")) closeMenus(); });
 
 // ---- Weather icons ----
@@ -879,7 +1162,7 @@ function dockAdd(k) {
   if (kind === "v") { var v = YTV.filter(function (x) { return x.id === id; })[0]; if (v) title = v.t; }
   var d = { kind: kind, id: id, uid: ++dockUid };
   DOCK.push(d);
-  var src = kind === "t" ? "https://player.twitch.tv/?channel=" + encodeURIComponent(id) + "&parent=" + location.hostname + "&muted=true"
+  var src = kind === "t" ? twEmbedSrc(id)
     : "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1";
   var w = document.createElement("div");
   w.className = "dk"; w.id = "dk" + d.uid;
@@ -978,7 +1261,7 @@ function locPick(i) {
   persist(); fetchClockTz(); closeModal();
 }
 function wxUrl(c) {
-  return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
+  return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max,snowfall_sum,wind_gusts_10m_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
 }
 function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
 function fetchWeather() {
@@ -986,8 +1269,32 @@ function fetchWeather() {
     if (j && j.current) { WX = j; render(); }
   }).catch(function () {});
 }
+// Weather warnings for today and tomorrow, worked out from the forecast numbers (no extra service needed)
+function wxWarn(j) {
+  var d = j && j.daily, out = [];
+  if (!d || !d.time) return out;
+  [0, 1].forEach(function (k) {
+    if (!d.time[k]) return;
+    var code = d.weather_code[k], rain = d.precipitation_sum[k] || 0, snow = (d.snowfall_sum && d.snowfall_sum[k]) || 0,
+      gust = (d.wind_gusts_10m_max && d.wind_gusts_10m_max[k]) || 0, hi = d.temperature_2m_max[k], lo = d.temperature_2m_min[k], uv = d.uv_index_max[k] || 0;
+    var add = function (t, x) { out.push({ day: k ? "Tomorrow" : "Today", t: t, x: x }); };
+    if (code >= 95) add("Thunderstorm", code > 95 ? "hail possible" : "");
+    if (snow >= 5 && gust >= 15) add("Snow storm", Math.round(snow) + " cm of snow, gusts " + Math.round(gust) + " m/s");
+    else if (snow >= 10 || code === 75 || code === 86) add("Heavy snow", Math.round(snow) + " cm");
+    if (code === 56 || code === 57 || code === 66 || code === 67) add("Freezing rain", "icy roads");
+    if (snow < 5 && (rain >= 15 || code === 65 || code === 82)) add("Heavy rain", Math.round(rain) + " mm");
+    if (gust >= 25) add("Storm", "gusts " + Math.round(gust) + " m/s");
+    else if (gust >= 17 && !(snow >= 5)) add("Strong wind", "gusts " + Math.round(gust) + " m/s");
+    if (hi >= 30) add("Heat", "up to " + Math.round(hi) + "°");
+    if (lo <= -20) add("Severe cold", "down to " + Math.round(lo) + "°");
+    if (uv >= 8) add("Very high UV", "index " + Math.round(uv));
+  });
+  return out;
+}
+function wxWarnText(w) { return w.map(function (x) { return x.day + ": " + x.t + (x.x ? " (" + x.x + ")" : ""); }).join("\n"); }
 function wxHtml(j) {
   var c = j.current, h = j.hourly, d = j.daily, now = c.time.slice(0, 13);
+  var warn = wxWarn(j), warnBox = warn.length ? '<div class="warnbox">' + warn.map(function (x) { return "<div><b>! " + x.t + "</b> " + x.day.toLowerCase() + (x.x ? " · " + esc(x.x) : "") + "</div>"; }).join("") + "</div>" : "";
   var i = h.time.findIndex(function (t) { return t.slice(0, 13) >= now; }); if (i < 0) i = 0;
   var hrs = "";
   for (var n = i; n < i + 12 && n < h.time.length; n++) hrs += '<div class="hr"><b>' + h.time[n].slice(11, 16) + "</b><span>" + Math.round(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
@@ -995,7 +1302,7 @@ function wxHtml(j) {
     var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
     return '<div class="row"><span>' + wxIcon(d.weather_code[k], 1, 20) + " " + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + d.precipitation_sum[k].toFixed(1) + " mm · " + Math.round(d.temperature_2m_min[k]) + "° / <b>" + Math.round(d.temperature_2m_max[k]) + "°</b></span></div>";
   }).join("");
-  return '<div class="mrow"><span class="wi">' + wxIcon(c.weather_code, c.is_day, 34) + '</span><b class="big">' + Math.round(c.temperature_2m) + "°</b><span>" + wxText(c.weather_code) + '</span></div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
+  return warnBox + '<div class="mrow"><span class="wi">' + wxIcon(c.weather_code, c.is_day, 34) + '</span><b class="big">' + Math.round(c.temperature_2m) + "°</b><span>" + wxText(c.weather_code) + '</span></div><div class="mut">Feels like ' + Math.round(c.apparent_temperature) + "° · wind " + c.wind_speed_10m + " m/s · humidity " + c.relative_humidity_2m + "%</div>" +
     '<h3>Next 12 hours (temperature, chance of rain)</h3><div class="hrs">' + hrs + "</div><h3>7 days</h3>" + days +
     '<p class="mut">Sunrise ' + d.sunrise[0].slice(11, 16) + " · Sunset " + d.sunset[0].slice(11, 16) + " · UV max " + d.uv_index_max[0] + "</p>";
 }
@@ -1075,7 +1382,12 @@ function cityAct(a, k) {
 
 // ---- Stocks: details window with TradingView chart, and adding symbols ----
 function openStock(id) {
-  openModal(id, '<div id="tv" class="tv"></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(id) + '">Open in TradingView</a></p>');
+  var s = tk(id), q = QUOTES[s], se = encodeURIComponent(s.replace(/_/g, "-"));
+  var lk = function (u, l) { return '<a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + u + '">' + l + "</a>"; };
+  openModal(id, (q ? '<div class="mrow sthead"><b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") + "</div>" : "") +
+    '<div id="tv" class="tv"></div><div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
+    '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(id), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + "</p>");
+  loadStockNews(id);
   var box = document.createElement("div"); box.className = "tradingview-widget-container"; box.style.height = "100%";
   var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget"; inner.style.height = "100%";
   box.appendChild(inner);
@@ -1122,7 +1434,7 @@ document.addEventListener("pointerdown", function (e) {
 
 // ---- Events ----
 document.addEventListener("click", function (e) {
-  if (e.target.closest && (e.target.closest("#filtNews") || e.target.closest("#filttg"))) { e.stopPropagation(); }
+  if (e.target.closest && e.target.closest("#filtNews, #filttg, #filtRd")) { e.stopPropagation(); }
   var b = e.target.closest("[data-a]");
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
@@ -1145,9 +1457,10 @@ document.addEventListener("click", function (e) {
   }
   if (a === "signout") {
     if (sb) sb.auth.signOut();
-    try { localStorage.removeItem("sp_prefs"); localStorage.removeItem("sp_wall"); localStorage.removeItem("sp_twitch"); } catch (ex) {}
-    P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, fav: {}, hidden: {} };
-    TW = []; TWC = false; MAIL = []; NEWS = []; TGP = []; YTV = []; QUOTES = {}; NG = []; USER = null;
+    try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
+    P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, fav: {}, hidden: {} };
+    TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; NG = []; USER = null;
+    loadMailForm(); loadExtraForm();
     applyWall(); MENU_OPEN = ""; render();
     return;
   }
@@ -1166,7 +1479,7 @@ document.addEventListener("click", function (e) {
     return;
   }
   if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
-  if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
+  if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : k === "rd" ? "filtRd" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
   if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
@@ -1175,14 +1488,29 @@ document.addEventListener("click", function (e) {
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
   if (a === "clstart") { startClock(k); return; }
   if (/^cl(play|reset|rm|stop)$/.test(a)) { clockAct(a, k); return; }
-  if (a === "noteadd" || a === "notedel") { noteAct(a, k); return; }
+  if (/^note(add|del|tab|cleardone|done|donetoggle|pin)$/.test(a)) { noteAct(a, k); return; }
+  if (a === "opencal") { CALV = null; openCal(); return; }
+  if (/^cal(day|nav|del|jump)$/.test(a)) { calAct(a, k); return; }
+  if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
+  if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
+  if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
+  if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); return; }
+  if (a === "bellgo") { var be = NLOG[+k]; MENU_OPEN = ""; render(); if (be) runAct(be.act); return; }
+  if (a === "bellclear") { NLOG = []; save("sp_nlog", NLOG); MENU_OPEN = ""; render(); return; }
+  if (a === "rdrefresh") { fetchReddit(true); return; }
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
   if (a === "undock") { undock(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
-  if (a === "open") { var ch = k.charAt(0); if (ch === "t") openTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else openStock(k.slice(2)); return; }
+  if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
+  if (a === "twpop") { twPop(k); return; }
+  if (a === "twchat") { twChat(k); return; }
+  if (a === "nseen") { markSeen(); render(); return; }
+  if (a === "refresh") { if (k === "news") fetchNews(); return; }
+  if (a === "nsearch") { window.open("https://news.google.com/search?q=" + encodeURIComponent(k), "_blank", "noopener"); return; }
+  if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
   if (a === "show") delete P.hidden[k];
@@ -1232,13 +1560,14 @@ function onUser(u) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); }
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); loadMailForm(); renderSources(); renderClocks(); fetchWeather(); fetchClockTz();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); fetchWeather(); fetchClockTz();
   });
 }
 function auth(fn) {
   if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
   var c = { email: $("acctEmail").value.trim(), password: $("acctPass").value };
   if (!c.email || !c.password) { setMsg("Enter your email and password."); return; }
+  if (fn === "signUp" && c.password.length < 8) { setMsg("Use a password of at least 8 characters."); return; }
   if (fn === "signUp") c.options = { emailRedirectTo: location.href.split("#")[0] };
   setMsg("Working...");
   sb.auth[fn](c).then(function (r) {
@@ -1260,7 +1589,7 @@ function openHelp() {
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
     ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["convert", "Currency converter"],
     ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
-    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["account", "Account &amp; privacy"]
+    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
   ];
   var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
     toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
@@ -1303,9 +1632,23 @@ function openHelp() {
     '<li>Paste that link into the "shared TradingView watchlist link" box on this site and press Import.</li>' +
     '</ol></li></ol>';
 
-  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News &amp; Telegram sources</b>.</p><ul><li><b>To add a news source:</b> type a website like <code>reuters.com</code> in the box (a name is optional) and press Add.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>';
+  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News &amp; Telegram sources</b>.</p><ul><li><b>To add a news source:</b> type a website like <code>reuters.com</code> in the box (a name is optional) and press Add.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
+    '<p><b>Reading the news:</b> headlines that arrived since you last looked get an accent bar and a <b>new</b> counter in the tile header (click it to mark everything seen; being away for 2+ minutes does that automatically). Headlines you already opened are dimmed. The same story from several sources is merged into one line with a source count, and stories many sources picked up in the last 3 hours are marked <b>hot</b>. Use the filter box above the list to find a topic.</p>' +
+    '<p><b>Filters &amp; alerts</b> (Settings &rarr; News &amp; Telegram sources): <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
-  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Connections</b> &rarr; press <b>Connect</b> next to Twitch, log in if asked, and approve access. The tile will then show who you follow that is currently live. Click a name to watch inside the page.</p>';
+  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Connections</b> &rarr; press <b>Connect</b> next to Twitch, log in if asked, and approve access. The tile will then show who you follow that is currently live. Click a name to watch inside the page.</p>' +
+    '<p><b>Ads even though you have Turbo or a sub?</b> The player inside this page is a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out and plays ads. Two fixes:</p><ol>' +
+    '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Connections &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
+    '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only.<ul>' +
+    '<li>Chrome: Settings &rarr; Privacy and security &rarr; Third-party cookies &rarr; <i>Sites allowed to use third-party cookies</i> &rarr; Add &rarr; <code>[*.]twitch.tv</code>.</li>' +
+    '<li>Edge: Settings &rarr; Cookies and site permissions &rarr; Manage and delete cookies &rarr; <i>Allow</i> &rarr; Add <code>[*.]twitch.tv</code> (and set Tracking prevention to Balanced, not Strict).</li>' +
+    '<li>Firefox: Settings &rarr; Privacy &amp; Security &rarr; Cookies and Site Data &rarr; Manage Exceptions &rarr; add <code>https://www.twitch.tv</code> and <code>https://player.twitch.tv</code> as <i>Allow</i>.</li>' +
+    '<li>Brave: click the lion icon on this site &rarr; Advanced &rarr; Cookies: <i>Allow all</i>.</li>' +
+    '<li>Safari: cross-site tracking prevention cannot be relaxed per site, so use Pop out.</li></ul>Then make sure you are logged in at twitch.tv in the same browser and reload this page.</li></ol>' +
+    '<p>Tip: mark streamers with ★ (Edit mode) to get a notification when they go live.</p>';
+
+  html += '<h3 id="help-keys">Search &amp; keyboard shortcuts</h3><p>Type in the small search box at the top (press <code>/</code> to jump to it) and press Enter. A site name like <code>reuters.com</code> opens the site; anything else goes to your search engine (choose it in Settings). Start or end with a &ldquo;bang&rdquo; to search a specific site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Google Maps, <code>!news</code> Google News, <code>!tv</code> TradingView symbol, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. Ctrl+Enter opens in a new tab.</p>' +
+    '<p>Shortcuts (when you are not typing in a box): <code>/</code> search · <code>r</code> refresh everything · <code>e</code> edit layout · <code>n</code> notes · <code>c</code> calendar · <code>b</code> summary · <code>s</code> settings · <code>t</code> light/dark · <code>?</code> this help · <code>Esc</code> close.</p>';
 
   html += '<h3 id="help-youtube">YouTube</h3><p>This shows new uploads from channels you subscribe to (YouTube does not allow websites to read your personal recommended feed, so this is the closest available option).</p><ol>' +
     '<li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> while signed in to your YouTube account.</li>' +
@@ -1322,7 +1665,12 @@ function openHelp() {
 
   html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Location &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
 
-  html += '<h3 id="help-notes">Notes</h3><p>Click the notepad icon to write, read or delete short notes. They are saved until you delete them.</p>';
+  html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or press <code>n</code>). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>';
+  html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit sources</b>. In the box, choose <b>Hot</b> or <b>New</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview, click for the text and links. Move and resize the box in Edit mode like the others.</p>';
+  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab.</p>';
+  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks and Twitch updating while the tab is in the background).</p>' +
+    '<p><b>Summary:</b> on your first visit each day a small "Since yesterday" window shows weather warnings, today\'s events, top stories, biggest movers, mail and who is live. Open it any time from the cogwheel menu or with <code>b</code>.</p>' +
+    '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
 
   html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
 
@@ -1330,17 +1678,450 @@ function openHelp() {
 
   html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it.</p>';
 
-  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Open <b>Settings</b> &rarr; <b>Account</b> to set a new password once you are signed in. If you forget your password, click the person icon, then <b>Forgot password?</b>, and a reset link will be emailed to you. Everything you set up is private to your own account &mdash; nobody else using this site can see it.</p>';
+  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Open <b>Settings</b> &rarr; <b>Account</b> to set a new password once you are signed in. If you forget your password, click the person icon, then <b>Forgot password?</b>, and a reset link will be emailed to you. Everything you set up is private to your own account &mdash; nobody else using this site can see it. <b>Settings &rarr; Backup</b> downloads everything as a file you can restore later.</p>';
 
   openModal("Help", html);
 }
 function acctHtml() {
   if (USER) return '<div class="menu acctpop" role="menu"><div class="mut sn">' + esc(USER.email) + '</div><button role="menuitem" data-a="signout">Sign out</button></div>';
-  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (6+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div><button class="lnk2" data-a="forgotpw">Forgot password?</button>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
+  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (8+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div><button class="lnk2" data-a="forgotpw">Forgot password?</button>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
 }
 
+// ---- Notifications: small cards in the bottom-right corner ----
+function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sound: true, desktop: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
+var NOTIFIED = load("sp_notified", {});
+// true the first time a key is seen, so the same thing is never announced twice (also after a reload)
+function once(key) {
+  if (NOTIFIED[key]) return false;
+  NOTIFIED[key] = Date.now();
+  var k = Object.keys(NOTIFIED);
+  if (k.length > 300) k.sort(function (a, b) { return NOTIFIED[a] - NOTIFIED[b]; }).slice(0, k.length - 300).forEach(function (x) { delete NOTIFIED[x]; });
+  save("sp_notified", NOTIFIED);
+  return true;
+}
+var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉" };
+// What clicking a notification does. Kept as plain data (not a function) so the history still works after a reload.
+function runAct(act) {
+  if (!act) return;
+  var a = act.a, k = act.k;
+  if (a === "news") { if (NEWS.some(function (n) { return n.u === k; })) openNews(k); else if (safeUrl(k)) window.open(k, "_blank", "noopener"); }
+  else if (a === "tg") { if (TGP.some(function (g) { return g.u === k; })) openTG(k); else if (safeUrl(k)) window.open(k, "_blank", "noopener"); }
+  else if (a === "stock") openStock(k);
+  else if (a === "tw") watchTwitch(k);
+  else if (a === "cal") { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); }
+  else if (a === "mail") { if (MAIL[+k] && !MAIL[+k].error) openMail(+k); }
+  else if (a === "settings") $("panel").hidden = false;
+}
+// History of the last 30 notifications (on this device). "seen" = you clicked or dismissed it, or opened the bell.
+var NLOG = load("sp_nlog", []);
+function missed() { return NLOG.filter(function (e) { return !e.seen; }).length; }
+function toast(kind, title, body, act, sticky, force) {
+  var n = NTF();
+  if (!force && n[kind] === false) return;
+  var id = ++toastN, box = $("toasts"), el = document.createElement("div"), entry = { k: kind, t: String(title).slice(0, 160), b: String(body || "").slice(0, 200), ts: Date.now(), act: act || null };
+  TOASTS[id] = entry;
+  NLOG.push(entry); if (NLOG.length > 30) NLOG = NLOG.slice(-30);
+  save("sp_nlog", NLOG);
+  el.className = "toast k-" + kind; el.id = "to" + id;
+  el.innerHTML = '<div class="tb" data-a="toastgo" data-k="' + id + '" role="button" tabindex="0"><b><i>' + (TICON[kind] || "●") + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + '</div><button class="tx" data-a="toastx" data-k="' + id + '" aria-label="Dismiss">✕</button>';
+  box.appendChild(el);
+  while (box.children.length > 4) toastAct("toastout", box.firstChild.id.slice(2));
+  if (!sticky) setTimeout(function () { toastAct("toastout", id); }, 20000);
+  if (n.sound) { if (kind === "cal") ring("chime"); else beep(1175, 0, 0.22, "sine"); }
+  if (n.desktop && document.hidden) notifyTxt(title, body, function () { runAct(act); });
+  render();
+}
+// toastgo = clicked, toastx = dismissed (both count as seen), toastout = it timed out unread (stays "missed")
+function toastAct(a, id) {
+  var el = $("to" + id), entry = TOASTS[id];
+  delete TOASTS[id];
+  if (el) el.remove();
+  if (entry && a !== "toastout") { entry.seen = 1; save("sp_nlog", NLOG); render(); }
+  if (a === "toastgo" && entry) runAct(entry.act);
+}
+function bellHtml() {
+  return '<div class="menu bell" role="menu">' + (NLOG.length ? NLOG.slice().reverse().map(function (e, i) {
+    return '<button role="menuitem" data-a="bellgo" data-k="' + (NLOG.length - 1 - i) + '" class="k-' + esc(e.k) + '"><b><i>' + (TICON[e.k] || "●") + "</i>" + esc(e.t) + "</b>" + (e.b ? "<span>" + esc(e.b) + "</span>" : "") + "<small>" + ago(e.ts) + " ago</small></button>";
+  }).join("") + '<button class="lnk2" data-a="bellclear">Clear history</button>' : '<div class="mut sn">No notifications yet.</div>') + "</div>";
+}
+// Big news: the same story from several of your sources within two hours
+function bigNews() {
+  var n = NTF(), now = Date.now(), sent = 0;
+  if (n.news === false || !NEWS.length) return;
+  newsGroups().forEach(function (g) {
+    var newest = g[0].ts;
+    if (now - newest > 7200000) return;
+    var close = g.filter(function (x) { return newest - x.ts < 7200000; });
+    if (close.length < Math.max(2, n.srcN) || sent >= 2 || !once("bn:" + g[g.length - 1].u)) return;
+    sent++;
+    toast("news", g[0].t, close.length + " sources · " + close.map(function (x) { return x.s; }).join(", "), { a: "news", k: g[0].u });
+  });
+}
+// Stocks: a fast move (compared with the price up to 35 minutes ago) or a big move on the day
+var QH = {};
+function stockAlerts(data) {
+  var n = NTF(), now = Date.now(), sent = 0;
+  if (n.stock === false || !P.stocks) return;
+  P.stocks.forEach(function (x) {
+    var s = tk(x.id), q = data[s];
+    if (!q || !q.p || P.hidden["s:" + x.id]) return;
+    var h = QH[s] = (QH[s] || []).filter(function (o) { return now - o.t < 2100000; });
+    var today = q.c != null ? (q.c >= 0 ? "+" : "") + q.c.toFixed(1) + "% today" : "", go = { a: "stock", k: x.id };
+    if (h.length) {
+      var pc = (q.p - h[0].p) / h[0].p * 100;
+      if (Math.abs(pc) >= n.pct && sent < 3 && once("sf:" + s + (pc > 0 ? "u" : "d") + Math.floor(now / 1800000))) {
+        sent++;
+        toast("stock", s + (pc > 0 ? " ▲ +" : " ▼ ") + pc.toFixed(1) + "% in " + Math.max(1, Math.round((now - h[0].t) / 60000)) + " min", "Now " + q.p.toFixed(2) + (today ? " · " + today : ""), go);
+      }
+    }
+    h.push({ t: now, p: q.p });
+    if (q.c != null && Math.abs(q.c) >= n.day && sent < 3 && once("sd:" + s + (q.c > 0 ? "u" : "d") + ymd(new Date()))) {
+      sent++;
+      toast("stock", s + " is " + (q.c > 0 ? "up " : "down ") + Math.abs(q.c).toFixed(1) + "% today", "Now " + q.p.toFixed(2) + " · click for the news", go);
+    }
+  });
+}
+
+// ---- Calendar: your own events with optional reminders and repeats (saved with your settings) ----
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+function ymd(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+function evOn(e, ds) {
+  if (ds < e.d) return false;
+  if (ds === e.d || e.rep === "d") return true;
+  if (!e.rep) return false;
+  var a = new Date(e.d + "T12:00:00"), b = new Date(ds + "T12:00:00");
+  return e.rep === "w" ? a.getDay() === b.getDay() : e.rep === "m" ? a.getDate() === b.getDate() : e.rep === "y" ? a.getDate() === b.getDate() && a.getMonth() === b.getMonth() : false;
+}
+function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
+var CALV = null, REPS = { "": "Once", d: "Daily", w: "Weekly", m: "Monthly", y: "Yearly" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
+function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
+function openCal() {
+  var now = new Date(), today = ymd(now);
+  if (!CALV) CALV = { y: now.getFullYear(), m: now.getMonth(), sel: today };
+  var start = (new Date(CALV.y, CALV.m, 1).getDay() + 6) % 7, days = new Date(CALV.y, CALV.m + 1, 0).getDate(), cells = "";
+  ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].forEach(function (d) { cells += "<i>" + d + "</i>"; });
+  for (var i = 0; i < start; i++) cells += "<span></span>";
+  for (var d = 1; d <= days; d++) {
+    var ds = CALV.y + "-" + pad2(CALV.m + 1) + "-" + pad2(d);
+    cells += '<button data-a="calday" data-k="' + ds + '" class="' + (ds === today ? "td " : "") + (ds === CALV.sel ? "on" : "") + '">' + d + (evsOn(ds).length ? "<u></u>" : "") + "</button>";
+  }
+  var evRow = function (e, ds, withDay) {
+    return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) +
+      (e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
+      "</span>" + (withDay ? "" : '<button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button>') + "</div>";
+  };
+  var up = [];
+  for (var k = 1; k <= 90 && up.length < 5; k++) {
+    var uds = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + k));
+    evsOn(uds).forEach(function (e) { if (up.length < 5) up.push(evRow(e, uds, true)); });
+  }
+  var draft = $("calT") ? $("calT").value : "";
+  openModal("Calendar", '<div class="calwrap"><div><div class="calh"><button data-a="calnav" data-k="-1" aria-label="Previous month">◀</button><b>' +
+    new Date(CALV.y, CALV.m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + '</b><button data-a="calnav" data-k="1" aria-label="Next month">▶</button><button data-a="calnav" data-k="0">Today</button></div><div class="calg">' + cells + "</div></div>" +
+    '<div class="calr"><h3>' + (CALV.sel === today ? "Today · " : "") + dayLabel(CALV.sel) + "</h3>" + (evsOn(CALV.sel).map(function (e) { return evRow(e, CALV.sel); }).join("") || '<p class="mut sn">Nothing planned.</p>') +
+    '<form id="calAdd" class="cadd"><input type="text" id="calT" placeholder="Add an event…" maxlength="120"><input type="time" id="calTm" aria-label="Time (empty = all day)" title="Time (leave empty for all day)">' +
+    '<select id="calRem" aria-label="Reminder">' + opts(REMS, "") + '</select><select id="calRep" aria-label="Repeat">' + opts(Object.keys(REPS).map(function (r) { return [r, REPS[r]]; }), "") + '</select><button class="pri">Add</button></form>' +
+    (up.length ? "<h3>Coming up</h3>" + up.join("") : "") + "</div></div>");
+  if ($("calT")) $("calT").value = draft;
+}
+function calAct(a, k) {
+  if (a === "calday" || a === "caljump") { CALV.sel = k; CALV.y = +k.slice(0, 4); CALV.m = +k.slice(5, 7) - 1; }
+  else if (a === "calnav") {
+    if (k === "0") CALV = null;
+    else { var d = new Date(CALV.y, CALV.m + (+k), 1); CALV.y = d.getFullYear(); CALV.m = d.getMonth(); }
+  }
+  else if (a === "caldel") { P.cal = (P.cal || []).filter(function (e) { return e.id !== k; }); persist(); render(); }
+  openCal();
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id !== "calAdd") return;
+  e.preventDefault();
+  var t = $("calT").value.trim();
+  if (!t) return;
+  if ((P.cal = P.cal || []).length >= 300) { alert("The calendar is full (300 events). Delete some old ones first."); return; }
+  var ev = { id: "e" + Date.now().toString(36), t: t, d: CALV.sel };
+  if ($("calTm").value) ev.tm = $("calTm").value;
+  if ($("calRem").value !== "") { ev.rem = +$("calRem").value; if (NTF().desktop) askNotify(); }
+  if ($("calRep").value) ev.rep = $("calRep").value;
+  P.cal.push(ev); $("calT").value = "";
+  persist(); render(); openCal(); $("calT").focus();
+});
+// Reminders: all-day events count as starting at 09:00
+function calCheck() {
+  if (NTF().cal === false || !P.cal || !P.cal.length) return;
+  var now = Date.now();
+  [0, 1].forEach(function (off) {
+    var t = new Date(), ds = ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() + off));
+    evsOn(ds).forEach(function (e) {
+      if (e.rem == null) return;
+      var start = new Date(ds + "T" + (e.tm || "09:00") + ":00").getTime();
+      if (now < start - e.rem * 60000 || now > start + 3600000 || !once("cal:" + e.id + ds)) return;
+      var m = Math.round((start - now) / 60000);
+      toast("cal", e.t, (off ? "Tomorrow" : "Today") + (e.tm ? " " + e.tm : "") + (m > 90 ? "" : m > 1 ? " · in " + m + " min" : m > -2 ? " · now" : " · started " + (-m) + " min ago"),
+        { a: "cal", k: ds }, true);
+    });
+  });
+}
+setInterval(calCheck, 20000);
+
+// ---- Hover preview: rest the mouse on a headline or Telegram post to see the picture and text without opening it ----
+var PEEK = {}, peekT = 0, peekKey = "";
+function peekData(k) {
+  var u = k.slice(2);
+  if (k.charAt(0) === "r") {
+    var rp = RD.filter(function (x) { return x.u === u; })[0];
+    return rp ? { title: rp.t, text: rp.d, img: safeUrl(rp.img), meta: "r/" + rp.s + (rp.by ? " · " + rp.by : "") + " · " + when(rp.ts) } : null;
+  }
+  if (k.charAt(0) === "m") {
+    var p = TGP.filter(function (x) { return x.u === u; })[0];
+    return p ? { title: "", text: p.tx || p.t, img: safeUrl(p.img) || safeUrl(p.th), meta: p.s + " · " + when(p.ts) + (p.vid ? " · video" : "") } : null;
+  }
+  var g = NG.filter(function (x) { return x.some(function (n) { return n.u === u; }); })[0], n = g && g.filter(function (x) { return x.u === u; })[0];
+  if (!n) return null;
+  var ex = PEEK[u] || {}, best = g.filter(function (x) { return x.d; })[0];
+  return { title: n.t, text: n.d || (best && best.d) || ex.d || "", img: safeUrl(n.img) || safeUrl(ex.img), need: !n.d && !PEEK[u], u: u,
+    meta: g.map(function (x) { return x.s; }).join(" · ") + " · " + when(n.ts) };
+}
+function showPeek(el, k) {
+  var d = peekData(k), p = $("peek");
+  if (!d || EDIT) return;
+  p.innerHTML = (d.img ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(d.img) + '">' : "") + '<div class="pk">' + (d.title ? "<b>" + esc(d.title) + "</b>" : "") +
+    (d.text ? "<p>" + esc(d.text.slice(0, 700)) + (d.text.length > 700 ? "…" : "") + "</p>" : d.need ? '<p class="mut">Loading summary…</p>' : "") + "<small>" + esc(d.meta) + "</small></div>";
+  placePeek(el);
+  if (!d.need) return;
+  if (!sb || !USER || /(^|\.)(google|bing|yahoo)\.com$/.test((d.u.match(/^https?:\/\/([^\/]+)/) || [])[1] || "")) { PEEK[d.u] = {}; showPeek(el, k); return; }
+  PEEK[d.u] = {};
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { peek: d.u } }).then(function (res) {
+    PEEK[d.u] = (res.data && res.data.peek) || {};
+    if (peekKey === k && !p.hidden && document.contains(el)) showPeek(el, k);
+  }).catch(function () {});
+}
+// Beside the box the mouse is in (or under it, for the small boxes in the top row), kept inside the window
+function placePeek(el, below) {
+  var p = $("peek");
+  p.hidden = false;
+  var r = el.getBoundingClientRect(), c = (el.closest(".card") || el).getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight, x = c.right + 8, y = r.top - 12;
+  if (x + w > innerWidth - 8) x = c.left - w - 8;
+  if (below || x < 8) { x = Math.max(8, Math.min(r.left, innerWidth - w - 8)); y = (below ? c.bottom : r.bottom) + 6; if (y + h > innerHeight - 8) y = r.top - h - 6; }
+  p.style.left = Math.round(x) + "px"; p.style.top = Math.round(Math.max(8, Math.min(y, innerHeight - h - 8))) + "px";
+}
+// Mail tile: the latest unread subjects
+function showMailPeek(el, i) {
+  var m = MAIL[i], c = P.mail && P.mail[i];
+  if (!m || m.error || !c || EDIT) return;
+  var seen = c.seen, items = (m.items || []).slice().sort(function (a, b) { return b.ts - a.ts; }).slice(0, 6), n = mailN(i);
+  $("peek").innerHTML = '<div class="pk"><b>' + esc(c.name || "Mail") + " · " + n.txt + " " + n.lab + "</b>" + (items.map(function (x) {
+    return '<div class="pm' + (seen && x.ts > seen * 1000 ? " nw" : "") + '"><span><b>' + esc((x.from || "").replace(/<.*>/, "").replace(/"/g, "").trim() || x.from || "") + "</b> " + esc(x.subject || "(no subject)") + "</span><small>" + ago(x.ts) + "</small></div>";
+  }).join("") || '<p class="mut">No unread mail.</p>') + "</div>";
+  placePeek(el, true);
+}
+function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; }
+var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"]';
+document.addEventListener("mouseover", function (e) {
+  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", k = b && (mail ? "mail:" + b.dataset.k : b.dataset.k);
+  if (!b || !(mail || /^[amr]:/.test(k))) return;
+  if (k === peekKey) return;
+  clearTimeout(peekT); peekKey = k;
+  peekT = setTimeout(function () {
+    if (peekKey !== k || !document.contains(b) || !$("modal").hidden) return;
+    if (mail) showMailPeek(b, +b.dataset.k); else showPeek(b, k);
+  }, 350);
+});
+document.addEventListener("mouseout", function (e) {
+  var b = e.target.closest && e.target.closest(PEEKSEL);
+  if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) hidePeek();
+});
+document.addEventListener("scroll", hidePeek, true);
+document.addEventListener("click", hidePeek, true);
+
+// ---- Stock window: recent news and chatter, to see why it is moving ----
+function loadStockNews(id) {
+  var box = $("stInfo"), s = tk(id);
+  if (!box) return;
+  if (!sb || !USER) { box.innerHTML = '<p class="mut sn">Sign in to load news for this stock.</p>'; return; }
+  sb.functions.invoke("quotes", { body: { news: s } }).then(function (r) {
+    if ($("stInfo") !== box) return;
+    var v = r.data;
+    if (r.error || !v || v._err || !v.news) { box.innerHTML = '<p class="mut sn">' + (v && !v._err && !v.news ? "Stock news needs the updated <b>quotes</b> function. Redeploy it in Supabase." : "Could not load news right now.") + "</p>"; return; }
+    var item = function (x, sub) { var u = safeUrl(x.u); return '<div class="si">' + (u ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + esc(x.t) + "</a>" : "<span>" + esc(x.t) + "</span>") + " <small>" + sub + "</small></div>"; };
+    box.innerHTML = "<h3>Why is it moving? Latest news" + (v.via ? " · " + esc(v.via) : "") + "</h3>" +
+      (v.news.map(function (x) { return item(x, esc(x.s) + " · " + ago(x.ts)); }).join("") || '<p class="mut sn">No recent news found for ' + esc(s) + ".</p>") +
+      (v.chat && v.chat.length ? "<h3>What people are saying</h3>" + v.chat.map(function (x) {
+        return item(x, esc(x.by) + " · " + ago(x.ts) + (x.mood ? ' · <span class="' + (/bull/i.test(x.mood) ? "up" : "down") + '">' + esc(x.mood) + "</span>" : ""));
+      }).join("") : "");
+  }).catch(function () { if ($("stInfo") === box) box.innerHTML = '<p class="mut sn">Could not load news right now.</p>'; });
+}
+
+// ---- Morning summary: what happened in the last 24 hours, in one small window ----
+var BRIEF_T = "Since yesterday";
+function briefHtml() {
+  var now = Date.now(), cut = now - 86400000, h = "", sec = function (t, body) { return body ? "<h3>" + t + "</h3>" + body : ""; };
+  var warn = WX ? wxWarn(WX) : [];
+  if (warn.length) h += '<div class="warnbox">' + warn.map(function (x) { return "<div><b>! " + x.t + "</b> " + x.day.toLowerCase() + (x.x ? " · " + esc(x.x) : "") + "</div>"; }).join("") + "</div>";
+  var todayEv = evsOn(ymd(new Date()));
+  h += sec("Today in your calendar", todayEv.map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join(""));
+  var top = NEWS.length ? newsGroups().filter(function (g) { return g[0].ts > cut; }).sort(function (a, b) { return b.length - a.length || (b.hi ? 1 : 0) - (a.hi ? 1 : 0) || b[0].ts - a[0].ts; }).slice(0, 6) : [];
+  h += sec("Top stories", top.map(function (g) {
+    return '<div class="row' + (g.some(function (x) { return READ[x.u]; }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
+  }).join(""));
+  var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, 6);
+  h += sec("Biggest movers", mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "");
+  var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!c || !c.url || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
+  h += sec("Mail", mail ? '<div class="chips">' + mail + "</div>" : "");
+  var live = (TWC && TW ? TW : []).filter(function (x) { return !P.hidden["t:" + x.id]; }).sort(function (a, b) { return (P.fav["t:" + b.id] ? 1 : 0) - (P.fav["t:" + a.id] ? 1 : 0) || b.v - a.v; }).slice(0, 8);
+  h += sec("Live now", live.length ? '<div class="chips">' + live.map(function (x) { return '<button data-a="open" data-k="' + esc("t:" + x.id) + '" title="' + esc(x.title || "") + '"><span class="dot"></span><b>' + esc(x.name || x.id) + "</b> <small>" + esc(x.sub || "") + "</small></button>"; }).join("") + "</div>" : "");
+  return h || '<p class="mut">Nothing to show yet. Sign in and let the page load first.</p>';
+}
+function openBrief() { openModal(BRIEF_T, '<div class="brief">' + briefHtml() + "</div>"); }
+// Keeps an open summary up to date while the rest of the data is still arriving
+function refreshBrief() { if (!$("modal").hidden && $("mTitle").textContent === BRIEF_T) $("mBody").innerHTML = '<div class="brief">' + briefHtml() + "</div>"; }
+function maybeBrief() {
+  var today = ymd(new Date());
+  if (P.brief === false || !USER || !NEWS.length || !$("modal").hidden || load("sp_brief", "") === today) return;
+  save("sp_brief", today);
+  openBrief();
+}
+
+// ---- Search bar: plain words go to your search engine, a site name opens the site, !bangs pick a site to search ----
+var ENGINES = { google: "https://www.google.com/search?q=", ddg: "https://duckduckgo.com/?q=", brave: "https://search.brave.com/search?q=", bing: "https://www.bing.com/search?q=", kagi: "https://kagi.com/search?q=" };
+var BANGS = {
+  g: ENGINES.google, ddg: ENGINES.ddg, yt: "https://www.youtube.com/results?search_query=", tw: "https://www.twitch.tv/search?term=",
+  r: "https://www.reddit.com/search/?q=", w: "https://en.wikipedia.org/w/index.php?search=", gh: "https://github.com/search?q=",
+  maps: "https://www.google.com/maps/search/", news: "https://news.google.com/search?q=", tv: "https://www.tradingview.com/symbols/", a: "https://www.amazon.com/s?k="
+};
+function searchUrl(q) {
+  q = q.trim();
+  if (!q) return "";
+  var m = q.match(/^!(\w+)\s*(.*)$/) || q.match(/^(.*?)\s+!(\w+)$/);
+  if (m) {
+    var bang = /^!/.test(q) ? m[1] : m[2], rest = /^!/.test(q) ? m[2] : m[1];
+    if (BANGS[bang.toLowerCase()]) return BANGS[bang.toLowerCase()] + encodeURIComponent(rest);
+  }
+  if (/^https?:\/\/\S+$/i.test(q)) return q;
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(q)) return "https://" + q;
+  return (ENGINES[P.engine] || ENGINES.google) + encodeURIComponent(q);
+}
+function openSearch() { $("srchIn").focus(); $("srchIn").select(); }
+$("srch").addEventListener("submit", function (e) {
+  e.preventDefault();
+  var u = safeUrl(searchUrl($("srchIn").value));
+  if (!u) return;
+  $("srchIn").value = ""; $("srchIn").blur();
+  if (P.srchNew) window.open(u, "_blank", "noopener"); else location.href = u;
+});
+$("srchIn").addEventListener("keydown", function (e) {
+  if (e.key === "Escape") { e.target.blur(); return; }
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  var u = safeUrl(searchUrl(e.target.value));
+  if (u) { e.target.value = ""; window.open(u, "_blank", "noopener"); }
+});
+
+// ---- Settings that are not part of the colors ----
+function loadExtraForm() {
+  var w = NW();
+  $("nwMute").value = w.mute || ""; $("nwHi").value = w.hi || "";
+  $("twPopOn").checked = !!P.twPop;
+  $("engineSel").value = ENGINES[P.engine] ? P.engine : "google"; $("srchNewTab").checked = !!P.srchNew;
+  var n = NTF();
+  NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
+  NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
+  $("briefOn").checked = P.brief !== false;
+}
+function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi").value.trim() }; persist(); render(); }
+$("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
+$("twPopOn").onchange = function () { P.twPop = this.checked; persist(); };
+// Notification settings: [input id, name in P.ntf, (for numbers) lowest, highest]
+var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSound", "sound"], ["nfDesktop", "desktop"]];
+var NF_NUM = [["nfSrcN", "srcN", 2, 6], ["nfPct", "pct", 0.5, 50], ["nfDay", "day", 1, 90]];
+function setNtf() {
+  var n = {};
+  NF_BOX.forEach(function (x) { n[x[1]] = $(x[0]).checked; });
+  NF_NUM.forEach(function (x) { var v = parseFloat($(x[0]).value); n[x[1]] = isNaN(v) ? NTF()[x[1]] : Math.max(x[2], Math.min(x[3], v)); });
+  P.ntf = n; persist();
+  if (n.desktop) askNotify();
+}
+NF_BOX.concat(NF_NUM).forEach(function (x) { $(x[0]).onchange = setNtf; });
+$("briefOn").onchange = function () { P.brief = this.checked; persist(); };
+$("engineSel").onchange = function () { P.engine = this.value; persist(); };
+$("srchNewTab").onchange = function () { P.srchNew = this.checked; persist(); };
+$("auroraOn").onchange = function () { P.aurora = this.checked; persist(); applyTheme(); };
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "newsQ") return;
+  debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase() : ""; render(); });
+});
+
+// ---- Backup and restore ----
+$("bkExport").onclick = function () {
+  var data = JSON.stringify({ app: "OmniRama", v: VERSION, at: new Date().toISOString(), prefs: Object.assign({}, P, { tw: undefined }) }, null, 2);
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+  a.download = "omnirama-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  $("bkMsg").textContent = "Backup downloaded.";
+};
+$("bkFile").onchange = function (e) {
+  var f = e.target.files[0];
+  if (!f) return;
+  var fr = new FileReader();
+  fr.onload = function () {
+    var p = null;
+    try { var j = JSON.parse(fr.result); p = j && j.app === "OmniRama" ? j.prefs : null; } catch (x) {}
+    e.target.value = "";
+    if (!p || typeof p !== "object" || Array.isArray(p)) { $("bkMsg").textContent = "That file is not an OmniRama backup."; return; }
+    if (!confirm("Replace your current settings, sources, notes and layout with this backup?")) return;
+    var tw = P.tw;
+    P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, p);
+    if (!P.fav || typeof P.fav !== "object") P.fav = {};
+    if (!P.hidden || typeof P.hidden !== "object") P.hidden = {};
+    if (tw) P.tw = tw;
+    persist(); applyTheme(); applyWall(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks();
+    NEWS = []; TGP = []; NEWSV++; MAIL = [];
+    render(); refreshAll(true);
+    $("bkMsg").textContent = "Restored.";
+  };
+  fr.readAsText(f);
+};
+
+// ---- Keyboard shortcuts (when you are not typing in a box) ----
+function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchWeather(); fetchRates(); }
+document.addEventListener("keydown", function (e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  if (typing || !$("modal").hidden) return;
+  var k = e.key;
+  if (k === "/") { e.preventDefault(); openSearch(); }
+  else if (k === "e") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); render(); }
+  else if (k === "n") openNotes();
+  else if (k === "c") { CALV = null; openCal(); }
+  else if (k === "b") openBrief();
+  else if (k === "s") $("panel").hidden = !$("panel").hidden;
+  else if (k === "r") refreshAll(true);
+  else if (k === "t") { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); }
+  else if (k === "?") openHelp();
+});
+
+// ---- Only poll while the page is visible (saves your Supabase / API quotas); catch up when you come back ----
+var HIDDEN_AT = 0;
+function every(ms, fn, inBackground) { setInterval(function () { if (!document.hidden || (inBackground && inBackground())) fn(); }, ms); }
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) { HIDDEN_AT = Date.now(); return; }
+  tick(); tickClocks();
+  // Away for more than 2 minutes: what was on screen when you left counts as seen, so only newer items are marked new
+  if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000) { markSeen(HIDDEN_AT); refreshAll(); }
+  else render();
+  HIDDEN_AT = 0;
+});
+
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); setInterval(fetchWeather, 900000); fetchClockTz(); fetchRates(); setInterval(fetchRates, 300000);
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); fetchRates();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
-fetchTwitch(); setInterval(fetchTwitch, 60000); setInterval(fetchQuotes, 300000); setInterval(fetchYT, 600000); setInterval(fetchNews, 300000); setInterval(fetchMail, 300000); setInterval(checkUpdate, 300000); loadMailForm(); renderSources(); renderClocks();
-setInterval(tick, 30000);
+fetchTwitch(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks();
+every(900000, fetchWeather); every(300000, fetchRates);
+// With desktop notifications on, the things that can notify keep updating while the tab is in the background
+function bg(kind) { return function () { var n = NTF(); return !!n.desktop && n[kind] !== false; }; }
+every(60000, fetchTwitch, bg("live"));
+every(300000, fetchNews, function () { return bg("news")() || bg("words")(); });
+every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(300000, checkUpdate);
+setInterval(tick, 1000);
