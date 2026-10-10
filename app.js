@@ -1,4 +1,4 @@
-var VERSION = 72;
+var VERSION = 73;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -420,7 +420,7 @@ function render() {
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  T.live = tile("live", "", convHtml());
+  T.live = tile("live", "", radioHtml());
   var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb, nNew = 0;
   var errNote = NERRK.length ? '<div class="empty sn">' + NERRK.length + " source" + (NERRK.length > 1 ? "s" : "") + ' unavailable right now (<button class="lnk2" data-a="setpanel" title="' + esc(NERR) + '">details</button>)</div>' : "";
@@ -676,7 +676,7 @@ function renderHidden() {
   }).join("");
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
-var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Currency converter", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
+var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
 function boxOff(id) { var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
 function setBoxOff(id, off) {
   var L = LAY();
@@ -1916,31 +1916,107 @@ function fetchRates() {
     render();
   }).catch(function () { ratesBusy = false; });
 }
-function conv() { if (!P.conv) P.conv = { amt: 100, from: "USD", to: "EUR" }; return P.conv; }
-function convOpts(cur) { return CONV_LIST.map(function (x) { return '<option value="' + x.c + '"' + (x.c === cur ? " selected" : "") + ">" + x.c + "</option>"; }).join(""); }
-function convHtml() {
-  var c = conv(), out = "—";
-  if (RATES[c.from] && RATES[c.to]) out = fmtNum((c.amt * RATES[c.from]) / RATES[c.to]);
-  return '<div class="mrow conv">' +
-    '<input type="number" id="convAmt" inputmode="decimal" step="any" min="0" value="' + esc(String(c.amt)) + '" aria-label="Amount">' +
-    '<select id="convFrom" aria-label="From currency">' + convOpts(c.from) + "</select>" +
-    '<button data-a="convswap" aria-label="Swap currencies">⇄</button>' +
-    '<select id="convTo" aria-label="To currency">' + convOpts(c.to) + "</select>" +
-    '<b id="convOut" title="' + (RATESerr ? esc(RATESerr) : "") + '">' + out + "</b></div>";
-}
 function fmtNum(n) {
   var d = Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 1 ? 2 : 6;
   return n.toLocaleString("en-GB", { maximumFractionDigits: d });
 }
-document.addEventListener("input", function (e) {
-  if (e.target.id !== "convAmt") return;
-  conv().amt = parseFloat(String(e.target.value).replace(",", ".")) || 0; persist();
-  var n = $("convOut"); if (n) n.textContent = RATES[conv().from] && RATES[conv().to] ? fmtNum((conv().amt * RATES[conv().from]) / RATES[conv().to]) : "—";
-});
+
+// ---- Radio (the small box next to the menu; it used to hold the currency converter, which the search bar now does) ----
+// Internet radio, played by the browser straight from each station's own stream. [id, name, kind, stream address].
+// Which stations are in the box's list is chosen in Settings > Radio.
+var RADIOS = [
+  ["retro", "Retro FM", "Estonia", "https://stream.skymedia.ee/live/RETRO"],
+  ["rockfm", "Rock FM", "Estonia", "https://edge02.cdn.bitflip.ee:8888/rck"],
+  ["rockmetal", "Rock FM Metal", "Estonia", "https://edge04.cdn.bitflip.ee:8888/rckmetal"],
+  ["skyplus", "Sky Plus", "Estonia", "https://stream.skymedia.ee/live/SKYPLUS"],
+  ["nrj", "NRJ", "Estonia", "https://stream.skymedia.ee/live/NRJ"],
+  ["power", "Power Hit Radio", "Estonia", "https://ice.leviracloud.eu/phr96-aac"],
+  ["starfm", "Star FM", "Estonia", "https://ice.leviracloud.eu/star320-mp3"],
+  ["r2", "Raadio 2", "Estonia", "https://icecast.err.ee/raadio2.mp3"],
+  ["viker", "Vikerraadio", "Estonia", "https://icecast.err.ee/vikerraadio.mp3"],
+  ["hot97", "Hot 97 (New York)", "Hip-hop", "https://playerservices.streamtheworld.com/api/livestream-redirect/WQHTFMAAC.aac"],
+  ["hh100", "100 Hip Hop & RnB", "Hip-hop", "https://streaming.shoutcast.com/100-hip-hop-and-rnb-fm"],
+  ["hhwork", "Hip Hop Workout", "Hip-hop", "https://stream.revma.ihrhls.com/zc7785"],
+  ["old181", "181.fm Old School", "Hip-hop", "https://listen.181fm.com/181-oldschool_128k.mp3"],
+  ["beat181", "181.fm The Beat", "Hip-hop", "https://listen.181fm.com/181-beat_128k.mp3"],
+  ["rpr1", "RPR1 Old School Hip Hop", "Hip-hop", "https://streams.rpr1.de/rpr-hiphop-128-mp3"],
+  ["bigrap", "bigFM Deutschrap", "Hip-hop", "https://stream.bigfm.de/rapfeature/mp3-128/"],
+  ["rprock", "Radio Paradise Rock", "Rock", "https://stream.radioparadise.com/rock-320"],
+  ["q1043", "Q104.3 Classic Rock", "Rock", "https://stream.revma.ihrhls.com/zc1465"],
+  ["eagle181", "181.fm The Eagle", "Rock", "https://listen.181fm.com/181-eagle_128k.mp3"],
+  ["bob", "Radio Bob", "Rock", "https://streams.radiobob.de/bob-national/mp3-192/"],
+  ["p3", "Sveriges Radio P3", "Sweden", "https://live1.sr.se/p3-mp3-96"],
+  ["rpmain", "Radio Paradise", "Mixed", "https://stream.radioparadise.com/mp3-192"],
+  ["kexp", "KEXP Seattle", "Mixed", "https://kexp-mp3-128.streamguys1.com/kexp128.mp3"],
+  ["a80s", "181.fm Awesome 80s", "Mixed", "https://listen.181fm.com/181-awesome80s_128k.mp3"],
+  ["s90s", "181.fm Star 90s", "Mixed", "https://listen.181fm.com/181-star90s_128k.mp3"],
+  ["dance", "Dance Wave", "Dance", "https://dancewave.online/dance.mp3"],
+  ["lofi", "Lofi (laut.fm)", "Chill", "https://stream.laut.fm/lofi"],
+  ["bbcws", "BBC World Service", "Talk", "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service"]
+];
+var RADIO_DEF = ["retro", "rockfm", "hot97", "hh100", "old181", "rprock", "rpmain"];
+function radioIds() { var on = P.radio && Array.isArray(P.radio.on) ? P.radio.on : RADIO_DEF; return RADIOS.filter(function (r) { return on.indexOf(r[0]) >= 0; }); }
+function radioCur() { var list = radioIds(), id = P.radio && P.radio.cur; return list.filter(function (r) { return r[0] === id; })[0] || list[0] || null; }
+function radioVol() { var v = P.radio && P.radio.vol; return v >= 0 && v <= 100 ? +v : 60; }
+function radioSet(k, v) { P.radio = P.radio || {}; P.radio[k] = v; persist(); }
+var RAD = { a: null, id: "", state: "" };   // state: "" stopped, "load" connecting, "play" playing, "err" could not play
+function radioPlay() {
+  var s = radioCur();
+  if (!s) return;
+  if (!RAD.a) {
+    RAD.a = new Audio(); RAD.a.preload = "none";
+    var set = function (st) { return function () { if (RAD.state && RAD.state !== st) { RAD.state = st; render(); } }; };
+    RAD.a.addEventListener("playing", set("play")); RAD.a.addEventListener("waiting", set("load")); RAD.a.addEventListener("error", set("err"));
+  }
+  RAD.id = s[0]; RAD.state = "load";
+  RAD.a.src = s[3]; RAD.a.volume = radioVol() / 100;
+  var p = RAD.a.play();
+  if (p && p.catch) p.catch(function () { if (RAD.id === s[0] && RAD.state === "load") { RAD.state = "err"; render(); } });
+  try { if (navigator.mediaSession && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: s[1], artist: "OmniRama radio" }); } catch (e) {}
+  render();
+}
+function radioStop() {
+  if (RAD.a) { RAD.state = ""; RAD.a.pause(); RAD.a.removeAttribute("src"); RAD.a.load(); }   // dropping the address really ends the stream
+  RAD.state = ""; render();
+}
+function radioHtml() {
+  var list = radioIds(), cur = radioCur(), RI = 'viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"', v = radioVol();
+  if (!list.length) return '<div class="mrow radio"><span class="mut">No stations chosen. Pick some in Settings, Radio.</span></div>';
+  var st = RAD.state, tip = st === "play" ? "Playing " + cur[1] : st === "load" ? "Connecting…" : st === "err" ? "Could not play this station right now" : "Play";
+  return '<div class="mrow radio">' +
+    '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2]) + '">' + list.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>"; }).join("") + "</select>" +
+    '<button data-a="radplay" class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" aria-label="Play" title="' + tip + '"><svg ' + RI + '><path d="M8 5.500v13l10.500-6.500z"/></svg></button>' +
+    '<button data-a="radstop" class="ib" aria-label="Stop" title="Stop"><svg ' + RI + '><rect x="6.500" y="6.500" width="11" height="11" rx="1.500"/></svg></button>' +
+    '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
+    (MENU_OPEN === "vol" ? '<div class="menu volpop"><input type="range" id="radVol" min="0" max="100" step="1" value="' + v + '" aria-label="Radio volume"><span id="radVolN">' + v + "</span></div>" : "") + "</div></div>";
+}
 document.addEventListener("change", function (e) {
-  if (e.target.id === "convFrom") { conv().from = e.target.value; persist(); render(); }
-  else if (e.target.id === "convTo") { conv().to = e.target.value; persist(); render(); }
+  if (e.target.id !== "radSel") return;
+  radioSet("cur", e.target.value);
+  if (RAD.state) radioPlay(); else render();   // switching while it plays tunes straight to the new station
 });
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "radVol") return;
+  var v = +e.target.value;
+  if (RAD.a) RAD.a.volume = v / 100;
+  if ($("radVolN")) $("radVolN").textContent = v;
+  P.radio = P.radio || {}; P.radio.vol = v; debounced("radVol", function () { persist(); });
+});
+// Settings > Radio: one tick box per station, grouped by kind
+function renderRadioList() {
+  var on = {}, groups = {}, order = [];
+  radioIds().forEach(function (r) { on[r[0]] = 1; });
+  RADIOS.forEach(function (r) { if (!groups[r[2]]) { groups[r[2]] = []; order.push(r[2]); } groups[r[2]].push(r); });
+  $("radList").innerHTML = order.map(function (g) {
+    return '<div class="sub"><b>' + esc(g) + "</b>" + groups[g].map(function (r) { return "<label>" + esc(r[1]) + ' <input type="checkbox" data-a="radtoggle" data-k="' + r[0] + '"' + (on[r[0]] ? " checked" : "") + "></label>"; }).join("") + "</div>";
+  }).join("");
+}
+function radioToggle(id, isOn) {
+  var cur = radioIds().map(function (r) { return r[0]; }).filter(function (x) { return x !== id; });
+  if (isOn) cur.push(id);
+  radioSet("on", RADIOS.map(function (r) { return r[0]; }).filter(function (x) { return cur.indexOf(x) >= 0; }));
+  render();
+}
 
 // ---- Weather (Open-Meteo, no key needed) ----
 var WX = null;
@@ -2195,7 +2271,11 @@ document.addEventListener("click", function (e) {
     }).catch(function () { alert("Could not copy automatically. Select the text below and copy it manually (Ctrl+C or Cmd+C)."); });
     return;
   }
-  if (a === "convswap") { var c = conv(), t = c.from; c.from = c.to; c.to = t; persist(); render(); return; }
+  if (a === "radplay") { radioPlay(); return; }
+  if (a === "radstop") { radioStop(); return; }
+  if (a === "radvol") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "vol" ? "" : "vol"; render(); return; }
+  if (a === "radtoggle") { radioToggle(k, b.checked); return; }
+  if (a === "radreset") { if (P.radio) delete P.radio.on; persist(); renderRadioList(); render(); return; }
   if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : k === "rd" ? "filtRd" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
@@ -2417,16 +2497,18 @@ var GS_CODE = '// Paste this whole file into your Apps Script project (replace w
 function openHelp() {
   var toc = [
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
-    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["convert", "Currency converter"],
+    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"],
     ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
     ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
   ];
   var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
     toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon (top right area of the site, in the row of small icons). Enter an email and password and press <b>Create account</b>. Once you\'re signed in, everything you set up is saved and will still be there next time, on any device.</p>';
+  html += '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
 
-  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Location &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other.</p>';
+  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide walks you through the boxes you want; you can run it again from <b>Settings &rarr; Layout &amp; boxes</b>. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
+
+  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
   html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
     '<ol>' +
@@ -2446,9 +2528,11 @@ function openHelp() {
     '<li>Google will ask you to authorize the script. Click <b>Authorize access</b>, choose your account. If you see a warning that says the app isn\'t verified, click <b>Advanced</b>, then <b>Go to (unsafe)</b>, then <b>Allow</b>. This warning is normal &mdash; it is your own private script, seen only by you.</li>' +
     '<li>You will now see a <b>Web app URL</b> ending in <code>/exec</code>. Click <b>Copy</b> next to it.</li>' +
     '<li>Paste that address into a new browser tab and press Enter. The page will show some text containing a <b>token</b> &mdash; a long code in quotes. Copy that token now; it is only shown this one time. If you ever lose it, there are reset instructions inside the code itself.</li>' +
-    '<li>Go back to this site, open <b>Settings</b> (cogwheel icon) &rarr; <b>Connections</b> &rarr; <b>Gmail accounts</b>. Paste in a name (e.g. "Personal"), the web app address, and the token, then press <b>Save Gmail accounts</b>.</li>' +
+    '<li>Go back to this site, open <b>Settings</b> (cogwheel icon) &rarr; <b>Mail</b>. Paste in a name (e.g. "Personal"), the web app address, and the token, then press <b>Save Gmail accounts</b>.</li>' +
     '<li>Wait about a minute and your unread count will appear on the site.</li>' +
-    '</ol><p class="mut">To add a second inbox, repeat all of the steps above while signed in to that other Gmail account.</p>';
+    '</ol><p class="mut">To add a second inbox, repeat all of the steps above while signed in to that other Gmail account.</p>' +
+    '<p><b>Using it:</b> hover the mail tile for the latest unread subjects, click it for the list, and press <b>Mark read</b> to count only mail that arrives from now on.</p>' +
+    '<p><b>Emails from this page</b> (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by this same script to its own address. If you set the script up a while ago, replace its code with the code above and deploy it again (<b>Deploy &rarr; Manage deployments &rarr; pencil &rarr; Version: New version &rarr; Deploy</b>); the address and the token stay the same.</p>';
 
   html += '<h3 id="help-stocks">Stocks</h3><p>Open <b>Settings</b> &rarr; <b>Stocks</b>. There are three ways to add stocks or crypto:</p><ol>' +
     '<li><b>Add one at a time:</b> type a symbol like <code>NASDAQ:NVDA</code> and press Add.</li>' +
@@ -2460,15 +2544,18 @@ function openHelp() {
     '<li>Choose <b>Advanced view</b> (or <b>Share</b>), then turn on link sharing if it is not already on.</li>' +
     '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
     '<li>Paste that link into the "shared TradingView watchlist link" box on this site and press Import.</li>' +
-    '</ol></li></ol>';
+    '</ol></li></ol>' +
+    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. Star or hide a stock in Edit mode.</p>' +
+    '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
-  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News &amp; Telegram sources</b>.</p><ul><li><b>To add a news source:</b> type a website like <code>reuters.com</code> in the box (a name is optional) and press Add.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
-    '<p><b>Reading the news:</b> headlines that arrived since you last looked get an accent bar and a <b>new</b> counter in the tile header (click it to mark everything seen; being away for 2+ minutes does that automatically). Headlines you already opened are dimmed. The same story from several sources is merged into one line with a source count, and stories many sources picked up in the last 3 hours are marked <b>hot</b>. Use the filter box above the list to find a topic.</p>' +
-    '<p><b>Filters &amp; alerts</b> (Settings &rarr; News &amp; Telegram sources): <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
+  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
+    '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. The ⌕ button filters the list.</p>' +
+    '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
+    '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
-  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Connections</b> &rarr; press <b>Connect</b> next to Twitch, log in if asked, and approve access. The tile will then show who you follow that is currently live. Click a name to watch inside the page.</p>' +
+  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Twitch</b> &rarr; press <b>Connect</b>, log in if asked, and approve access. The box then shows who you follow that is live, with game and viewers; sort it or pick one category with the dropdowns. Hover a channel for a preview picture, the stream title and how long it has been live. Click a name to watch inside the page. Streamers you starred (Edit mode) who are offline are listed dimmed under the live ones with when they were last live; switch that off in Settings &rarr; Twitch.</p>' +
     '<p><b>Ads even though you have Turbo or a sub?</b> The player inside this page is a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out and plays ads. Two fixes:</p><ol>' +
-    '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Connections &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
+    '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Twitch &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
     '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only.<ul>' +
     '<li>Chrome: Settings &rarr; Privacy and security &rarr; Third-party cookies &rarr; <i>Sites allowed to use third-party cookies</i> &rarr; Add &rarr; <code>[*.]twitch.tv</code>.</li>' +
     '<li>Edge: Settings &rarr; Cookies and site permissions &rarr; Manage and delete cookies &rarr; <i>Allow</i> &rarr; Add <code>[*.]twitch.tv</code> (and set Tracking prevention to Balanced, not Strict).</li>' +
@@ -2477,8 +2564,7 @@ function openHelp() {
     '<li>Safari: cross-site tracking prevention cannot be relaxed per site, so use Pop out.</li></ul>Then make sure you are logged in at twitch.tv in the same browser and reload this page.</li></ol>' +
     '<p>Tip: mark streamers with ★ (Edit mode) to get a notification when they go live.</p>';
 
-  html += '<h3 id="help-keys">Search &amp; keyboard shortcuts</h3><p>Type in the small search box at the top (press <code>/</code> to jump to it) and press Enter. A site name like <code>reuters.com</code> opens the site; anything else goes to your search engine (choose it in Settings). Start or end with a &ldquo;bang&rdquo; to search a specific site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Google Maps, <code>!news</code> Google News, <code>!tv</code> TradingView symbol, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. Ctrl+Enter opens in a new tab.</p>' +
-    '<p>The search box also answers sums and conversions while you type: <code>12*45</code>, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>100 usd in eur</code>, <code>0.5 btc to usd</code>, <code>10 km in miles</code>, <code>72 f in c</code>. Press Enter to put the answer in the box and copy it; press Enter again to search for it.</p>' +
+  html += '<h3 id="help-keys">Search &amp; keyboard shortcuts</h3>' + searchHelpHtml() +
     '<p>Shortcuts (when you are not typing in a box): ' + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close." : "switched off.") + ' Change any key, or switch them off, in Settings &rarr; Keyboard shortcuts.</p>';
 
   html += '<h3 id="help-youtube">YouTube</h3><p>This shows new uploads from channels you subscribe to (YouTube does not allow websites to read your personal recommended feed, so this is the closest available option).</p><ol>' +
@@ -2492,26 +2578,36 @@ function openHelp() {
     '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
     '</ol>';
 
-  html += '<h3 id="help-convert">Currency converter</h3><p>Type an amount, choose the two currencies (a few major cryptocurrencies are included), and use the ⇄ button to swap them. This works even if you are not signed in.</p>';
+  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. A red play button means that station could not be reached just now. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
-  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Location &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
+  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
 
-  html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or press <code>n</code>). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>';
-  html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit sources</b>. In the box, choose <b>Hot</b> or <b>New</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview, click for the text and links. Move and resize the box in Edit mode like the others.</p>';
-  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures for football (Champions League, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Europa League), NBA basketball and UFC. Pick a sport and a view in the box: <b>Live &amp; today</b>, <b>Upcoming</b> or <b>Favorites</b>. Click a game for the score or the full UFC fight card, and press ☆ next to a team or fighter to make it a favorite; favorites are marked ★, listed first, and have their own view. Scores update every minute while a game is in play.</p>';
+  html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or use its shortcut). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>' +
+    '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
+  html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
+  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups, NBA, NHL, NFL, MLB, tennis, Formula 1, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
+    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. An esports game has <b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+    '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
+    '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
   html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window.</p>';
-  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab.</p>';
-  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks and Twitch updating while the tab is in the background).</p>' +
+  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>';
+  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
+    '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
     '<p><b>Summary:</b> on your first visit each day a small "Since yesterday" window shows weather warnings, today\'s events, top stories, biggest movers, mail and who is live. Open it any time from the cogwheel menu or with <code>b</code>.</p>' +
     '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
 
   html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
 
-  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, and overall text size.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish.</p>';
+  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish.</p>';
 
-  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it.</p>';
+  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
 
-  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Open <b>Settings</b> &rarr; <b>Account</b> to set a new password once you are signed in. If you forget your password, click the person icon, then <b>Forgot password?</b>, and a reset link will be emailed to you. Everything you set up is private to your own account &mdash; nobody else using this site can see it. <b>Settings &rarr; Backup</b> downloads everything as a file you can restore later.</p>';
+  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Under <b>Settings</b>, the Account sections are:</p><ul>' +
+    '<li><b>Password:</b> set a new one (typed twice). If you forget it, click the person icon, then <b>Forgot password?</b>, and a reset link is emailed to you.</li>' +
+    '<li><b>Sign-in activity:</b> every device and browser signed in to your account right now and the latest sign-ins, with a button to sign out everywhere else. You can also be emailed the first time a new browser signs in (needs an inbox under Mail).</li>' +
+    '<li><b>Delete account:</b> removes the account and everything saved in it, for good.</li>' +
+    '<li><b>Backup:</b> downloads all settings, sources, notes and layout as a file you can restore later.</li></ul>' +
+    '<p>Everything you set up is private to your own account &mdash; nobody else using this site can see it. To run the site, it counts how long the page is open and how often each kind of button is used per account; never what you read, type, search or save. Text you translate in the search bar goes to the MyMemory translation service, and radio stations are played straight from the stations\' own servers.</p>';
 
   openModal("Help", html);
 }
@@ -3505,7 +3601,7 @@ function fighterHead(f, side, e) {
   var n = f[side], id = f[side + "id"], w = f[side + "w"], fav = spIsFav(n);
   return '<div class="spteam fgt">' + (id ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + esc(id) + '.png&w=160&h=116">' : "") +
     '<button class="lnk' + (w ? " win" : "") + '" data-a="fighter" data-k="' + esc(id) + '"><b>' + esc(n) + "</b></button>" +
-    '<span class="mut sn">' + esc(f[side + "r"] || "") + ' <small class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + id) + '"></small></span>' +
+    '<span class="mut sn">' + esc(f[side + "r"] || "") + '</span><span class="odl">odds <b class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + id) + '"></b></span>' +
     '<button class="ib sm' + (fav ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (fav ? "Remove from favorites" : "Add to favorites") + '">' + (fav ? "★" : "☆") + "</button></div>";
 }
 function openFight(key) {
@@ -3513,9 +3609,10 @@ function openFight(key) {
   if (!x) return;
   var e = x.e, f = x.f;
   SP_OPEN = key;
-  openModal(e.title, '<div class="spwin"><div class="spscore">' + fighterHead(f, "a", e) + '<div class="spmid"><span class="mut sn">' + esc(f.wc || "") + (f.rounds ? " · " + f.rounds + " rounds" : "") + "</span>" + fightWhen(e, f) + '<span id="fgRes" class="sn"></span></div>' + fighterHead(f, "b", e) + "</div>" +
-    '<div id="fgStats"></div><div id="fgTape"><p class="mut sn">Loading the fighters…</p></div>' +
-    '<p class="tools"><button data-a="open" data-k="' + esc("p:" + e.id) + '">‹ Whole card</button>' + (e.link ? linkBtn(e.link, "Details on ESPN") : "") + "</p></div>");
+  // Kept tight so the whole fight fits without scrolling: the two buttons sit in the middle of the header, between the fighters
+  openModal(e.title, '<div class="spwin fwf"><div class="spscore">' + fighterHead(f, "a", e) + '<div class="spmid"><span class="mut sn">' + esc(f.wc || "") + (f.rounds ? " · " + f.rounds + " rounds" : "") + "</span>" + fightWhen(e, f) + '<span id="fgRes" class="sn"></span>' +
+    '<span class="fgbtn"><button class="ib sm" data-a="open" data-k="' + esc("p:" + e.id) + '">‹ Whole card</button>' + (e.link ? '<a class="btn ib sm" target="_blank" rel="noopener noreferrer" href="' + esc(e.link) + '">ESPN</a>' : "") + "</span></div>" + fighterHead(f, "b", e) + "</div>" +
+    '<div id="fgStats"></div><div id="fgTape"><p class="mut sn">Loading the fighters…</p></div></div>');
   fillOdds($("mBody"));
   var live = function () { return SP_OPEN === key && !$("modal").hidden; };
   // how it ended
@@ -3589,7 +3686,7 @@ var WIZ_BOXES = [
   ["youtube", "YouTube", "New uploads from your subscriptions."],
   ["sports", "Sports", "Live football, NBA and UFC scores and fixtures."],
   ["mail", "Mail", "Unread counts for up to two Gmail inboxes."],
-  ["live", "Currency converter", "Quick currency and crypto conversion."]
+  ["live", "Radio", "Internet radio: pick a station and press play."]
 ];
 var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "twitch", "youtube", "mail"];
 function wizPages() { return ["pick"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
@@ -3818,14 +3915,118 @@ function scratch(q) {
   var m = /^(note|todo)[:\s]\s*(\S.*)$/i.exec(q.trim());
   return m ? { save: { todo: m[1].toLowerCase() === "todo", t: m[2].trim().slice(0, 2000) }, show: (m[1].toLowerCase() === "todo" ? "New to-do: " : "New note: ") + m[2].trim() } : null;
 }
-function srchShow() {
-  var a = SRCHANS = scratch($("srchIn").value) || calcAnswer($("srchIn").value), box = $("srchAns");
-  box.hidden = !a;
-  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
+// ---- Dates in the search bar: "days until 24 dec", "90 days from today", "week number", "what day is 1 may 2027" ----
+var MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+var DAYNAMES = { christmas: [25, 11], "christmas eve": [24, 11], "christmas day": [25, 11], "new year": [1, 0], "new years": [1, 0], "new year's": [1, 0], "new years eve": [31, 11], "new year's eve": [31, 11], halloween: [31, 9], "valentines day": [14, 1], "valentine's day": [14, 1] };
+// a date as you would type it; with no year it is the next time that date comes round (or the last time, for "since")
+function parseDay(s, past) {
+  s = String(s || "").trim().toLowerCase().replace(/(\d)(st|nd|rd|th)\b/g, "$1").replace(/,/g, " ").replace(/\s+/g, " ").replace(/^the /, "");
+  var now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), d = null, m, hasYear = true;
+  if (s === "today" || s === "now") return today;
+  if (s === "tomorrow") return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  if (s === "yesterday") return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  var mk = function (y, mo, da) { var x = new Date(y, mo, da); return x.getMonth() === mo && x.getDate() === da ? x : null; };
+  if (DAYNAMES[s]) { d = mk(today.getFullYear(), DAYNAMES[s][1], DAYNAMES[s][0]); hasYear = false; }
+  else if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) d = mk(+m[1], +m[2] - 1, +m[3]);
+  else if ((m = /^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?\.?$/.exec(s))) { hasYear = !!m[3]; d = mk(m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : today.getFullYear(), +m[2] - 1, +m[1]); }
+  else if ((m = /^(\d{1,2}) ([a-z]{3,9})\.?(?: (\d{4}))?$/.exec(s)) || (m = /^([a-z]{3,9})\.? (\d{1,2})(?: (\d{4}))?$/.exec(s))) {
+    var dayFirst = /^\d/.test(m[1]), mo = MONTHS.indexOf((dayFirst ? m[2] : m[1]).slice(0, 3));
+    if (mo < 0) return null;
+    hasYear = !!m[3]; d = mk(m[3] ? +m[3] : today.getFullYear(), mo, +(dayFirst ? m[1] : m[2]));
+  }
+  if (!d) return null;
+  if (!hasYear && past !== "same") { if (!past && d < today) d = mk(d.getFullYear() + 1, d.getMonth(), d.getDate()); if (past && d > today) d = mk(d.getFullYear() - 1, d.getMonth(), d.getDate()); }
+  return d;
 }
+function isoWeek(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7); }
+function dayText(d) { return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); }
+function dateAnswer(q) {
+  q = q.trim().toLowerCase().replace(/\?+$/, "").replace(/\s+/g, " ");
+  var now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), m, d, n;
+  var span = function (days) { days = Math.abs(days); return days + " day" + (days === 1 ? "" : "s") + (days >= 14 ? " (" + Math.floor(days / 7) + " weeks" + (days % 7 ? " " + days % 7 + " d" : "") + ")" : ""); };
+  var diff = function (a, b) { return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000); };
+  if ((m = /^(?:how many )?days? (?:until|till|til|to|before|left to|left until) (.+)$/.exec(q)) && (d = parseDay(m[1]))) { n = diff(today, d); return { show: (n < 0 ? span(n) + " ago" : n === 0 ? "That is today" : span(n)) + " · " + dayText(d), raw: String(n) }; }
+  if ((m = /^(?:how many )?days? (?:since|after) (.+)$/.exec(q)) && (d = parseDay(m[1], true))) { n = diff(d, today); return { show: span(n) + " since " + dayText(d), raw: String(n) }; }
+  // two dates without a year are both taken in this year
+  if ((m = /^(?:days? )?between (.+?) and (.+)$/.exec(q)) && (d = parseDay(m[1], "same")) && parseDay(m[2], "same")) { n = diff(d, parseDay(m[2], "same")); return { show: span(n) + " between them", raw: String(Math.abs(n)) }; }
+  if ((m = /^(?:in )?(\d{1,5}) (day|week|month|year)s?(?: (from|after|before|ago))?(?: (.+))?$/.exec(q)) && (/^in /.test(q) || m[3])) {
+    var base = m[4] && m[3] !== "ago" ? parseDay(m[4]) : today, sign = m[3] === "before" || m[3] === "ago" ? -1 : 1, k = +m[1] * sign;
+    if (!base) return null;
+    d = m[2] === "day" ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + k) : m[2] === "week" ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * k) : m[2] === "month" ? new Date(base.getFullYear(), base.getMonth() + k, base.getDate()) : new Date(base.getFullYear() + k, base.getMonth(), base.getDate());
+    return { show: dayText(d) + " · week " + isoWeek(d), raw: ymd(d) };
+  }
+  if ((m = /^week(?: ?number| ?no\.?| ?nr\.?)?(?: (?:of|for|on) (.+)| (.+))?$/.exec(q))) { d = m[1] || m[2] ? parseDay(m[1] || m[2]) : today; return d ? { show: "Week " + isoWeek(d) + (m[1] || m[2] ? " · " + dayText(d) : " · today is " + dayText(d)), raw: String(isoWeek(d)) } : null; }
+  if ((m = /^(?:what |which )?(?:week)?day (?:is|was|of|on) (.+)$/.exec(q)) && (d = parseDay(m[1]))) return { show: dayText(d) + " · week " + isoWeek(d), raw: dayText(d) };
+  if (q === "today" || q === "date" || q === "todays date" || q === "today's date") return { show: dayText(today) + " · week " + isoWeek(today), raw: ymd(today) };
+  return null;
+}
+// ---- Translate in the search bar: "tr hello to swedish", "translate tere hommikust" (to English when no language is given) ----
+// Sent to the free MyMemory translation service, which works out the language it is written in. Only what you type after "tr".
+var TR_LANG = { english: "en", swedish: "sv", estonian: "et", russian: "ru", finnish: "fi", german: "de", french: "fr", spanish: "es", italian: "it", portuguese: "pt", dutch: "nl", polish: "pl", norwegian: "no", danish: "da",
+  latvian: "lv", lithuanian: "lt", ukrainian: "uk", turkish: "tr", greek: "el", czech: "cs", hungarian: "hu", romanian: "ro", japanese: "ja", chinese: "zh-CN", korean: "ko", arabic: "ar", hindi: "hi" };
+var trTimer = 0, TRC = {};
+function trAsk(q) {
+  var m = /^(?:tr|translate)\s+(.+)$/i.exec(q.trim());
+  if (!m) return null;
+  var text = m[1].trim(), to = "en", toName = "English", t = /^(.*\S)\s+(?:to|into|in)\s+([a-zA-Z-]{2,12})$/.exec(text);
+  if (t) {
+    var w = t[2].toLowerCase(), code = TR_LANG[w] || (Object.keys(TR_LANG).filter(function (k) { return TR_LANG[k].toLowerCase() === w; })[0] ? w : "");
+    if (code) { to = TR_LANG[w] || code; toName = TR_LANG[w] ? w.charAt(0).toUpperCase() + w.slice(1) : code.toUpperCase(); text = t[1].trim(); }
+  }
+  return text ? { text: text.slice(0, 400), to: to, toName: toName } : null;
+}
+function trRun(a) {
+  var key = a.to + "|" + a.text, inp = $("srchIn"), typed = inp.value;
+  var done = function (out) {
+    TRC[key] = out;
+    if (inp.value !== typed) return;   // you typed on in the meantime
+    SRCHANS = out.err ? null : { show: out.t, raw: out.t };
+    $("srchAns").hidden = false;
+    $("srchAns").innerHTML = "<b>" + esc(out.err || out.t) + "</b><small>" + (out.err ? "" : (out.from ? out.from + " → " : "→ ") + esc(a.toName) + " · Enter to copy") + "</small>";
+  };
+  if (TRC[key]) { done(TRC[key]); return; }
+  fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(a.text) + "&langpair=autodetect|" + encodeURIComponent(a.to)).then(function (r) { return r.json(); }).then(function (j) {
+    var t = j && j.responseData && j.responseData.translatedText, from = j && j.responseData && j.responseData.detectedLanguage;
+    done(t && +j.responseStatus === 200 ? { t: unent(String(t)), from: from ? String(from).slice(0, 5) : "" } : { err: /limit|quota/i.test(String((j && j.responseDetails) || "")) ? "The free translation limit for today is used up." : "No translation found." });
+  }).catch(function () { done({ err: "The translation service did not answer." }); });
+}
+function srchShow() {
+  var q = $("srchIn").value, box = $("srchAns"), tr = trAsk(q);
+  clearTimeout(trTimer);
+  var a = SRCHANS = scratch(q) || (/^\s*(help|\?)\s*$/i.test(q) ? { show: "What the search bar can do", help: 1 } : null) || (tr ? { show: "Translating to " + tr.toName + "…", wait: 1 } : null) || dateAnswer(q) || calcAnswer(q);
+  box.hidden = !a;
+  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.help ? "Enter to open" : a.wait ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
+  if (tr) trTimer = setTimeout(function () { trRun(tr); }, 500);   // wait until you stop typing
+}
+// "help" in the search bar: everything the bar can do, in one small window
+function searchHelpHtml() {
+  var sk = keysOn() && keyOf("search") ? keyLabel(keyOf("search")) : "";
+  var row = function (a, b) { return "<tr><td><code>" + a + "</code></td><td>" + b + "</td></tr>"; };
+  return '<p class="mut sn">Type in the bar at the top' + (sk ? " (press <code>" + esc(sk) + "</code> to jump to it)" : "") + '. Answers appear under the bar while you type.</p><table class="shelp">' +
+    "<tr><th colspan=\"2\">Search and open</th></tr>" +
+    row("any words", "Search with your search engine (Settings → Search bar). Enter opens it, Ctrl+Enter opens it in a new tab.") +
+    row("reuters.com", "A site name opens the site.") +
+    row("!yt lofi", "Search one site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Maps, <code>!news</code> Google News, <code>!tv</code> TradingView, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. The <code>!</code> word can also go last.") +
+    "<tr><th colspan=\"2\">Answers (Enter copies the answer)</th></tr>" +
+    row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
+    row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
+    row("10 km in miles", "Units: length, weight, volume, speed, time, data and temperature (<code>72 f in c</code>).") +
+    row("days until 24 dec", "Dates: <code>days since 1 jan 2020</code>, <code>90 days from today</code>, <code>in 3 weeks</code>, <code>2 months before 1 may</code>, <code>between 1 mar and 24 dec</code>, <code>week number</code>, <code>what day is 1 may 2027</code>, <code>today</code>.") +
+    row("tr hello to swedish", "Translate. The language it is written in is worked out for you; without <code>to …</code> it goes to English: <code>tr tere hommikust</code>. Sent to the free MyMemory service.") +
+    "<tr><th colspan=\"2\">Save</th></tr>" +
+    row("note buy milk", "Saves a note without opening Notes.") +
+    row("todo call the bank", "Saves a to-do.") +
+    "<tr><th colspan=\"2\">Keys</th></tr>" +
+    row("Enter", "Search, or take the answer shown under the bar (copy it, save it). After an answer, Enter again searches for it.") +
+    row("Ctrl+Enter", "Always search the web, in a new tab, whatever is typed.") +
+    row("Esc", "Leave the bar.") +
+    row("help", "This window.") + "</table>";
+}
+function openSearchHelp() { openModal("Search bar", searchHelpHtml()); }
 // Enter (or a click on the answer): the answer goes into the box, selected, and onto the clipboard
 function srchTake() {
-  if (!SRCHANS) return;
+  if (!SRCHANS || SRCHANS.wait) return;
+  if (SRCHANS.help) { SRCHANS = null; $("srchAns").hidden = true; $("srchIn").value = ""; $("srchIn").blur(); openSearchHelp(); return; }
   if (SRCHANS.save) {
     var s = SRCHANS.save;
     SRCHANS = null;
@@ -3873,7 +4074,7 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
-  renderLangs();
+  renderLangs(); renderRadioList();
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;

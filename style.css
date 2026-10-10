@@ -129,13 +129,23 @@ p.tools{align-items:center;gap:6px}
 .ib span{font-size:11px;font-weight:700;color:var(--ac)}
 .ib.on{border-color:var(--ac);color:var(--ac)}
 .ib.sm{padding:2px 8px;font-size:12px}
-.conv{flex-wrap:nowrap}
-.conv input{font:inherit;font-size:calc(14px*var(--fs,1));color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 6px;flex:none;width:56px;min-width:0}
-.conv input[type=number]{width:60px;padding:3px 6px;-moz-appearance:textfield}
-.conv input[type=number]::-webkit-inner-spin-button,.conv input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-.conv select{flex:none;max-width:52px;padding:3px 2px}
-.conv button{flex:none;padding:2px 7px}
-.conv b{flex:1 1 auto;min-width:0;margin-left:auto;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* Radio: station list, play, stop, volume */
+.compact .mrow.radio{flex-wrap:nowrap;gap:6px}
+.radio select{flex:1 1 0;min-width:0;max-width:none;text-overflow:ellipsis}
+.radio .ib{flex:none;padding:4px 6px}
+.radio .ib.bad{border-color:var(--down);color:var(--down)}
+.radio .ib.busy svg{opacity:.45}
+.radio .dd{position:relative;flex:none}
+.radio .menu.volpop{left:auto;right:0;top:calc(100% + 6px);z-index:31;display:flex;align-items:center;gap:8px;padding:8px 10px;min-width:0;width:170px}
+.volpop input[type=range]{flex:1 1 0;min-width:0}
+.volpop span{flex:none;width:2.2em;text-align:right;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:no-preference){.radio .ib.busy svg{animation:radbusy 1s ease-in-out infinite alternate}}
+@keyframes radbusy{to{opacity:1}}
+/* "help" in the search bar */
+.shelp{width:100%;border-collapse:collapse;font-size:13px}
+.shelp th{text-align:left;font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;padding:10px 0 3px}
+.shelp td{padding:4px 8px 4px 0;border-top:1px solid var(--line);vertical-align:top}
+.shelp td:first-child{white-space:nowrap;width:1%}
 .pairwrap{grid-column:span 6;display:flex;gap:10px;align-items:stretch;min-width:0}
 .pairwrap>.card{min-width:0}
 .paird{flex:0 0 18px;align-self:stretch;background:transparent;border:0;border-radius:8px;color:var(--mut);cursor:ew-resize;touch-action:none;font-size:14px;letter-spacing:-2px}
@@ -761,6 +771,20 @@ body.noshadow #srchAns{box-shadow:none}
 .od.odf{color:var(--ac)}
 .spteam.fgt img{width:80px;height:58px;object-fit:cover;object-position:top;border-radius:8px}
 .spteam.fgt .lnk{font-size:15px}
+.odl{font-size:12px;color:var(--mut)}
+.odl:has(.od:empty){visibility:hidden}
+/* the window of one fight: compact, so everything is on screen at once */
+.mbox:has(.fwf){max-height:96vh;padding:14px 18px}
+.fwf .spscore{padding:0 0 2px;gap:8px;align-items:start}
+.fwf .spteam{gap:2px}
+.fwf .spteam.fgt img{width:68px;height:49px}
+.fwf .spteam .ib.sm{padding:0 7px;margin-top:2px}
+.fwf .spmid{gap:5px;padding-top:6px}
+.fwf .fgbtn{display:flex;gap:5px;margin-top:4px}
+.fwf h3{margin:8px 0 2px}
+.fwf .tape{font-size:12.5px}
+.fwf .tape td,.fwf .tape th{padding:1px 6px;line-height:1.45}
+.fwf .tape th{font-size:11px}
 .frow .fname{display:inline}
 .frow .r .lnk{color:var(--mut);white-space:nowrap}
 .tape{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
