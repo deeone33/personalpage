@@ -1,4 +1,4 @@
-var VERSION = 50;
+var VERSION = 51;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -75,7 +75,7 @@ Object.keys(BADIMG).forEach(function (u) { if (Date.now() - BADIMG[u] > 60480000
 document.addEventListener("error", function (e) {
   var t = e.target;
   if (!t || t.tagName !== "IMG" || t.getAttribute("data-rm") !== "1") return;
-  if (t.closest(".ic")) { BADIMG[t.getAttribute("src")] = Date.now(); save("sp_badimg", BADIMG); }
+  if (t.closest(".ic") || t.classList.contains("tl")) { BADIMG[t.getAttribute("src")] = Date.now(); save("sp_badimg", BADIMG); }
   t.remove();
 }, true);
 
@@ -452,7 +452,18 @@ function render() {
   renderHidden();
   refreshBrief();
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
+  packGrid();
 }
+// Each box covers as many of the grid's thin (2px) rows as its own height needs, plus the 14px gap under it.
+// That lets boxes of different heights pack together (a short Reddit box with Sports under it, beside a tall one).
+function packGrid() {
+  var kids = $("grid").children, hs = [], i;
+  for (i = 0; i < kids.length; i++) hs.push(kids[i].offsetHeight);
+  for (i = 0; i < kids.length; i++) kids[i].style.gridRowEnd = "span " + Math.ceil((hs[i] + 14) / 2);
+}
+var packT = 0;
+window.addEventListener("resize", function () { clearTimeout(packT); packT = setTimeout(packGrid, 80); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { packGrid(); });
 
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
@@ -654,6 +665,7 @@ document.addEventListener("change", function (e) {
     });
     if (!ch.length) { alert("No channels found. Use the subscriptions.csv file from Google Takeout."); return; }
     P.yt = { ch: ch }; persist(); render(); fetchYT();
+    if (WIZ && $("wzPage")) wizRender();
   };
   fr.readAsText(e.target.files[0]);
 });
@@ -822,7 +834,7 @@ function ownSrc() {
   if (!P.news) P.news = JSON.parse(JSON.stringify(NEWS_SRC));
   if (!P.tg) P.tg = TG_SRC.slice();
 }
-function srcMsg(t) { $("srcMsg").textContent = t || ""; }
+function srcMsg(t) { $("srcMsg").textContent = t || ""; WIZMSG = t || ""; }
 function feedUrls(u) {
   if (/^https?:\/\//i.test(u)) {
     try { var h = new URL(u); return h.pathname.length > 1 || h.search ? [u] : siteUrls(h.hostname.replace(/^www\./, "")); } catch (e) { return null; }
@@ -1253,7 +1265,7 @@ function setDockW(w) { document.documentElement.style.setProperty("--dock-w", w 
     function up() {
       grip.removeEventListener("pointermove", mv); grip.removeEventListener("pointerup", up);
       document.body.classList.remove("resizing");
-      if (w) { P.dockW = w; persist(); }
+      if (w) { P.dockW = w; persist(); packGrid(); }
     }
     grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up);
   });
@@ -1263,6 +1275,7 @@ function syncDock() {
   $("dock").hidden = !l; $("dockR").hidden = !r;
   document.body.classList.toggle("docked", l); document.body.classList.toggle("dockedr", r);
   document.body.classList.toggle("dockslim", l && !DOCK.length);
+  setTimeout(packGrid, 0);   // the page just got wider or narrower
 }
 function dockAdd(k) {
   var kind = k.charAt(0), id = k.slice(2);
@@ -1478,7 +1491,8 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "Enter") {
     if (e.target.id === "cityIn") cityGo();
     else if (e.target.id === "locIn") locGo();
-    else if (e.target.id === "acctEmail" || e.target.id === "acctPass") auth("signInWithPassword");
+    else if (e.target.id === "wzIn") { var wb = document.querySelector('[data-a="wizadd"]'); if (wb) wb.click(); }
+    else if (/^acct(Email|Pass|Pass2)$/.test(e.target.id)) auth(AUTHTAB === "up" ? "signUp" : "signInWithPassword");
     return;
   }
   if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && e.target.closest && e.target.closest('[data-a="paird"]')) {
@@ -1566,7 +1580,9 @@ document.addEventListener("click", function (e) {
   if (a === "clockmenu2") { e.stopPropagation(); audio(); MENU_OPEN = MENU_OPEN === "clock" ? "" : "clock"; render(); return; }
   if (a === "cogmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "cog" ? "" : "cog"; render(); return; }
   if (a === "opennotes") { openNotes(); return; }
-  if (a === "acctmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
+  if (a === "acctmenu2") { e.stopPropagation(); if (!USER) { MENU_OPEN = ""; ACCTMSG = ""; render(); openAuth(); return; } MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
+  if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
+  if (/^wiz/.test(a)) { wizAct(a, k); return; }
   if (a === "signin") { auth("signInWithPassword"); return; }
   if (a === "signup") { auth("signUp"); return; }
   if (a === "forgotpw") {
@@ -1685,7 +1701,25 @@ $("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall");
 var sb = null, USER = null, saveTimer;
 try { if (window.supabase && window.SUPABASE_URL) sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
 var ACCTMSG = "";
-function setMsg(t) { ACCTMSG = t || ""; render(); }
+function setMsg(t) { ACCTMSG = t || ""; if ($("acctMsg")) $("acctMsg").textContent = ACCTMSG; else render(); }
+// ---- Sign in / Create account window ----
+var AUTHTAB = "in";
+function openAuth(tab) {
+  var keep = $("acctEmail") ? $("acctEmail").value : "";
+  if (tab) AUTHTAB = tab;
+  var up = AUTHTAB === "up", seg = function (k, l) { return '<button data-a="authtab" data-k="' + k + '"' + (AUTHTAB === k ? ' class="on"' : "") + ">" + l + "</button>"; };
+  openModal("Account", '<div class="auth"><div class="seg">' + seg("in", "Sign in") + seg("up", "Create account") + "</div>" +
+    '<p class="mut sn">' + (up ? "A free account saves your boxes, sources, notes and layout, and brings them to any device." : "Sign in to load your own setup.") + "</p>" +
+    '<label>Email<input type="email" id="acctEmail" autocomplete="email" placeholder="you@example.com"></label>' +
+    '<label>Password<input type="password" id="acctPass" autocomplete="' + (up ? "new-password" : "current-password") + '"' + (up ? ' placeholder="At least 8 characters"' : "") + "></label>" +
+    (up ? '<label>Repeat password<input type="password" id="acctPass2" autocomplete="new-password"></label>' : "") +
+    '<div id="acctMsg" class="sn" role="status">' + esc(ACCTMSG) + "</div>" +
+    '<button class="pri" data-a="' + (up ? "signup" : "signin") + '">' + (up ? "Create account" : "Sign in") + "</button>" +
+    (up ? '<p class="mut sn">You then get an email with a confirmation link. Click it, come back and sign in. A short guide helps you pick your boxes and set them up.</p>'
+        : '<button class="lnk2" data-a="forgotpw">Forgot password?</button>') + "</div>");
+  $("acctEmail").value = keep;
+  (keep ? $("acctPass") : $("acctEmail")).focus();
+}
 function persist() {
   save("sp_prefs", P);
   if (!sb || !USER) return;
@@ -1705,11 +1739,16 @@ function onUser(u) {
   if (!u) return;
   loadWall(u);
   sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
+    var isNew = false;
     if (r.error) { setMsg("Could not load your settings: " + r.error.message); return; }
     if (r.data && r.data.prefs && r.data.prefs.theme) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       save("sp_prefs", P); applyTheme(); render();
-    } else { persist(); }
+    } else { persist(); isNew = true; }   // no saved settings yet: a brand-new account
+    if (!$("modal").hidden && $("mTitle").textContent === "Account") closeModal();
+    var resume = null; try { resume = JSON.parse(sessionStorage.getItem("sp_wiz") || "null"); sessionStorage.removeItem("sp_wiz"); } catch (e) {}
+    if (resume) setTimeout(function () { openWizard(resume); }, 300);
+    else if (isNew && !P.onboarded) setTimeout(function () { openWizard(); }, 600);
     fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz();
   });
 }
@@ -1718,11 +1757,12 @@ function auth(fn) {
   var c = { email: $("acctEmail").value.trim(), password: $("acctPass").value };
   if (!c.email || !c.password) { setMsg("Enter your email and password."); return; }
   if (fn === "signUp" && c.password.length < 8) { setMsg("Use a password of at least 8 characters."); return; }
+  if (fn === "signUp" && $("acctPass2") && $("acctPass2").value !== c.password) { setMsg("The two passwords are not the same."); return; }
   if (fn === "signUp") c.options = { emailRedirectTo: location.href.split("#")[0] };
   setMsg("Working...");
   sb.auth[fn](c).then(function (r) {
     if (r.error) setMsg(r.error.message);
-    else if (fn === "signUp" && !r.data.session) setMsg("Check your email to confirm your account, then sign in.");
+    else if (fn === "signUp" && !r.data.session) { ACCTMSG = "Account created. Check your email for the confirmation link, click it, then sign in here."; openAuth("in"); }
     else setMsg("");
   });
 }
@@ -1734,6 +1774,8 @@ function initAuth() {
     if ((u && u.id) !== (USER && USER.id)) setTimeout(function () { onUser(u); }, 0);
   });
 }
+// The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
+var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
 function openHelp() {
   var toc = [
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
@@ -1755,7 +1797,7 @@ function openHelp() {
     '<li>You will see some sample code already in the box. Click inside that box, press Ctrl+A (or Cmd+A on a Mac) to select everything, then press Delete.</li>' +
     '<li>Click the button below to copy the correct code, then click inside the empty box and paste it (Ctrl+V or Cmd+V).</li>' +
     '</ol>' +
-    '<div class="codebox"><button class="lnk2 copybtn" data-a="copycode">Copy the code</button><pre id="gsCode">' + '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n' + '</pre></div>' +
+    '<div class="codebox"><button class="lnk2 copybtn" data-a="copycode">Copy the code</button><pre id="gsCode">' + GS_CODE + '</pre></div>' +
     '<ol start="5">' +
     '<li>Near the top of the script.google.com page, click the untitled project name and rename it to something like "Mail for my start page", then press Enter.</li>' +
     '<li>Press Ctrl+S (or Cmd+S) to save.</li>' +
@@ -2217,14 +2259,28 @@ function spWhen(e) {
 }
 function spTitle(e) {
   if (e.sp === "ufc") return esc(e.title);
-  var sc = e.state === "pre" ? " – " : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ";
-  return esc(e.home.n) + sc + esc(e.away.n);
+  var sc = e.state === "pre" ? ' <span class="mut">–</span> ' : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ";
+  return spCrest(e.home) + esc(e.home.n) + sc + esc(e.away.n) + spCrest(e.away);
+}
+// Small sport symbols (ball, ball, octagon) and 40px team crests (ESPN resizes them for us: 3 KB instead of 36 KB)
+var SP_SVG = 'viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+var SP_ICON = {
+  football: "<svg " + SP_SVG + '><circle cx="12" cy="12" r="9"/><path d="M12 8l3.8 2.8-1.5 4.4H9.7l-1.5-4.4zM12 3v5M3.5 9.6l4.7 1.2M20.5 9.6l-4.7 1.2M6.6 19.2l3.1-4M17.4 19.2l-3.1-4"/></svg>',
+  basketball: "<svg " + SP_SVG + '><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3 2.8 3 9.8 0 12.6M18.3 5.7c-3 2.8-3 9.8 0 12.6"/></svg>',
+  ufc: "<svg " + SP_SVG + '><path d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"/><path d="M9 9.5l6 5M15 9.5l-6 5"/></svg>'
+};
+var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC" };
+function spIcon(sp) { return '<i class="spi sp-' + sp + '" title="' + (SP_NAME[sp] || "") + '">' + (SP_ICON[sp] || "") + "</i>"; }
+function spCrest(t) {
+  var u = safeUrl(t.logo);
+  if (u.indexOf("https://a.espncdn.com/i/") === 0) u = "https://a.espncdn.com/combiner/i?img=/i/" + u.slice(24) + "&w=40&h=40";
+  return u && !BADIMG[u] ? '<img class="tl" alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(u) + '">' : "";
 }
 function sportsBody() {
   var ev = spEvents(), view = spView();
   if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or fighter.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
   return lst("sports", ev.map(function (e) {
-    return '<div class="row' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span>' + (e.fav ? '<i class="fv">★</i>' : "") + '<button class="lnk" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spTitle(e) + "</button>" +
+    return '<div class="row' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + (e.fav ? '<i class="fv">★</i>' : "") + spTitle(e) + "</button>" +
       (P.hideSrc ? "" : " <small>" + esc(e.lg) + "</small>") + '</span><span class="r">' + spWhen(e) + "</span></div>";
   }).join(""), 6);
 }
@@ -2252,6 +2308,128 @@ function spToggleFav(name, openId) {
   if (i >= 0) P.spFav.splice(i, 1); else if (P.spFav.length < 60) P.spFav.push(name);
   persist(); render();
   if (openId) openSport(openId);
+}
+
+// ---- First-time setup guide: pick your boxes, then one page per box that needs setting up ----
+var WIZ = null, WIZMSG = "";
+var WIZ_BOXES = [
+  ["weather", "Weather", "Forecast and weather warnings for your city."],
+  ["news", "News", "Headlines from the sites you choose. The same story from several sites is merged."],
+  ["telegram", "Telegram", "The latest posts from public Telegram channels."],
+  ["reddit", "Reddit", "Posts from the subreddits you follow."],
+  ["stocks", "Stocks", "Prices, moves and news for your stocks and crypto."],
+  ["twitch", "Twitch", "Who you follow that is live right now."],
+  ["youtube", "YouTube", "New uploads from your subscriptions."],
+  ["sports", "Sports", "Live football, NBA and UFC scores and fixtures."],
+  ["mail", "Mail", "Unread counts for up to two Gmail inboxes."],
+  ["live", "Currency converter", "Quick currency and crypto conversion."]
+];
+var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "twitch", "youtube", "mail"];
+function wizPages() { return ["pick"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
+function openWizard(resume) {
+  WIZMSG = "";
+  if (resume && resume.sel) WIZ = { step: resume.step || 0, sel: resume.sel };
+  else { WIZ = { step: 0, sel: {} }; WIZ_BOXES.forEach(function (b) { WIZ.sel[b[0]] = !boxOff(b[0]); }); }
+  wizRender();
+}
+// Small drawn pictures of the screens you will see (simplified, so they stay correct when the real sites restyle)
+function mock(title, body) { return '<div class="mock"><div class="mockbar"><i></i><i></i><i></i><span>' + title + '</span></div><div class="mockbody">' + body + "</div></div>"; }
+function mkb(t, hl) { return '<span class="mkb' + (hl ? " hl" : "") + '">' + t + "</span>"; }
+function mkl(w) { return '<span class="mkl" style="width:' + w + '%"></span>'; }
+function wizChips(list) { return list.length ? '<div class="chips wizchips">' + list.slice(0, 14).map(function (x) { return "<span>" + esc(x) + "</span>"; }).join("") + (list.length > 14 ? "<span>+" + (list.length - 14) + " more</span>" : "") + "</div>" : ""; }
+function wizAddRow(kind, ph, btn) { return '<div class="add"><input type="text" id="wzIn" placeholder="' + ph + '" autocomplete="off"><button class="pri" data-a="wizadd" data-k="' + kind + '">' + (btn || "Add") + '</button></div><div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + "</div>"; }
+function wizPage(id) {
+  if (id === "pick") return '<p>Choose what you want on your page. Nothing is final: you can switch boxes on and off later in <b>Settings → Layout &amp; boxes</b>.</p><div class="wizgrid">' + WIZ_BOXES.map(function (b) {
+    return '<button class="wizbox' + (WIZ.sel[b[0]] ? " on" : "") + '" data-a="wizpick" data-k="' + b[0] + '" role="checkbox" aria-checked="' + !!WIZ.sel[b[0]] + '"><span class="chk' + (WIZ.sel[b[0]] ? " on" : "") + '"></span><span><b>' + b[1] + "</b><small>" + b[2] + "</small></span></button>";
+  }).join("") + "</div>";
+  if (id === "news") return "<p>News starts with these sources. Add any news site by its address (for example <code>bbc.com</code>) or a feed address.</p>" + wizChips(newsSrc().map(function (x) { return x.name; })) + wizAddRow("news", "A website or feed, e.g. bbc.com") +
+    '<p class="mut sn">Later, in Settings → News, Telegram &amp; Reddit, you can remove sources, mute words you do not want to see, and highlight words you care about.</p>';
+  if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
+    mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport");
+  if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
+  if (id === "stocks") return "<p>Type the symbols you want to follow, separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. NVDA, AAPL, TSLA, BTCUSD, ETHUSD") +
+    '<p class="mut sn">Use TradingView? In Settings → Stocks you can paste a shared watchlist link and import the whole list at once.</p>';
+  if (id === "twitch") return "<p>Connect your Twitch account so the box can show which of the channels you follow are live. The page only asks to <b>see who you follow</b>; it cannot chat, follow or change anything.</p>" +
+    mock("id.twitch.tv", "<b>OmniRama wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
+    "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
+    (twToken() ? '<p><span class="pill ac">✓ Twitch is connected</span></p>' : '<p><button class="pri" data-a="wiztw">Connect Twitch</button></p>') +
+    '<p class="mut sn">Tip: with Twitch Turbo or a sub, use <b>Pop out</b> on a stream to watch without ads.</p>';
+  if (id === "youtube") {
+    var nch = P.yt && P.yt.ch ? P.yt.ch.length : 0;
+    return "<p>YouTube does not let a website read your subscriptions directly, so you hand the page a small file with the list. It takes about five minutes, once.</p><ol>" +
+      '<li>Open <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> and press <b>Deselect all</b>.' + mock("takeout.google.com", '<span class="mkrow"><b>Select data to include</b>' + mkb("Deselect all", 1) + "</span>" + mkl(80) + mkl(65)) + "</li>" +
+      "<li>Scroll down to <b>YouTube and YouTube Music</b> and tick it. Press <b>All YouTube data included</b>, untick everything, and tick only <b>subscriptions</b>." + mock("YouTube and YouTube Music", '<span class="mkrow"><span class="mkchk on"></span> YouTube and YouTube Music</span><span class="mkrow">' + mkb("All YouTube data included", 1) + '</span><span class="mkrow"><span class="mkchk"></span> history &nbsp; <span class="mkchk"></span> playlists &nbsp; <span class="mkchk on"></span> <b>subscriptions</b></span>') + "</li>" +
+      "<li>Press <b>Next step</b>, then <b>Create export</b>. Google emails you a download link a few minutes later.</li>" +
+      "<li>Open the downloaded zip. Inside the YouTube folder is <code>subscriptions.csv</code>. Choose that file here:</li></ol>" +
+      '<p><label class="filebtn" for="ytFile">Choose subscriptions.csv</label> ' + (nch ? '<span class="pill ac">✓ ' + nch + " channels loaded</span>" : '<span class="mut sn">no file chosen yet</span>') + "</p>";
+  }
+  if (id === "mail") {
+    var m0 = (P.mail && P.mail[0]) || {};
+    return "<p>The Mail box shows your unread count without giving this site your Google password. You paste a small script into <b>your own</b> Google account, and it answers only to a secret token. It is all copy and paste; allow about ten minutes.</p><ol>" +
+      '<li>Open <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> (signed in as the Gmail account you want) and press <b>New project</b>.' + mock("script.google.com", '<span class="mkrow">' + mkb("+ New project", 1) + "</span>" + mkl(50) + mkl(70)) + "</li>" +
+      '<li>Select all the sample code in the editor and delete it. Then copy our script and paste it in. <div class="codebox"><button class="copybtn" data-a="copycode">Copy the code</button><pre id="gsCode" hidden>' + GS_CODE + "</pre></div>" + mock("Code.gs", '<span class="mkcode">function doGet(e) {<br>&nbsp;&nbsp;…the pasted script…<br>}</span>') + "</li>" +
+      "<li>Press <b>Deploy</b> (top right) → <b>New deployment</b>. Click the gear next to “Select type” and choose <b>Web app</b>. Set the two boxes exactly like this, then press Deploy:" + mock("New deployment", '<span class="mkrow">Execute as ' + mkb("Me", 1) + '</span><span class="mkrow">Who has access ' + mkb("Anyone", 1) + '</span><span class="mkrow">' + mkb("Deploy", 1) + "</span>") + "</li>" +
+      "<li>Google asks for permission. Press <b>Authorize access</b>, pick your account, then <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. The warning is normal: it is your own private script." + mock("Google hasn’t verified this app", mkl(75) + '<span class="mkrow">' + mkb("Advanced", 1) + mkb("Back to safety") + '</span><span class="mknote">then: Go to your project (unsafe) → Allow</span>') + "</li>" +
+      "<li>Copy the <b>Web app URL</b> (it ends in <code>/exec</code>). Open it once in a new tab: the page shows a <b>token</b>. Copy the token too; it is shown only this one time.</li>" +
+      "<li>Fill in the three fields and press Save:</li></ol>" +
+      '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="password" id="wzT" placeholder="Token" autocomplete="off" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
+      '<div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + '</div><p class="mut sn">A second inbox can be added the same way later, in Settings → Mail. The full written steps are in Help → Mail.</p>';
+  }
+  return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its title; W / T / H change width, text size and list length.</li>" +
+    "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
+    "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
+    "<li><b>Weather:</b> click the weather box to pick your city.</li><li><b>Shortcuts:</b> press <code>?</code> for the full help.</li></ul>";
+}
+var WIZ_TITLES = { pick: "Welcome to OmniRama", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
+function wizRender() {
+  var pages = wizPages();
+  WIZ.step = Math.max(0, Math.min(pages.length - 1, WIZ.step));
+  var id = pages[WIZ.step], last = WIZ.step === pages.length - 1, keepScroll = $("wzPage") && $("wzPage").dataset.p === id ? document.querySelector("#modal .mbox").scrollTop : 0;
+  openModal(WIZ_TITLES[id] + (id !== "pick" && id !== "done" ? " · step " + WIZ.step + " of " + (pages.length - 2) : ""),
+    '<div class="wiz" id="wzPage" data-p="' + id + '">' + wizPage(id) + '</div><div class="wiznav"><button data-a="wizback"' + (WIZ.step ? "" : " disabled") + ">Back</button>" +
+    '<span class="wizdots">' + pages.map(function (_, i) { return "<i" + (i === WIZ.step ? ' class="on"' : "") + "></i>"; }).join("") + "</span>" +
+    (last ? "" : '<button class="lnk2" data-a="wizskip">Skip the guide</button>') + '<button class="pri" data-a="wiznext">' + (last ? "Finish" : id === "pick" ? "Continue" : "Next") + "</button></div>");
+  document.querySelector("#modal .mbox").scrollTop = keepScroll;
+}
+function wizAct(a, k) {
+  if (a === "wizopen") { $("panel").hidden = true; openWizard(); return; }
+  if (!WIZ) return;
+  var pages = wizPages(), id = pages[WIZ.step], v = $("wzIn") ? $("wzIn").value.trim() : "", ok = false;
+  if (a === "wizpick") WIZ.sel[k] = !WIZ.sel[k];
+  else if (a === "wizback") { WIZ.step--; WIZMSG = ""; }
+  else if (a === "wiznext" && WIZ.step < pages.length - 1) {
+    if (id === "pick") {
+      var L = LAY(); L.off = L.off || {};
+      WIZ_BOXES.forEach(function (b) { if (WIZ.sel[b[0]]) delete L.off[b[0]]; else L.off[b[0]] = 1; });
+      persist(); render();
+    }
+    WIZ.step++; WIZMSG = "";
+  }
+  else if (a === "wiznext" || a === "wizskip") { P.onboarded = true; persist(); WIZ = null; closeModal(); refreshAll(true); return; }
+  else if (a === "wiztw") { try { sessionStorage.setItem("sp_wiz", JSON.stringify(WIZ)); } catch (e) {} twConnect(); return; }
+  else if (a === "wizadd") {
+    if (!v) return;
+    if (k === "news") { ok = addNewsSrc("", v); if (ok) srcChanged(); }
+    else if (k === "tg") { ok = addTgSrc(v); if (ok) srcChanged(); }
+    else if (k === "reddit") { ok = addRdSrc(v); if (ok) rdChanged(); }
+    else if (k === "stocks") {
+      var list = v.split(/[,\s;]+/).map(function (x) { return x.trim().toUpperCase(); }).filter(function (x) { return /^[A-Z0-9._:=^!&-]{1,24}$/.test(x); });
+      ok = list.length > 0;
+      if (ok) { importSymbols(list); WIZMSG = "Added " + list.join(", ") + "."; } else WIZMSG = "Type one or more symbols, like NVDA, AAPL.";
+    }
+  }
+  else if (a === "wizmail") {
+    var u = $("wzU").value.trim(), t = $("wzT").value.trim();
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(u)) WIZMSG = "That does not look like a Web app URL. It starts with https://script.google.com/ and ends in /exec.";
+    else if (!t) WIZMSG = "Paste the token too (the long code the Web app URL showed you).";
+    else {
+      P.mail = [0, 1].map(function (i) { return (P.mail && P.mail[i]) || {}; });
+      P.mail[0] = { name: $("wzN").value.trim() || "Mail", url: u, t: t };
+      persist(); MAIL = []; render(); fetchMail(); loadMailForm();
+      WIZMSG = "Saved. Your unread count appears in the Mail box within a minute.";
+    }
+  }
+  wizRender();
 }
 
 // ---- Search bar: plain words go to your search engine, a site name opens the site, !bangs pick a site to search ----
