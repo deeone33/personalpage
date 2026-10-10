@@ -1,4 +1,4 @@
-var VERSION = 62;
+var VERSION = 64;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -530,7 +530,30 @@ function render() {
 }
 // Each box covers as many of the grid's 1px rows as its own height needs, plus the 14px gap under it.
 // That lets boxes of different heights pack together (a short Reddit box with Sports under it, beside a tall one).
+// The small stock charts sit in their own column, right before the percentage, the same width and the same place on
+// every row. The ticker always stays whole; in a narrow box it is the price that gets cut short to make room. The
+// percentages share the width of the widest one, so the charts line up exactly. Only when there is no room for even a
+// small chart next to the longest ticker are the charts left out. Runs on every redraw and when the page is resized.
+function fitSparks() {
+  var list = document.querySelector('#grid .list[data-list="stocks"]');
+  if (!list || !list.querySelector(".spk")) return;
+  var rows = Array.prototype.slice.call(list.querySelectorAll(".row")), max = parseFloat(getComputedStyle(list).fontSize) * 3.1;
+  list.classList.remove("spk0", "spkon"); list.classList.add("spkm");   // measure with the charts taken out
+  list.style.removeProperty("--pillw");
+  var pill = 0, tick = 0, right = 0;
+  rows.forEach(function (r) { var s = r.querySelector(".spk"); if (s && s.nextElementSibling) pill = Math.max(pill, s.nextElementSibling.getBoundingClientRect().width); });
+  list.style.setProperty("--pillw", Math.ceil(pill) + "px");
+  rows.forEach(function (r) {
+    var b = r.firstElementChild.querySelector(".lnk");
+    if (b) tick = Math.max(tick, b.getBoundingClientRect().right - r.getBoundingClientRect().left);
+    right = Math.max(right, r.lastElementChild.getBoundingClientRect().width);
+  });
+  var w = Math.floor(Math.min(max, rows[0].clientWidth - tick - right - 8 - 6));   // 8px row gap, 6px between chart and percentage
+  list.classList.remove("spkm");
+  if (w < 16) list.classList.add("spk0"); else { list.classList.add("spkon"); list.style.setProperty("--spkw", w + "px"); }
+}
 function packGrid() {
+  fitSparks();
   var kids = Array.prototype.slice.call($("grid").children);
   // start from each list's natural height (undo any earlier snapping)
   Array.prototype.forEach.call($("grid").querySelectorAll(".list[data-snap]"), function (l) { l.style.minHeight = ""; l.style.maxHeight = l.dataset.mh; l.removeAttribute("data-snap"); });

@@ -666,16 +666,18 @@ button.danger:hover{background:var(--down);color:#fff}
 
 /* ---- Small day chart on a stock row. A fixed-size box in the right-hand group: it cannot push the row wider,
    and when the Stocks box gets narrow (a docked stream, a small window) it is dropped before any text is cut ---- */
-.list[data-list=stocks]{container-type:inline-size}
-.spk{flex:none;display:block;width:3.1em;height:1.05em;overflow:visible}
+.spk{flex:none;display:block;height:1.05em;overflow:visible}
 .spk path{fill:none;stroke-width:1.4;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
 .spk.u path{stroke:var(--up)}
 .spk.d path{stroke:var(--down)}
-/* with the charts on, the percentages share one width, so the charts start in the same place on every row */
-.spk+span{min-width:5.6em;text-align:right;box-sizing:border-box}
-/* a narrow box gets a shorter chart; it is only dropped when there is really no room left for it */
-@container (max-width:300px){.spk{width:2em}}
-@container (max-width:238px){.spk{display:none}.spk+span{min-width:0}}
+/* app.js (fitSparks) sets one chart width (--spkw) and one percentage width (--pillw) for the whole list */
+.spk{width:var(--spkw,3.1em)}
+.spk+span{min-width:var(--pillw,0);text-align:right;box-sizing:border-box}
+.list.spkm .spk,.list.spk0 .spk{display:none}
+.list.spk0 .spk+span{min-width:0}
+/* with the charts on, each stock is one line: the ticker stays whole and the price is cut short when the box is narrow */
+.list.spkon .row>span:first-child{flex:1 1 0;white-space:nowrap;overflow:hidden}
+.list.spkon .row>.r,.list.spkm .row>.r{flex:none}
 
 /* ---- League table in a game's window ---- */
 .sptabw{max-height:17.5em;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:10px}
