@@ -506,6 +506,50 @@ body.dockslim #dockGrip{display:none}
 .setgrp .sub b .spi{vertical-align:-3px}
 .tl{width:calc(16px*var(--fs,1));height:calc(16px*var(--fs,1));object-fit:contain;vertical-align:-3px;margin:0 5px 0 0}
 .lnk .tl:last-child{margin:0 0 0 5px}
+/* Sports rows in fixed columns so icons, names, scores and times line up down the list.
+   Columns: sport icon | home crest | home short name | score | away short name | away crest */
+.sprow>span:first-child{flex:1 1 auto;min-width:0}
+.sprow .r{flex:none;min-width:3.4em;justify-content:flex-end}
+.lnk.spg{display:grid;grid-template-columns:1.25em 1.35em 3.1em 4.2em 3.1em 1.35em;align-items:center;column-gap:.35em;white-space:nowrap}
+.lnk.spt{display:grid;grid-template-columns:1.25em minmax(0,1fr);align-items:center;column-gap:.35em;width:100%}
+.spg .spi,.spt .spi{margin:0;vertical-align:0}
+.spg .tlc{display:flex;align-items:center;justify-content:center;height:1.3em}
+.spg .tl,.spg .tl:last-child{margin:0;vertical-align:0}
+.spg .ab{font-weight:600;overflow:hidden}
+.spg .ab.aw{text-align:right}
+.spg .ab.fvn{color:var(--ac)}
+.spg .sc{text-align:center;font-variant-numeric:tabular-nums}
+.spt .spn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.row.splive .lnk b.sc{color:var(--live)}
+
+/* ---- Game details: goals and cards, period scores, stats, top performers (popup and hover card) ---- */
+.evs{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.ev{display:flex;align-items:center;gap:6px;width:50%}
+.ev.a{align-self:flex-end;flex-direction:row-reverse;text-align:right}
+.evm{flex:none;min-width:2.6em;color:var(--mut);font-variant-numeric:tabular-nums}
+.ev.a .evm{text-align:left}
+.evg{font-style:normal;font-size:11px;line-height:1}
+.evc{flex:none;width:8px;height:11px;border-radius:2px;background:#f2c94c}
+.evc.red{background:var(--down)}
+.lines{border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums;margin:8px 0 2px}
+.lines th{color:var(--mut);font-weight:400;padding:1px 7px;text-align:center}
+.lines td{padding:2px 7px;text-align:center;border-top:1px solid var(--line)}
+.lines td:first-child{text-align:left;font-weight:600;padding-left:0}
+.stat{display:grid;grid-template-columns:3em 1fr 3em;align-items:center;gap:8px;font-size:13px;padding:3px 0}
+.stat b{font-variant-numeric:tabular-nums}
+.stat b:last-child{text-align:right}
+.stat span{display:flex;flex-direction:column;gap:2px;text-align:center;color:var(--mut);font-size:11.5px}
+.stat em{display:block;height:5px;border-radius:4px;background:var(--line);overflow:hidden}
+.stat em u{display:block;height:100%;background:var(--ac);border-radius:4px}
+.leads{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px}
+.leads>div:last-child{text-align:right}
+.leads small{color:var(--mut)}
+.sprecap{text-align:center;margin:8px 0 0}
+.sppk .pkscore{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-weight:600}
+.sppk .pkscore span:last-child{text-align:right}
+.sppk .pkscore b{font-size:16px;font-variant-numeric:tabular-nums}
+.sppk .evs{font-size:12px}
+.sppk .lines{font-size:11.5px;margin:2px 0}
 
 /* ---- Sign in / create account ---- */
 .mbox:has(.auth){width:min(380px,100%)}

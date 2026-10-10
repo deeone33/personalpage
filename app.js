@@ -1,4 +1,4 @@
-var VERSION = 54;
+var VERSION = 56;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2274,12 +2274,12 @@ function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true
 var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"]';
 document.addEventListener("mouseover", function (e) {
   var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", k = b && (mail ? "mail:" + b.dataset.k : b.dataset.k);
-  if (!b || !(mail || /^[amr]:/.test(k))) return;
+  if (!b || !(mail || /^[amrp]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
   peekT = setTimeout(function () {
     if (peekKey !== k || !document.contains(b) || !$("modal").hidden) return;
-    if (mail) showMailPeek(b, +b.dataset.k); else showPeek(b, k);
+    if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else showPeek(b, k);
   }, 350);
 });
 document.addEventListener("mouseout", function (e) {
@@ -2450,10 +2450,26 @@ function spParse(lg, j, pri) {
       else if (o.sessions.length && nextS) { o.state = "pre"; o.ts = nextS.ts; }
       else if (o.state === "in") o.detail = o.detail || "On now";
     } else {
-      var cs2 = ((e.competitions || [])[0] || {}).competitors || [];
-      var side = function (ha) { var c = cs2.filter(function (x) { return x.homeAway === ha; })[0] || {}, t = c.team || {}; return { n: t.shortDisplayName || t.displayName || "?", s: c.score, logo: safeUrl(t.logo), win: !!c.winner }; };
+      var comp = (e.competitions || [])[0] || {}, cs2 = comp.competitors || [];
+      var side = function (ha) {
+        var c = cs2.filter(function (x) { return x.homeAway === ha; })[0] || {}, t = c.team || {}, st = {};
+        (c.statistics || []).forEach(function (x) { st[x.name] = x.displayValue; });
+        return {
+          n: t.shortDisplayName || t.displayName || "?", ab: String(t.abbreviation || t.shortDisplayName || t.displayName || "?").slice(0, 4).toUpperCase(), s: c.score, logo: safeUrl(t.logo), win: !!c.winner, id: String(t.id || ""),
+          lines: (c.linescores || []).map(function (l) { return Math.round(l.value); }), st: st,
+          // top performers (points, goals, assists...), one per category
+          lead: (c.leaders || []).slice(0, 3).map(function (l) { var x = (l.leaders || [])[0] || {}; return { cat: l.shortDisplayName || l.displayName || "", who: (x.athlete || {}).displayName || "", val: x.displayValue || "" }; }).filter(function (l) { return l.who; })
+        };
+      };
       o.home = side("home"); o.away = side("away");
       o.names = [o.home.n, o.away.n];
+      // what happened: goals and cards with minute and player (football), venue, crowd, and ESPN's one-line recap
+      o.ev = (comp.details || []).map(function (d) {
+        var kind = d.redCard ? "red" : d.yellowCard ? "yel" : d.scoringPlay ? "goal" : "";
+        return kind ? { k: kind, min: (d.clock || {}).displayValue || "", who: ((d.athletesInvolved || [])[0] || {}).displayName || "", side: String((d.team || {}).id) === o.home.id ? "h" : "a", pen: !!d.penaltyKick, og: !!d.ownGoal } : null;
+      }).filter(Boolean);
+      o.venue = (comp.venue || {}).fullName || ""; o.att = +comp.attendance || 0;
+      o.recap = ((comp.headlines || [])[0] || {}).shortLinkText || "";
     }
     if (o.fights) o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
     return o;
@@ -2504,10 +2520,13 @@ function spWhen(e) {
   var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
   return '<span class="mut">' + (today ? "" : d.toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" }) + " ") + d.toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }) + "</span>";
 }
+// One game as fixed columns, so every row lines up: home crest, home short name, score, away short name, away crest.
+// (The sport icon comes first and the time or minute sits in its own column on the right; full names are in the tooltip.)
 function spTitle(e) {
-  if (e.kind !== "team") return esc(e.title);
-  var sc = e.state === "pre" ? ' <span class="mut">–</span> ' : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ";
-  return spCrest(e.home) + esc(e.home.n) + sc + esc(e.away.n) + spCrest(e.away);
+  if (e.kind !== "team") return '<span class="spn">' + esc(e.title) + "</span>";
+  var sc = e.state === "pre" ? '<span class="sc mut">–</span>' : '<b class="sc">' + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b>";
+  var ab = function (t, side) { return '<span class="ab ' + side + (spIsFav(t.n) ? " fvn" : "") + '">' + esc(t.ab) + "</span>"; };
+  return '<span class="tlc">' + spCrest(e.home) + "</span>" + ab(e.home, "hm") + sc + ab(e.away, "aw") + '<span class="tlc">' + spCrest(e.away) + "</span>";
 }
 // Small sport symbols and 40px team crests (ESPN resizes them for us: 3 KB instead of 36 KB)
 var SP_SVG = 'viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
@@ -2533,9 +2552,61 @@ function sportsBody() {
   if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
   if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
   return lst("sports", ev.map(function (e) {
-    return '<div class="row' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + (e.fav ? '<i class="fv">★</i>' : "") + spTitle(e) + "</button>" +
-      (P.hideSrc ? "" : " <small>" + esc(e.lg) + "</small>") + '</span><span class="r">' + spWhen(e) + "</span></div>";
+    return '<div class="row sprow' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
+      '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e) + "</span></div>";
   }).join(""), 6);
+}
+// ---- The story of a game: who scored and when, cards, period scores, stats and top performers ----
+function spEvIcon(x) { return x.k === "goal" ? '<i class="evg" title="Goal">⚽</i>' : '<i class="evc ' + x.k + '" title="' + (x.k === "red" ? "Red card" : "Yellow card") + '"></i>'; }
+// Home events on the left, away on the right, in time order. `short` = goals and red cards only (for the hover card).
+function spEventsHtml(e, short) {
+  var ev = (e.ev || []).filter(function (x) { return !short || x.k !== "yel"; });
+  if (!ev.length) return "";
+  return (short ? "" : "<h3>Goals and cards</h3>") + '<div class="evs">' + ev.map(function (x) {
+    var txt = esc(x.who || (x.k === "goal" ? "Goal" : "Card")) + (x.pen ? " (pen)" : "") + (x.og ? " (own goal)" : "");
+    return '<div class="ev ' + x.side + '"><span class="evm">' + esc(x.min) + "</span>" + spEvIcon(x) + "<span>" + txt + "</span></div>";
+  }).join("") + "</div>";
+}
+// Period / quarter / inning scores for sports that have them (not football)
+function spLinesHtml(e) {
+  var h = e.home.lines || [], a = e.away.lines || [];
+  if (e.sp === "football" || h.length < 2 || e.state === "pre") return "";
+  var n = Math.max(h.length, a.length), head = "", r1 = "", r2 = "";
+  for (var i = 0; i < n; i++) { head += "<th>" + (i + 1) + "</th>"; r1 += "<td>" + (h[i] != null ? h[i] : "") + "</td>"; r2 += "<td>" + (a[i] != null ? a[i] : "") + "</td>"; }
+  return '<table class="lines"><tr><th></th>' + head + "<th>T</th></tr><tr><td>" + esc(e.home.ab) + "</td>" + r1 + "<td><b>" + esc(e.home.s) + "</b></td></tr><tr><td>" + esc(e.away.ab) + "</td>" + r2 + "<td><b>" + esc(e.away.s) + "</b></td></tr></table>";
+}
+var SP_STATS = [["possessionPct", "Possession %"], ["totalShots", "Shots"], ["shotsOnTarget", "Shots on target"], ["wonCorners", "Corners"], ["foulsCommitted", "Fouls"], ["saves", "Saves"], ["hits", "Hits"], ["rebounds", "Rebounds"], ["assists", "Assists"]];
+function spStatsHtml(e) {
+  if (e.state === "pre") return "";
+  var rows = SP_STATS.filter(function (s) { return e.home.st[s[0]] != null && e.away.st[s[0]] != null; }).slice(0, 6).map(function (s) {
+    var hv = parseFloat(e.home.st[s[0]]) || 0, av = parseFloat(e.away.st[s[0]]) || 0, tot = hv + av || 1;
+    return '<div class="stat"><b>' + esc(e.home.st[s[0]]) + '</b><span><em><u style="width:' + Math.round(hv / tot * 100) + '%"></u></em>' + s[1] + "</span><b>" + esc(e.away.st[s[0]]) + "</b></div>";
+  });
+  return rows.length ? "<h3>Match stats</h3>" + rows.join("") : "";
+}
+function spLeadersHtml(e) {
+  var one = function (t) { return (t.lead || []).map(function (l) { return "<div><small>" + esc(l.cat) + "</small> " + esc(l.who) + ' <span class="mut">' + esc(l.val) + "</span></div>"; }).join(""); };
+  var h = one(e.home), a = one(e.away);
+  return h || a ? '<h3>Top performers</h3><div class="leads"><div>' + h + "</div><div>" + a + "</div></div>" : "";
+}
+// Hover card for a game: the score line, then the short story of it
+function showSportPeek(el, id) {
+  var e = spEvents().filter(function (x) { return x.id === id; })[0];
+  if (!e || EDIT) return;
+  var h;
+  if (e.kind === "team") {
+    h = '<div class="pkscore"><span>' + esc(e.home.n) + "</span><b>" + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b><span>" + esc(e.away.n) + "</span></div>" +
+      spEventsHtml(e, true) + spLinesHtml(e) +
+      (e.sp === "football" && e.state !== "pre" && e.home.st.possessionPct != null ? '<div class="pm"><span>Possession ' + esc(e.home.st.possessionPct) + "% – " + esc(e.away.st.possessionPct) + "%</span>" + (e.home.st.shotsOnTarget != null ? "<small>on target " + esc(e.home.st.shotsOnTarget) + "–" + esc(e.away.st.shotsOnTarget) + "</small>" : "") + "</div>" : "") +
+      (e.recap ? "<p>" + esc(e.recap) + "</p>" : "");
+  } else {
+    h = "<b>" + esc(e.title) + "</b>" + (e.fights ? e.fights.slice(0, 5).map(function (f) {
+      return '<div class="pm"><span>' + esc(f.a) + ' <span class="mut">vs</span> ' + esc(f.b) + "</span><small>" + (f.state === "in" ? "LIVE" : f.state === "post" ? (f.aw ? "1st won" : f.bw ? "2nd won" : "done") : "") + "</small></div>";
+    }).join("") : "") + (e.sessions ? e.sessions.map(function (s) { return '<div class="pm"><span>' + esc(s.n) + "</span><small>" + (s.state === "in" ? "LIVE" : s.state === "post" ? "done" : new Date(s.ts).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", minute: "2-digit" })) + "</small></div>"; }).join("") : "") +
+      (e.top && e.top.length ? "<p>" + e.top.slice(0, 3).map(function (t, i) { return (i + 1) + ". " + esc(t.n) + (t.s ? " " + esc(t.s) : ""); }).join(" · ") + "</p>" : "");
+  }
+  $("peek").innerHTML = '<div class="pk sppk">' + h + "<small>" + esc(e.lg) + " · " + (e.state === "in" ? esc(e.detail || "live") : e.state === "post" ? "finished" : new Date(e.ts).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + (e.venue ? " · " + esc(e.venue) : "") + "</small></div>";
+  placePeek(el);
 }
 function openSport(id) {
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
@@ -2555,7 +2626,9 @@ function openSport(id) {
     }).join("") : "") + (e.top.length ? "<h3>" + (e.state === "pre" ? "Field" : "Leaders") + "</h3>" + e.top.map(function (t, i) { return '<div class="row"><span>' + (i + 1) + ". <b>" + esc(t.n) + '</b></span><span class="r mut">' + esc(t.s) + "</span></div>"; }).join("") : "");
   } else {
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
-    body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>";
+    body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
+      (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
+      (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "");
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, "Details on ESPN") + "</p>" : "") + "</div>");
 }
