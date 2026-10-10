@@ -296,7 +296,13 @@ body.docked{padding-left:var(--dock-w)}
 .dk{position:relative;display:flex;flex-direction:column;gap:6px;flex:none}
 .dk>.tw{flex:none}
 .dk.haschat{flex:1 1 auto}
-.dkchat{flex:1 1 auto;min-height:300px;border-radius:12px;overflow:hidden}
+.dkchat{position:relative;flex:1 1 auto;min-height:300px;max-width:100%;border-radius:12px;overflow:hidden}
+.dkchat.fixedh{flex:none;min-height:0}
+/* drag the bottom edge for height, the right edge for width */
+.cgrip{position:absolute;z-index:2;touch-action:none}
+.cgh{left:0;right:0;bottom:0;height:9px;cursor:ns-resize}
+.cgw{top:0;bottom:9px;right:0;width:9px;cursor:ew-resize}
+.cgrip:hover,.cgrip:active{background:var(--ac);opacity:.7}
 .dkchat iframe{display:block;width:100%;height:100%;border:0}
 .dkc{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
 .dk:hover .dkc,.dkc:focus-within{opacity:1}
@@ -509,13 +515,16 @@ body.dockslim #dockGrip{display:none}
 /* Sports rows in fixed columns so icons, names, scores and times line up down the list.
    Columns: sport icon | home crest | home short name | score | away short name | away crest */
 .sprow>span:first-child{flex:1 1 auto;min-width:0}
-.sprow .r{flex:none;min-width:3.4em;justify-content:flex-end}
-.lnk.spg{display:grid;grid-template-columns:1.25em 1.35em 3.1em 4.2em 3.1em 1.35em;align-items:center;column-gap:.35em;white-space:nowrap}
+.sprow .r{flex:none;width:var(--stw,3.4em);min-width:0;justify-content:flex-end}
+/* the two name columns share whatever width the box has (so the row shrinks and grows with the box, and every row
+   still lines up because all rows are the same width); the icons, crests and score keep their size */
+.lnk.spg{display:grid;grid-template-columns:1.25em 1.35em minmax(0,1fr) var(--scw,2.4em) minmax(0,1fr) 1.35em;align-items:center;column-gap:.35em;white-space:nowrap;width:100%}
 .lnk.spt{display:grid;grid-template-columns:1.25em minmax(0,1fr);align-items:center;column-gap:.35em;width:100%}
 .spg .spi,.spt .spi{margin:0;vertical-align:0}
 .spg .tlc{display:flex;align-items:center;justify-content:center;height:1.3em}
 .spg .tl,.spg .tl:last-child{margin:0;vertical-align:0}
-.spg .ab{font-weight:600;overflow:hidden}
+.spg .ab{font-weight:600;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.sprow{gap:6px}
 .spg .ab.aw{text-align:right}
 .spg .ab.fvn{color:var(--ac)}
 .spg .sc{text-align:center;font-variant-numeric:tabular-nums}
@@ -611,7 +620,8 @@ body.dockslim #dockGrip{display:none}
 .pvnote .lnk2{font-size:13px}
 button.danger{align-self:flex-start;border-color:var(--down);color:var(--down)}
 button.danger:hover{background:var(--down);color:#fff}
-#delMsg:empty{display:none}
+#delMsg:empty,#nfMailMsg:empty{display:none}
+#nfMailMsg{color:var(--fg);background:var(--acsoft);border-radius:8px;padding:6px 10px}
 #delMsg{color:var(--fg);background:var(--acsoft);border-radius:8px;padding:6px 10px}
 
 /* ---- Scrollbars ---- */

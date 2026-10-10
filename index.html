@@ -153,6 +153,9 @@
     <label>New mail <input type="checkbox" id="nfMail"></label>
     <label>Ping sound <input type="checkbox" id="nfSound"></label>
     <label>Also as desktop notifications <input type="checkbox" id="nfDesktop"></label>
+    <label>Also send them to my email <input type="checkbox" id="nfEmail"></label>
+    <div class="mut sn">Emails go to your connected Gmail inbox, sent by its own script (Settings → Mail), with everything from a five-minute stretch in one email. This needs the newer script code from Help → Mail, and this page has to be open in a tab. <button data-a="nfmailtest">Send a test email</button></div>
+    <div id="nfMailMsg" class="sn" role="status"></div>
     <label>Morning summary on first visit of the day <input type="checkbox" id="briefOn"></label>
     <button data-a="nftest">Show a test notification</button>
   </section>

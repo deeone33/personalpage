@@ -1,4 +1,4 @@
-var VERSION = 56;
+var VERSION = 57;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -264,7 +264,11 @@ function tick() {
 function row(key, main, sub, right, op, cls, attr) {
   var f = P.fav[key];
   var ed = EDIT ? '<button data-a="fav" data-k="' + esc(key) + '" aria-label="Favorite">' + (f ? "★" : "☆") + '</button><button data-a="hide" data-k="' + esc(key) + '" aria-label="Hide">✕</button>' : "";
-  return '<div class="row' + (cls || "") + '"' + (attr || "") + '><span>' + (f ? '<i class="fv">★</i>' : "") + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
+  // The favorite star normally leads the row. With " favr" in cls it sits on the right instead (before the number),
+  // so starred and unstarred rows start at the same place.
+  var starR = !!cls && cls.indexOf(" favr") >= 0, star = f ? '<i class="fv">★</i>' : "";
+  if (starR) right = star + right;
+  return '<div class="row' + (cls || "") + '"' + (attr || "") + '><span>' + (starR ? "" : star) + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
     '</span><span class="r">' + right + ed + "</span></div>";
 }
 function shown(key) { return !P.hidden[key]; }
@@ -431,7 +435,7 @@ function render() {
     Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select>";
   T.twitch = tile("twitch", "Twitch", (twv.length ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
-    return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0);
+    return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0, " favr");
   }).join("")) : '<div class="empty">Nobody you follow is live.</div>') +
     (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT);
 
@@ -1420,11 +1424,43 @@ function dockChat(uid) {
   if (c) c.remove();
   else {
     c = document.createElement("div"); c.className = "dkchat";
-    c.innerHTML = '<iframe title="Chat" src="https://www.twitch.tv/embed/' + encodeURIComponent(d.id) + "/chat?parent=" + location.hostname + (P.theme === "dark" ? "&darkpopout" : "") + '"></iframe>';
+    c.innerHTML = '<iframe title="Chat" src="https://www.twitch.tv/embed/' + encodeURIComponent(d.id) + "/chat?parent=" + location.hostname + (P.theme === "dark" ? "&darkpopout" : "") + '"></iframe>' +
+      '<div class="cgrip cgh" data-g="h" title="Drag to change the chat height. Double-click to fill the space again."></div><div class="cgrip cgw" data-g="w" title="Drag to change the chat width. Double-click for full width again."></div>';
     w.appendChild(c);
+    chatSize(c);
   }
   w.classList.toggle("haschat", !!w.querySelector(".dkchat"));
 }
+// The docked chat fills the space under the video unless you drag its bottom or right edge; that size is remembered.
+function chatSize(c) {
+  c.style.height = P.chatH ? P.chatH + "px" : "";
+  c.style.width = P.chatW ? P.chatW + "px" : "";
+  c.classList.toggle("fixedh", !!P.chatH);
+}
+document.addEventListener("pointerdown", function (e) {
+  var g = e.target.closest && e.target.closest(".cgrip");
+  if (!g) return;
+  e.preventDefault();
+  var c = g.parentNode, isH = g.dataset.g === "h", r = c.getBoundingClientRect(), v = 0;
+  try { g.setPointerCapture(e.pointerId); } catch (x) {}
+  document.body.classList.add("resizing");   // lets the mouse pass over the video and chat frames while dragging
+  function mv(ev) {
+    v = Math.round(isH ? Math.max(160, Math.min(ev.clientY - r.top, window.innerHeight - 40)) : Math.max(220, Math.min(ev.clientX - r.left, c.parentNode.clientWidth)));
+    if (isH) { c.style.height = v + "px"; c.classList.add("fixedh"); } else c.style.width = v + "px";
+  }
+  function up() {
+    g.removeEventListener("pointermove", mv); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
+    document.body.classList.remove("resizing");
+    if (v) { if (isH) P.chatH = v; else P.chatW = v; persist(); Array.prototype.forEach.call(document.querySelectorAll(".dkchat"), chatSize); }
+  }
+  g.addEventListener("pointermove", mv); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+});
+document.addEventListener("dblclick", function (e) {
+  var g = e.target.closest && e.target.closest(".cgrip");
+  if (!g) return;
+  if (g.dataset.g === "h") delete P.chatH; else delete P.chatW;
+  persist(); Array.prototype.forEach.call(document.querySelectorAll(".dkchat"), chatSize);
+});
 function undock(uid) {
   DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
   var n = $("dk" + uid); if (n) n.remove();
@@ -1754,6 +1790,13 @@ document.addEventListener("click", function (e) {
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
+  if (a === "nfmailtest") {
+    $("nfMailMsg").textContent = "Sending…";
+    sendNtfMail([{ t: "Test email", b: "If you can read this in your inbox, email notifications work.", ts: Date.now() }]).then(function (err) {
+      $("nfMailMsg").textContent = err ? "That did not work: " + err : "Sent. Check the inbox of your connected Gmail account.";
+    });
+    return;
+  }
   if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); return; }
   if (a === "bellgo") { var be = NLOG[+k]; MENU_OPEN = ""; render(); if (be) runAct(be.act); return; }
   if (a === "bellclear") { NLOG = []; save("sp_nlog", NLOG); MENU_OPEN = ""; render(); return; }
@@ -1927,7 +1970,7 @@ function initAuth() {
   });
 }
 // The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
-var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
+var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniRama&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
 function openHelp() {
   var toc = [
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
@@ -2034,7 +2077,7 @@ function acctHtml() {
 }
 
 // ---- Notifications: small cards in the bottom-right corner ----
-function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sound: true, desktop: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
+function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
 var NOTIFIED = load("sp_notified", {});
 // true the first time a key is seen, so the same thing is never announced twice (also after a reload)
 function once(key) {
@@ -2075,8 +2118,33 @@ function toast(kind, title, body, act, sticky, force) {
   if (!sticky) setTimeout(function () { toastAct("toastout", id); }, 20000);
   if (n.sound) { if (kind === "cal") ring("chime"); else beep(1175, 0, 0.22, "sine"); }
   if (n.desktop && document.hidden) notifyTxt(title, body, function () { runAct(act); });
+  if (n.email && !force) MAILQ.push(entry);
   render();
 }
+// ---- Notifications by email (off unless you switch it on) ----
+// They go through your own Gmail script, which can only ever write to its own address, so nothing can be sent to anyone else.
+// To keep it calm (and inside Gmail's daily limit) everything from a five-minute stretch goes out as ONE email.
+var MAILQ = [], mailQLast = 0;
+function mailCfg() { return (P.mail || []).filter(function (c) { return c && c.url && c.t; })[0] || null; }
+function sendNtfMail(items) {
+  var c = mailCfg();
+  if (!sb || !USER) return Promise.resolve("Sign in first.");
+  if (!c) return Promise.resolve("Connect a Gmail inbox first (Settings, Mail). The emails are sent by that inbox's script, to itself.");
+  var when = function (t) { return new Date(t).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); };
+  var subject = items.length === 1 ? "OmniRama: " + items[0].t : "OmniRama: " + items.length + " notifications";
+  var text = items.map(function (x) { return when(x.ts) + "  " + x.t + (x.b ? "\n       " + x.b : ""); }).join("\n\n") + "\n\n(Sent by your OmniRama page. Switch this off in Settings, Notifications.)";
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailNotify: { url: c.url, t: c.t, subject: subject, text: text } } }).then(function (r) {
+    if (r.error) return r.error.message || "The function did not answer.";
+    if (r.data && r.data.sent) return "";
+    return (r.data && r.data._err) || "The feeds function needs updating (redeploy super-function).";
+  }).catch(function (e) { return String((e && e.message) || e); });
+}
+function flushMailQ() {
+  if (!MAILQ.length || Date.now() - mailQLast < 300000) return;
+  mailQLast = Date.now();
+  sendNtfMail(MAILQ.splice(0, 30));
+}
+setInterval(flushMailQ, 30000);
 // toastgo = clicked, toastx = dismissed (both count as seen), toastout = it timed out unread (stays "missed")
 function toastAct(a, id) {
   var el = $("to" + id), entry = TOASTS[id];
@@ -2518,7 +2586,9 @@ function spWhen(e) {
   if (e.state === "in") return '<span class="pill live">' + esc(e.detail || "LIVE") + "</span>";
   if (e.state === "post") return '<span class="mut">' + esc(e.kind === "team" ? (e.detail || "FT") : "Finished") + "</span>";
   var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
-  return '<span class="mut">' + (today ? "" : d.toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" }) + " ") + d.toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }) + "</span>";
+  // today: the time. This week: weekday and time. Later: the date. (Short, so the column stays narrow.)
+  var hm = d.toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+  return '<span class="mut">' + (today ? hm : e.ts - Date.now() < 6 * 86400000 ? d.toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short" }) + " " + hm : d.toLocaleDateString("en-GB", { timeZone: TZ, day: "numeric", month: "short" })) + "</span>";
 }
 // One game as fixed columns, so every row lines up: home crest, home short name, score, away short name, away crest.
 // (The sport icon comes first and the time or minute sits in its own column on the right; full names are in the tooltip.)
@@ -2551,10 +2621,17 @@ function sportsBody() {
   var ev = spEvents(), view = spView();
   if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
   if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : "No games today in these leagues. Try Upcoming.") + "</div>";
-  return lst("sports", ev.map(function (e) {
+  // The score column and the time column get one width for the whole list (sized for the longest entry),
+  // so every row has the same columns whatever its score or status is.
+  var scMax = 1, stMax = 3;
+  ev.forEach(function (e) {
+    if (e.kind === "team" && e.state !== "pre") scMax = Math.max(scMax, (String(e.home.s != null ? e.home.s : "") + "–" + String(e.away.s != null ? e.away.s : "")).length);
+    stMax = Math.max(stMax, spWhen(e).replace(/<[^>]+>/g, "").length);
+  });
+  return lst("sports", '<div class="spl" style="--scw:' + (scMax * 0.62 + 0.3).toFixed(2) + "em;--stw:" + (stMax * 0.56 + 1.4).toFixed(2) + 'em">' + ev.map(function (e) {
     return '<div class="row sprow' + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
       '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e) + "</span></div>";
-  }).join(""), 6);
+  }).join("") + "</div>", 6);
 }
 // ---- The story of a game: who scored and when, cards, period scores, stats and top performers ----
 function spEvIcon(x) { return x.k === "goal" ? '<i class="evg" title="Goal">⚽</i>' : '<i class="evc ' + x.k + '" title="' + (x.k === "red" ? "Red card" : "Yellow card") + '"></i>'; }
@@ -2849,7 +2926,7 @@ function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi")
 $("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
 $("twPopOn").onchange = function () { P.twPop = this.checked; persist(); };
 // Notification settings: [input id, name in P.ntf, (for numbers) lowest, highest]
-var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSound", "sound"], ["nfDesktop", "desktop"]];
+var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
 var NF_NUM = [["nfSrcN", "srcN", 2, 6], ["nfPct", "pct", 0.5, 50], ["nfDay", "day", 1, 90]];
 function setNtf() {
   var n = {};
@@ -2940,7 +3017,7 @@ $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (windo
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);
 // With desktop notifications on, the things that can notify keep updating while the tab is in the background
-function bg(kind) { return function () { var n = NTF(); return !!n.desktop && n[kind] !== false; }; }
+function bg(kind) { return function () { var n = NTF(); return !!(n.desktop || n.email) && n[kind] !== false; }; }
 every(60000, fetchTwitch, bg("live"));
 every(120000, fetchNews, function () { return bg("news")() || bg("words")(); });
 every(60000, fetchTG, bg("words"));
