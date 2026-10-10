@@ -22,6 +22,7 @@
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab" aria-label="Search the web" enterkeyhint="search"></form>
     <img id="logoImg" alt="OmniRama" src="logo.png" width="512" height="109">
   </header>
+  <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the converter, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
   <div id="clocks"></div>
   <div id="grid"></div>
   <footer class="mut">OmniRama · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button></footer>
@@ -158,10 +159,20 @@
   <section class="setgrp" data-cat="Account" data-sec="Password">
     <div id="pwSignedIn">
       <label>New password <input type="password" id="pwNew" placeholder="8+ characters" autocomplete="new-password"></label>
+      <label>Type it again <input type="password" id="pwNew2" placeholder="Same password once more" autocomplete="new-password"></label>
       <button id="pwSave">Update password</button>
       <div id="pwMsg" class="mut sn" role="status"></div>
     </div>
     <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Account" data-sec="Delete account">
+    <div id="delSignedIn">
+      <div class="mut sn">Deletes your account for good, with everything saved in it: settings, sources, notes, calendar and wallpaper. This cannot be undone. Download a backup first if you might want your setup back. You can create a new account with the same email afterwards.</div>
+      <button class="danger" data-a="delacct">Delete my account…</button>
+      <div id="delMsg" class="sn" role="status"></div>
+    </div>
+    <div id="delSignedOut" class="mut" hidden>Sign in first to delete an account.</div>
   </section>
 
   <section class="setgrp" data-cat="Account" data-sec="Backup">

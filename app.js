@@ -1,4 +1,4 @@
-var VERSION = 51;
+var VERSION = 52;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -22,10 +22,13 @@ var DATA = {
     { t: "New Baltic ferry route announced", n: 2 }
   ],
   twitch: [
-    { id: "nocturne_tv", sub: "WoW", v: 2100, live: 1 },
-    { id: "kaizen", sub: "Path of Exile", v: 840, live: 1 },
-    { id: "sweden_speedrun", sub: "Speedruns", v: 1200, live: 1 },
-    { id: "tavern_bard", sub: "Music", v: 310, live: 1 },
+    { id: "nocturne_tv", sub: "World of Warcraft", v: 21400, live: 1 },
+    { id: "kaizen", sub: "Path of Exile", v: 8400, live: 1 },
+    { id: "sweden_speedrun", sub: "Speedruns", v: 5200, live: 1 },
+    { id: "pixelchef", sub: "Just Chatting", v: 3100, live: 1 },
+    { id: "tavern_bard", sub: "Music", v: 1900, live: 1 },
+    { id: "gridline", sub: "Grand Theft Auto V", v: 1200, live: 1 },
+    { id: "northwind", sub: "Hearthstone", v: 640, live: 1 },
     { id: "raidleader_x", sub: "Offline", v: 0, live: 0 }
   ],
   youtube: [
@@ -39,15 +42,66 @@ var DATA = {
     { id: "AAPL", name: "Apple", p: 231.1, c: -0.4 },
     { id: "TSLA", name: "Tesla", p: 248.9, c: -3.1 },
     { id: "MSFT", name: "Microsoft", p: 428.5, c: 0.9 },
-    { id: "EQNR", name: "Equinor", p: 26.7, c: 1.7 }
+    { id: "EQNR", name: "Equinor", p: 26.7, c: 1.7 },
+    { id: "AMZN", name: "Amazon", p: 262.4, c: 3.3 },
+    { id: "BTCUSD", name: "Bitcoin", p: 98450, c: 2.1 },
+    { id: "ETHUSD", name: "Ethereum", p: 3420, c: -1.4 },
+    { id: "NFLX", name: "Netflix", p: 70.3, c: -1.8 },
+    { id: "XAUUSD", name: "Gold", p: 4220.3, c: 1.5 }
   ]
 };
+
+// ---- Preview for visitors who are not signed in: made-up content shown through the real boxes ----
+// (The sources and headlines are invented, so nothing false is attributed to a real publisher.)
+var PREVIEW = false;
+function loadSamples() {
+  if (USER) return;
+  PREVIEW = true;
+  var ago = function (m) { return Date.now() - m * 60000; }, note = "This is a made-up headline for the preview. With a free account this box shows real news from the sites you choose.";
+  var n = function (s, t, m, nw) { return { s: s, t: t, u: "#news-" + m, ts: ago(m), d: note, img: "", nw: nw }; };
+  NEWS = [
+    n("World Wire", "Riksbank holds interest rate steady and signals cuts next year", 9, 1), n("Daily Ledger", "Sweden's Riksbank holds interest rate steady", 14), n("Metro Post", "Analysts: Riksbank keeps interest rate steady as inflation cools", 21),
+    n("Metro Post", "New Baltic ferry route links Tallinn and Stockholm in six hours", 27, 1), n("World Wire", "Storm warning issued for the west coast ahead of the weekend", 48),
+    n("Daily Ledger", "Study finds four-day week lifts productivity at pilot companies", 95), n("World Wire", "Championship final goes to extra time after late equaliser", 130),
+    n("Metro Post", "City council approves new tram line through the old town", 190), n("Daily Ledger", "Game studio confirms expansion release date after long delay", 260), n("Daily Ledger", "Tech firm unveils foldable tablet with week-long battery", 250),
+    n("World Wire", "Record number of visitors at this year's book fair", 420), n("Metro Post", "Local bakery wins national award for rye bread", 700)
+  ];
+  var g = function (t, m, nw) { return { s: "SampleChannel", t: t, tx: t, u: "#tg-" + m, ts: ago(m), img: "", th: "", vid: "", nw: nw }; };
+  TGP = [
+    g("Central bank decision: interest rate unchanged. The governor says cuts are possible next year if inflation keeps falling.", 6, 1),
+    g("Ferry operator confirms the new Baltic route starts in spring, with two departures a day in each direction.", 24, 1),
+    g("Weather service upgrades the west coast warning to orange. Gusts up to 28 m/s expected from Friday evening.", 51),
+    g("Pilot programme results are in: most companies that tried a four-day week plan to keep it.", 90),
+    g("Extra time in the final after a 94th-minute equaliser. Still level at the break.", 128),
+    g("Council vote passes 31 to 20: the tram line through the old town goes ahead.", 185),
+    g("The studio confirms it: the expansion ships next month. Pre-load opens a week before release.", 255),
+    g("First hands-on with the foldable tablet. The hinge feels solid, and the battery claim is being tested.", 300),
+    g("Book fair closes with a record: more than 140,000 visitors over four days.", 415),
+    g("Morning briefing: markets open flat, rain in the north, and three things to watch today.", 560)
+  ];
+  var r = function (s, t, m, d) { return { s: s, t: t, u: "#rd-" + m, x: "", ts: ago(m), by: "/u/sample_user", d: d || "A made-up post for the preview.", img: "" }; };
+  RD = [
+    r("worldnews", "Riksbank holds rate steady, hints at cuts in the new year", 15), r("technology", "Foldable tablet claims a week of battery life. Too good to be true?", 70),
+    r("classicwow", "After years of waiting we finally have a release date", 140), r("worldnews", "New ferry route will connect two Baltic capitals", 200),
+    r("technology", "I tracked my screen time for a year, here is what changed", 330), r("classicwow", "Guild first clear last night, screenshots inside", 480)
+  ];
+  var v = function (c, t, m) { return { id: "sample" + m, t: t, n: c, ts: ago(m) }; };
+  YTV = [
+    v("WoW Academy", "Raid guide: every boss in under 20 minutes", 55), v("Nordic Markets", "Rate decision explained: what it means for your mortgage", 120),
+    v("Synthwave Radio", "Night drive mix vol. 9", 300), v("Speedrun Weekly", "New world record by 0.4 seconds", 420), v("Kitchen Lab", "Rye bread at home, the slow way", 540),
+    v("Build Things", "I made a desk that hides every cable", 800), v("Trail Notes", "Three days alone on the coastal path", 1300), v("WoW Academy", "Ten addons you should be using", 1700)
+  ];
+  NEWSV++;
+  render();
+}
+// The small note at the bottom of a details window in the preview
+function previewNote() { return '<p class="pvnote">This is sample content. <button class="lnk2" data-a="pvup">Create a free account</button> to fill this box with your own.</p>'; }
 
 // ---- Storage (safe if the browser blocks it) ----
 function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 var DEFAULT_ACCENT = "#f5b942";
-var P = load("sp_prefs", { theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} });
+var P = load("sp_prefs", { theme: "dark", accent: DEFAULT_ACCENT, fs: 0.95, fav: {}, hidden: {} });
 var EDIT = false;
 function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -156,10 +210,11 @@ $("pwSave").onclick = function () {
   if (!sb || !USER) return;
   var v = $("pwNew").value;
   if (v.length < 8) { $("pwMsg").textContent = "Use at least 8 characters."; return; }
+  if ($("pwNew2").value !== v) { $("pwMsg").textContent = "The two passwords are not the same. Type the new password again in both boxes."; return; }
   $("pwMsg").textContent = "Working...";
   sb.auth.updateUser({ password: v }).then(function (r) {
     $("pwMsg").textContent = r.error ? r.error.message : "Password updated.";
-    if (!r.error) $("pwNew").value = "";
+    if (!r.error) { $("pwNew").value = ""; $("pwNew2").value = ""; }
   });
 };
 $("wallFit").onchange = function (e) { P.wallFit = e.target.value; persist(); applyWall(); };
@@ -218,10 +273,19 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
 var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6 };
+// The layout a new visitor or a new account starts with: sizes, text sizes, list lengths and order.
+// Top row of small boxes, News and Telegram side by side, then Stocks, Twitch, YouTube and (stacked) Reddit over Sports.
+var DEF_LAYOUT = {
+  v: 2, pairPct: 54,
+  order: ["weather", "mail", "live", "menu", "news", "telegram", "stocks", "twitch", "youtube", "reddit", "sports"],
+  c: { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, stocks: 3, twitch: 3, youtube: 3, reddit: 3, sports: 3 },
+  fs: { weather: 0.9, mail: 0.9, live: 0.9, news: 0.9, telegram: 0.9, stocks: 0.9, twitch: 0.9, youtube: 0.9, reddit: 0.8, sports: 0.8 },
+  rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 5, sports: 5 }
+};
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
 function LAY() {
-  if (!P.layout) P.layout = { order: [], w: {}, rows: {} };
+  if (!P.layout) P.layout = JSON.parse(JSON.stringify(DEF_LAYOUT));
   var L = P.layout;
   if (!L.fs) L.fs = {};
   if (!L.c) { L.c = {}; Object.keys(L.w || {}).forEach(function (k) { L.c[k] = L.w[k] * 3; }); }
@@ -303,7 +367,7 @@ function render() {
   T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + "°</b>" + (wWarn.length ? '<span class="warn" title="' + esc(wxWarnText(wWarn)) + '" aria-label="Weather warning">!</span>' : "") + '<span class="mut">' + esc(note) + "</span></div>", 1);
   T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
-    if (!cfg || !cfg.url) val = '<span class="mut">Not connected</span>';
+    if (!cfg || !cfg.url) val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>';
     else if (!m) val = '<span class="mut">Loading...</span>';
     else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">Error</span>';
     else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
@@ -322,14 +386,14 @@ function render() {
     var nowN = Date.now();
     NG = newsGroups();
     var gRead = function (g) { return g.some(function (x) { return READ[x.u]; }); };
-    nNew = NG.filter(function (g) { return isNewTs(g[0].ts, "news") && !gRead(g); }).length;
+    nNew = NG.filter(function (g) { return isNewItem(g[0], "news") && !gRead(g); }).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
     nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, 80).map(function (g) {
       var n = g[0], srcs = g.map(function (x) { return x.s; }), b = g.fav ? "★ Favorite sources" : bucket(n.ts);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, rd = g.some(function (x) { return READ[x.u]; });
-      var cls = (isNewTs(n.ts, "news") && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
+      var cls = (isNewItem(n, "news") && !rd ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + '<span class="mut">' + ago(n.ts) + "</span>" + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : ""), "a:" + n.u, cls, bk);
     }).join(""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
@@ -346,11 +410,11 @@ function render() {
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
   var tgMulti = allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
-  var tNew = tp.filter(function (g) { return isNewTs(g.ts, "tg") && !READ[g.u]; }).length;
+  var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !READ[g.u]; }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.map(function (g) {
-    var cls = (isNewTs(g.ts, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
+    var cls = (isNewItem(g, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
   }).join(""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
@@ -370,7 +434,7 @@ function render() {
     (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT);
 
   var yb;
-  if (P.yt && P.yt.ch && P.yt.ch.length) {
+  if ((P.yt && P.yt.ch && P.yt.ch.length) || PREVIEW) {
     var now = Date.now();
     var vids = YTV.map(function (v) { return { id: v.id, t: v.t, n: v.n, ts: v.ts, key: "y:" + v.n, isNew: now - v.ts < 172800000 }; })
       .filter(function (v) { return shown(v.key) && now - v.ts < 2592000000; })
@@ -380,7 +444,7 @@ function render() {
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
     yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") +
       (YTDOWN && vids.length ? '<div class="empty sn" title="YouTube\'s upload feed is not answering. This is on YouTube\'s side and comes back by itself.">YouTube\'s feed is down right now · showing the last loaded videos</div>' : "") + (vids.length ? lst("youtube", vids.map(function (v) {
-      return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), "v:" + v.id);
+      return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), PREVIEW ? 0 : "v:" + v.id);
     }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : USER ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
   } else {
     var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
@@ -392,12 +456,12 @@ function render() {
   var rSubs = rdSrc(), RS = rdSort();
   var rp = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); });
   if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
-  var rNew = RS === "new" ? rp.filter(function (x) { return isNewTs(x.ts, "rd") && !READ[x.u]; }).length : 0;
+  var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !READ[x.u]; }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
-    var cls = (RS === "new" && isNewTs(x.ts, "rd") && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
+    var cls = (RS === "new" && isNewItem(x, "rd") && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
 
@@ -451,6 +515,7 @@ function render() {
   if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   renderHidden();
   refreshBrief();
+  $("pv").hidden = !PREVIEW;
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   packGrid();
 }
@@ -704,7 +769,7 @@ function fetchTG() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tg: tgSrc() } }).then(function (r) {
     tgBusy = false;
     if (r.error || !r.data || !r.data.tg || nBusy) return;
-    TGP = unentAll(r.data.tg, ["t", "tx"]);
+    TGP = unentAll(r.data.tg, ["t", "tx"]); stampFirst(TGP, "tg");
     newsAlerts(); render();
   }).catch(function () { tgBusy = false; });
 }
@@ -716,6 +781,7 @@ function fetchNews() {
     if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
       NEWS = unentAll(r.data.news, ["t", "d"]); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
+      stampFirst(NEWS, "news"); stampFirst(TGP, "tg");
       var ne = r.data.news_err || {};
       NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
       NERRK = Object.keys(ne);
@@ -732,6 +798,20 @@ function fetchNews() {
 var NSEEN = load("sp_nseen", 0), READ = load("sp_nread", {}), NQ = "", NFILT = false;
 if (!NSEEN || typeof NSEEN !== "object") { var ns0 = +NSEEN || Date.now(); NSEEN = { news: ns0, tg: ns0, rd: ns0 }; save("sp_nseen", NSEEN); }
 function isNewTs(ts, box) { return ts > (NSEEN[box] || 0); }
+// "New" goes by when this page first SAW an item, not when it was published: a story that shows up late
+// (published before you last looked, but only now in the feed) still counts as new.
+var FIRST = load("sp_first", { _i: {} });
+if (!FIRST._i) FIRST._i = {};
+function stampFirst(list, box) {
+  var now = Date.now(), init = !FIRST._i[box], changed = init;
+  FIRST._i[box] = 1;
+  (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init ? x.ts : now; changed = true; } });
+  if (!changed) return;
+  var k = Object.keys(FIRST);
+  if (k.length > 2500) k.filter(function (u) { return u !== "_i"; }).sort(function (a, b) { return FIRST[a] - FIRST[b]; }).slice(0, k.length - 2000).forEach(function (u) { delete FIRST[u]; });
+  save("sp_first", FIRST);
+}
+function isNewItem(x, box) { return PREVIEW ? !!x.nw : isNewTs(FIRST[x.u] || x.ts, box); }
 function markSeen(box, t) {
   (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = t || Date.now(); });
   save("sp_nseen", NSEEN);
@@ -892,7 +972,7 @@ function fetchReddit() {
     var v = r.data && r.data.reddit;
     if (r.error) RDERR = r.error.message;
     else if (!v) RDERR = "it needs the updated feeds function (redeploy super-function in Supabase)";
-    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) RD = unentAll(v.items, ["t", "d"]); }
+    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { RD = unentAll(v.items, ["t", "d"]); stampFirst(RD, "rd"); } }
     render();
   }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
 }
@@ -903,7 +983,7 @@ function openReddit(u) {
   var img = safeUrl(x.img);
   openModal("r/" + x.s, '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" +
     (img ? '<img class="mimg rdimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
-    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>");
+    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>" + (PREVIEW ? previewNote() : ""));
   render();
 }
 function srcChanged() { persist(); NEWS = []; TGP = []; NEWSV++; NERR = ""; renderSources(); render(); fetchNews(); }
@@ -944,7 +1024,7 @@ function openNews(u) {
   var img = safeUrl(n.img);
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
     (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
-    '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button></p>' + more);
+    (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button></p>') + more);
   render();
 }
 function openTG(u) {
@@ -954,7 +1034,7 @@ function openTG(u) {
   var vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th;
   var media = vid ? '<video class="mvid" controls playsinline preload="metadata"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
     : img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
-  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + "</p><p>" + linkBtn(g.u, "Open on Telegram") + "</p>");
+  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + "</p><p>" + linkBtn(g.u, "Open on Telegram") + "</p>" + (PREVIEW ? previewNote() : ""));
   render();
 }
 var MAIL = [], mBusy = false;
@@ -1595,15 +1675,9 @@ document.addEventListener("click", function (e) {
     });
     return;
   }
-  if (a === "signout") {
-    if (sb) sb.auth.signOut();
-    try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
-    P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, fav: {}, hidden: {} };
-    TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; NG = []; USER = null;
-    loadMailForm(); loadExtraForm(); renderSide();
-    applyWall(); MENU_OPEN = ""; render();
-    return;
-  }
+  if (a === "pvup" || a === "pvin") { ACCTMSG = ""; openAuth(a === "pvup" ? "up" : "in"); return; }
+  if (a === "delacct") { deleteAccount(); return; }
+  if (a === "signout") { signOut(); return; }
   if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
@@ -1733,9 +1807,12 @@ function renderAccount() {
   $("who").textContent = USER ? "signed in as " + USER.email : "not signed in";
   $("pwSignedIn").hidden = !USER;
   $("pwSignedOut").hidden = !!USER;
+  $("delSignedIn").hidden = !USER; $("delSignedOut").hidden = !!USER;
 }
 function onUser(u) {
-  USER = u; renderAccount(); render();
+  USER = u;
+  if (u && PREVIEW) { PREVIEW = false; NEWS = []; TGP = []; RD = []; YTV = load("sp_ytv", []); NEWSV++; }
+  renderAccount(); render();
   if (!u) return;
   loadWall(u);
   sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
@@ -1766,11 +1843,41 @@ function auth(fn) {
     else setMsg("");
   });
 }
+function signOut() {
+  if (sb) sb.auth.signOut();
+  try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
+  P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, shadow: P.shadow, fav: {}, hidden: {} };
+  TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null;
+  FIRST = { _i: {} };
+  loadMailForm(); loadExtraForm(); renderSide(); renderAccount();
+  applyWall(); MENU_OPEN = ""; render();
+  loadSamples();
+}
+// Deletes the account for good: the sign-in itself plus everything stored for it. The feeds function does the deleting
+// (only it holds the key that may remove a user), and only ever for the account whose own sign-in asks.
+function deleteAccount() {
+  if (!sb || !USER) return;
+  var msg = $("delMsg"), typed = prompt("This permanently deletes the account " + USER.email + " and everything saved in it: settings, sources, notes, calendar and wallpaper. It cannot be undone.\n\nYou can create a new account with the same email afterwards.\n\nType DELETE to confirm.");
+  if (typed !== "DELETE") { msg.textContent = typed == null ? "" : "Nothing was deleted. To delete, type DELETE in capital letters."; return; }
+  msg.textContent = "Deleting…";
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { deleteAccount: true } }).then(function (r) {
+    if (r.error || !r.data || !r.data.deleted) {
+      msg.textContent = "Could not delete the account: " + ((r.data && r.data._err) || (r.error && r.error.message) || "the feeds function needs updating (redeploy super-function).");
+      return;
+    }
+    msg.textContent = "";
+    $("panel").hidden = true;
+    signOut();
+    openModal("Account deleted", "<p>Your account and everything saved in it have been deleted.</p><p class=\"mut sn\">You can create a new one any time with the person icon.</p>");
+  }).catch(function (e) { msg.textContent = "Could not delete the account: " + String((e && e.message) || e); });
+}
 function initAuth() {
   renderAccount();
-  if (!sb) return;
+  if (!sb) { loadSamples(); return; }
+  setTimeout(function () { if (!USER && !PREVIEW) loadSamples(); }, 1500);
   sb.auth.onAuthStateChange(function (ev, session) {
     var u = session ? session.user : null;
+    if (!u && !USER && !PREVIEW) loadSamples();   // nobody is signed in: show the preview
     if ((u && u.id) !== (USER && USER.id)) setTimeout(function () { onUser(u); }, 0);
   });
 }
@@ -1952,7 +2059,7 @@ function bigNews() {
   });
 }
 // Stocks: a fast move (compared with the price up to 35 minutes ago) or a big move on the day
-var QH = {};
+var QH = {}, STOCKN = load("sp_stockn", {});
 function stockAlerts(data) {
   var n = NTF(), now = Date.now(), sent = 0;
   if (n.stock === false || !P.stocks) return;
@@ -1960,17 +2067,23 @@ function stockAlerts(data) {
     var s = tk(x.id), q = data[s];
     if (!q || !q.p || P.hidden["s:" + x.id]) return;
     var h = QH[s] = (QH[s] || []).filter(function (o) { return now - o.t < 2100000; });
-    var today = q.c != null ? (q.c >= 0 ? "+" : "") + q.c.toFixed(1) + "% today" : "", go = { a: "stock", k: x.id };
+    var today = q.c != null ? (q.c >= 0 ? "+" : "") + q.c.toFixed(1) + "% today" : "", go = { a: "stock", k: x.id }, fast = false;
     if (h.length) {
       var pc = (q.p - h[0].p) / h[0].p * 100;
       if (Math.abs(pc) >= n.pct && sent < 3 && once("sf:" + s + (pc > 0 ? "u" : "d") + Math.floor(now / 1800000))) {
-        sent++;
+        sent++; fast = true;
+        // this card already says where the stock stands today, so the "up X% today" card is not sent as well
+        if (q.c != null && Math.abs(q.c) >= n.day) { STOCKN[s] = { c: q.c, p: q.p, t: now }; save("sp_stockn", STOCKN); }
         toast("stock", s + (pc > 0 ? " ▲ +" : " ▼ ") + pc.toFixed(1) + "% in " + Math.max(1, Math.round((now - h[0].t) / 60000)) + " min", "Now " + q.p.toFixed(2) + (today ? " · " + today : ""), go);
       }
     }
     h.push({ t: now, p: q.p });
-    if (q.c != null && Math.abs(q.c) >= n.day && sent < 3 && once("sd:" + s + (q.c > 0 ? "u" : "d") + ymd(new Date()))) {
+    // A big move on the day is announced once. It is announced again only if the price has changed since AND the move
+    // flipped direction, grew a lot more, or it is a new trading day. A closed market (same price for hours) stays quiet.
+    var rec = STOCKN[s], moved = !rec || rec.p !== q.p;
+    if (!fast && q.c != null && Math.abs(q.c) >= n.day && sent < 3 && (!rec || (moved && ((rec.c > 0) !== (q.c > 0) || Math.abs(q.c) >= Math.abs(rec.c) + Math.max(2, n.day / 2) || now - rec.t > 72000000)))) {
       sent++;
+      STOCKN[s] = { c: q.c, p: q.p, t: now }; save("sp_stockn", STOCKN);
       toast("stock", s + " is " + (q.c > 0 ? "up " : "down ") + Math.abs(q.c).toFixed(1) + "% today", "Now " + q.p.toFixed(2) + " · click for the news", go);
     }
   });
@@ -2151,13 +2264,45 @@ function loadStockNews(id) {
 
 // ---- Morning summary: what happened in the last 24 hours, in one small window ----
 var BRIEF_T = "Since yesterday";
+// "Top" = what most of your feeds are talking about. Every headline, Telegram post and Reddit title from the last 24 hours
+// is broken into words; a story scores by how often its words turn up elsewhere (names and numbers count extra), plus a
+// bonus for several sources reporting it and for your highlight words. Near-duplicates and a fourth story on the same
+// name are skipped, so the list covers different topics.
+function topStories(n) {
+  var now = Date.now(), cut = now - 86400000, df = {};
+  NEWS.concat(TGP, RD).forEach(function (x) {
+    if (x.ts < cut) return;
+    var seen = {};
+    tokz(x.t).set.forEach(function (w) { if (!seen[w]) { seen[w] = 1; df[w] = (df[w] || 0) + 1; } });
+  });
+  var pool = newsGroups().filter(function (g) { return g[0].ts > cut; }).map(function (g) {
+    var tk = tokz(g[0].t), uniq = {}, heat = 0;
+    tk.set.forEach(function (w) {
+      if (uniq[w]) return;
+      uniq[w] = 1;
+      var extra = (df[w] || 1) - g.length;
+      if (extra > 0) heat += Math.min(extra, 12) * (tk.strong[w] ? 1.5 : 1);
+    });
+    var words = Object.keys(uniq);
+    return { g: g, words: words, strong: words.filter(function (w) { return tk.strong[w]; }), score: (g.length - 1) * 4 + heat / Math.sqrt(Math.max(4, words.length)) + (g.hi ? 3 : 0) - (now - g[0].ts) / 3600000 * 0.08 };
+  }).sort(function (a, b) { return b.score - a.score; });
+  var out = [], used = {};
+  pool.forEach(function (p) {
+    if (out.length >= n) return;
+    var dup = out.some(function (o) { var sh = p.words.filter(function (w) { return o.words.indexOf(w) >= 0; }).length; return sh >= 3 || sh / Math.min(p.words.length, o.words.length) >= 0.5; });
+    if (dup || p.strong.some(function (w) { return used[w] >= 2; })) return;
+    p.strong.forEach(function (w) { used[w] = (used[w] || 0) + 1; });
+    out.push(p);
+  });
+  return out.map(function (o) { return o.g; });
+}
 function briefHtml() {
   var now = Date.now(), cut = now - 86400000, h = "", sec = function (t, body) { return body ? "<h3>" + t + "</h3>" + body : ""; };
   var warn = WX ? wxWarn(WX) : [];
   if (warn.length) h += '<div class="warnbox">' + warn.map(function (x) { return "<div><b>! " + x.t + "</b> " + x.day.toLowerCase() + (x.x ? " · " + esc(x.x) : "") + "</div>"; }).join("") + "</div>";
   var todayEv = evsOn(ymd(new Date()));
   h += sec("Today in your calendar", todayEv.map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join(""));
-  var top = NEWS.length ? newsGroups().filter(function (g) { return g[0].ts > cut; }).sort(function (a, b) { return b.length - a.length || (b.hi ? 1 : 0) - (a.hi ? 1 : 0) || b[0].ts - a[0].ts; }).slice(0, 6) : [];
+  var top = NEWS.length ? topStories(6) : [];
   h += sec("Top stories", top.map(function (g) {
     return '<div class="row' + (g.some(function (x) { return READ[x.u]; }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
   }).join(""));

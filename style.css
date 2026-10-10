@@ -556,6 +556,18 @@ body.dockslim #dockGrip{display:none}
 .mkcode{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--mut)}
 @media(max-width:520px){.wizgrid,.wizmail{grid-template-columns:1fr}}
 
+/* ---- Preview banner (not signed in) and the delete-account button ---- */
+#pv{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:8px 12px;border:1px solid var(--ac);border-radius:12px;background:var(--acsoft);font-size:13px;line-height:1.4}
+#pv[hidden]{display:none}
+#pv>span:first-child{flex:1 1 320px;min-width:0}
+.pvb{display:flex;gap:6px;flex:none}
+.pvnote{margin:12px 0 0;padding:8px 10px;border-radius:9px;background:var(--acsoft);font-size:13px}
+.pvnote .lnk2{font-size:13px}
+button.danger{align-self:flex-start;border-color:var(--down);color:var(--down)}
+button.danger:hover{background:var(--down);color:#fff}
+#delMsg:empty{display:none}
+#delMsg{color:var(--fg);background:var(--acsoft);border-radius:8px;padding:6px 10px}
+
 /* ---- Scrollbars ---- */
 *{scrollbar-width:thin;scrollbar-color:rgba(140,147,163,.4) transparent}
 *::-webkit-scrollbar{width:6px;height:6px}
