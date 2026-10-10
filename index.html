@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniRama</title>
@@ -19,7 +19,7 @@
 <main id="app">
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div></div>
-    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Search the web or type a site. Bangs: !yt !tw !r !w !gh !maps !news !tv !a · Ctrl+Enter = new tab · Also answers sums and conversions: 12*45, 100 usd in eur, 10 km in miles, days until 24 dec, tr hello to swedish · note … or todo … saves it to Notes · type help for everything" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
+    <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <img id="logoImg" alt="OmniRama" src="logo.png" width="512" height="109">
   </header>
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the radio, the search bar, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
@@ -140,7 +140,7 @@
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Radio">
-    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. The box has the list, play, stop and a volume button. The radio keeps playing while you use the rest of the page.</div>
+    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak. The box has the list, play, stop and a volume button. The radio keeps playing while you use the rest of the page.</div>
     <div id="radList"></div>
     <button data-a="radreset">Back to the starting stations</button>
   </section>

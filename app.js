@@ -1,4 +1,4 @@
-var VERSION = 73;
+var VERSION = 76;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -420,7 +420,7 @@ function render() {
   var tw = (TWC ? TW : D.twitch).filter(function (x) { return x.live && shown("t:" + x.id); })
     .map(function (x) { x.key = "t:" + x.id; return x; })
     .sort(function (a, b) { return favFirst(a, b) || b.v - a.v; });
-  T.live = tile("live", "", radioHtml());
+  T.live = tile("live", "", radioHtml(), "radinfo");   // a click on the box itself (not on its controls) shows what is playing
   var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb, nNew = 0;
   var errNote = NERRK.length ? '<div class="empty sn">' + NERRK.length + " source" + (NERRK.length > 1 ? "s" : "") + ' unavailable right now (<button class="lnk2" data-a="setpanel" title="' + esc(NERR) + '">details</button>)</div>' : "";
@@ -1922,37 +1922,80 @@ function fmtNum(n) {
 }
 
 // ---- Radio (the small box next to the menu; it used to hold the currency converter, which the search bar now does) ----
-// Internet radio, played by the browser straight from each station's own stream. [id, name, kind, stream address].
-// Which stations are in the box's list is chosen in Settings > Radio.
+// Internet radio, played by the browser straight from each station's own stream.
+// [id, name, genre, stream address, language the presenters speak]. Listed by genre; that is also the order in
+// Settings > Radio (where you choose which stations are in the box's list) and in the box's own list.
 var RADIOS = [
-  ["retro", "Retro FM", "Estonia", "https://stream.skymedia.ee/live/RETRO"],
-  ["rockfm", "Rock FM", "Estonia", "https://edge02.cdn.bitflip.ee:8888/rck"],
-  ["rockmetal", "Rock FM Metal", "Estonia", "https://edge04.cdn.bitflip.ee:8888/rckmetal"],
-  ["skyplus", "Sky Plus", "Estonia", "https://stream.skymedia.ee/live/SKYPLUS"],
-  ["nrj", "NRJ", "Estonia", "https://stream.skymedia.ee/live/NRJ"],
-  ["power", "Power Hit Radio", "Estonia", "https://ice.leviracloud.eu/phr96-aac"],
-  ["starfm", "Star FM", "Estonia", "https://ice.leviracloud.eu/star320-mp3"],
-  ["r2", "Raadio 2", "Estonia", "https://icecast.err.ee/raadio2.mp3"],
-  ["viker", "Vikerraadio", "Estonia", "https://icecast.err.ee/vikerraadio.mp3"],
-  ["hot97", "Hot 97 (New York)", "Hip-hop", "https://playerservices.streamtheworld.com/api/livestream-redirect/WQHTFMAAC.aac"],
-  ["hh100", "100 Hip Hop & RnB", "Hip-hop", "https://streaming.shoutcast.com/100-hip-hop-and-rnb-fm"],
-  ["hhwork", "Hip Hop Workout", "Hip-hop", "https://stream.revma.ihrhls.com/zc7785"],
-  ["old181", "181.fm Old School", "Hip-hop", "https://listen.181fm.com/181-oldschool_128k.mp3"],
-  ["beat181", "181.fm The Beat", "Hip-hop", "https://listen.181fm.com/181-beat_128k.mp3"],
-  ["rpr1", "RPR1 Old School Hip Hop", "Hip-hop", "https://streams.rpr1.de/rpr-hiphop-128-mp3"],
-  ["bigrap", "bigFM Deutschrap", "Hip-hop", "https://stream.bigfm.de/rapfeature/mp3-128/"],
-  ["rprock", "Radio Paradise Rock", "Rock", "https://stream.radioparadise.com/rock-320"],
-  ["q1043", "Q104.3 Classic Rock", "Rock", "https://stream.revma.ihrhls.com/zc1465"],
-  ["eagle181", "181.fm The Eagle", "Rock", "https://listen.181fm.com/181-eagle_128k.mp3"],
-  ["bob", "Radio Bob", "Rock", "https://streams.radiobob.de/bob-national/mp3-192/"],
-  ["p3", "Sveriges Radio P3", "Sweden", "https://live1.sr.se/p3-mp3-96"],
-  ["rpmain", "Radio Paradise", "Mixed", "https://stream.radioparadise.com/mp3-192"],
-  ["kexp", "KEXP Seattle", "Mixed", "https://kexp-mp3-128.streamguys1.com/kexp128.mp3"],
-  ["a80s", "181.fm Awesome 80s", "Mixed", "https://listen.181fm.com/181-awesome80s_128k.mp3"],
-  ["s90s", "181.fm Star 90s", "Mixed", "https://listen.181fm.com/181-star90s_128k.mp3"],
-  ["dance", "Dance Wave", "Dance", "https://dancewave.online/dance.mp3"],
-  ["lofi", "Lofi (laut.fm)", "Chill", "https://stream.laut.fm/lofi"],
-  ["bbcws", "BBC World Service", "Talk", "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service"]
+  // Pop & hits
+  ["skyplus", "Sky Plus", "Pop & hits", "https://stream.skymedia.ee/live/SKYPLUS", "Estonian"],
+  ["nrj", "NRJ Estonia", "Pop & hits", "https://stream.skymedia.ee/live/NRJ", "Estonian"],
+  ["power", "Power Hit Radio", "Pop & hits", "https://ice.leviracloud.eu/phr96-aac", "Estonian"],
+  ["starfm", "Star FM", "Pop & hits", "https://ice.leviracloud.eu/star320-mp3", "Estonian"],
+  ["p3", "Sveriges Radio P3", "Pop & hits", "https://live1.sr.se/p3-mp3-96", "Swedish"],
+  ["mixmegapol", "Mix Megapol", "Pop & hits", "https://live-bauerse-fm.sharp-stream.com/mixmegapol_instream_se_mp3", "Swedish"],
+  ["nrjse", "NRJ Sweden", "Pop & hits", "https://live-bauerse-fm.sharp-stream.com/nrj_instreamtest_se_mp3", "Swedish"],
+  ["svenskpop", "Svensk Pop", "Pop & hits", "https://live-bauerse-fm.sharp-stream.com/svenskpop_se_mp3", "Swedish"],
+  ["capital", "Capital UK", "Pop & hits", "https://media-ssl.musicradio.com/CapitalUK", "English"],
+  ["heart", "Heart UK", "Pop & hits", "https://media-ssl.musicradio.com/HeartUK", "English"],
+  ["kiss", "KISS UK", "Pop & hits", "https://live-kiss.sharp-stream.com/kiss100.mp3", "English"],
+  ["virgin", "Virgin Radio UK", "Pop & hits", "https://radio.virginradio.co.uk/stream", "English"],
+  ["top181", "181.fm Power (Top 40)", "Pop & hits", "https://listen.181fm.com/181-power_128k.mp3", "English"],
+  // Rock
+  ["rockfm", "Rock FM", "Rock", "https://edge02.cdn.bitflip.ee:8888/rck", "Estonian"],
+  ["rockmetal", "Rock FM Metal", "Rock", "https://edge04.cdn.bitflip.ee:8888/rckmetal", "Estonian"],
+  ["rockklassiker", "Rockklassiker", "Rock", "https://live-bauerse-fm.sharp-stream.com/rockklassiker_instream_se_mp3", "Swedish"],
+  ["radiox", "Radio X", "Rock", "https://media-ssl.musicradio.com/RadioXUK", "English"],
+  ["radioxcr", "Radio X Classic Rock", "Rock", "https://media-ice.musicradio.com/RadioXClassicRockMP3", "English"],
+  ["rprock", "Radio Paradise Rock", "Rock", "https://stream.radioparadise.com/rock-320", "English"],
+  ["q1043", "Q104.3 Classic Rock", "Rock", "https://stream.revma.ihrhls.com/zc1465", "English"],
+  ["eagle181", "181.fm The Eagle", "Rock", "https://listen.181fm.com/181-eagle_128k.mp3", "English"],
+  ["bob", "Radio Bob", "Rock", "https://streams.radiobob.de/bob-national/mp3-192/", "German"],
+  // Hip-hop & R&B
+  ["hot97", "Hot 97 (New York)", "Hip-hop & R&B", "https://playerservices.streamtheworld.com/api/livestream-redirect/WQHTFMAAC.aac", "English"],
+  ["xtra", "Capital XTRA", "Hip-hop & R&B", "https://media-ssl.musicradio.com/CapitalXTRANational", "English"],
+  ["hh100", "100 Hip Hop & RnB", "Hip-hop & R&B", "https://streaming.shoutcast.com/100-hip-hop-and-rnb-fm", "English"],
+  ["hhwork", "Hip Hop Workout", "Hip-hop & R&B", "https://stream.revma.ihrhls.com/zc7785", "English"],
+  ["old181", "181.fm Old School", "Hip-hop & R&B", "https://listen.181fm.com/181-oldschool_128k.mp3", "English"],
+  ["beat181", "181.fm The Beat", "Hip-hop & R&B", "https://listen.181fm.com/181-beat_128k.mp3", "English"],
+  ["dingata", "Sveriges Radio P3 Din Gata", "Hip-hop & R&B", "https://live1.sr.se/dingata-mp3-96", "Swedish"],
+  ["rpr1", "RPR1 Old School Hip Hop", "Hip-hop & R&B", "https://streams.rpr1.de/rpr-hiphop-128-mp3", "German"],
+  ["bigrap", "bigFM Deutschrap", "Hip-hop & R&B", "https://stream.bigfm.de/rapfeature/mp3-128/", "German"],
+  // Dance
+  ["capdance", "Capital Dance", "Dance", "https://media-ssl.musicradio.com/CapitalDance", "English"],
+  ["heartdance", "Heart Dance", "Dance", "https://media-ssl.musicradio.com/HeartDanceMP3", "English"],
+  ["dance", "Dance Wave", "Dance", "https://dancewave.online/dance.mp3", "Music only"],
+  // 80s, 90s & oldies
+  ["retro", "Retro FM", "80s, 90s & oldies", "https://stream.skymedia.ee/live/RETRO", "Estonian"],
+  ["retrose", "Retro FM Sweden", "80s, 90s & oldies", "https://live-bauerse-fm.sharp-stream.com/retrofm_aacp", "Swedish"],
+  ["nostalgi", "Radio Nostalgi", "80s, 90s & oldies", "https://live-bauerse-fm.sharp-stream.com/nostalgi_mp3", "Swedish"],
+  ["vinyl", "Vinyl FM", "80s, 90s & oldies", "https://live-bauerse-fm.sharp-stream.com/vinylfm_instream_se_mp3", "Swedish"],
+  ["heart80", "Heart 80s", "80s, 90s & oldies", "https://media-ssl.musicradio.com/Heart80sMP3", "English"],
+  ["heart90", "Heart 90s", "80s, 90s & oldies", "https://media-ssl.musicradio.com/Heart90sMP3", "English"],
+  ["gold", "Gold", "80s, 90s & oldies", "https://media-ssl.musicradio.com/GoldMP3", "English"],
+  ["a80s", "181.fm Awesome 80s", "80s, 90s & oldies", "https://listen.181fm.com/181-awesome80s_128k.mp3", "English"],
+  ["s90s", "181.fm Star 90s", "80s, 90s & oldies", "https://listen.181fm.com/181-star90s_128k.mp3", "English"],
+  // Mixed & alternative
+  ["r2", "Raadio 2", "Mixed & alternative", "https://icecast.err.ee/raadio2.mp3", "Estonian"],
+  ["rpmain", "Radio Paradise", "Mixed & alternative", "https://stream.radioparadise.com/mp3-192", "English"],
+  ["kexp", "KEXP Seattle", "Mixed & alternative", "https://kexp-mp3-128.streamguys1.com/kexp128.mp3", "English"],
+  ["country181", "181.fm Kickin' Country", "Mixed & alternative", "https://listen.181fm.com/181-kickincountry_128k.mp3", "English"],
+  // Chill & classical
+  ["smoothchill", "Smooth Chill", "Chill & classical", "https://media-ssl.musicradio.com/ChillMP3", "English"],
+  ["chill181", "181.fm Chilled", "Chill & classical", "https://listen.181fm.com/181-chilled_128k.mp3", "English"],
+  ["lofi", "Lofi (laut.fm)", "Chill & classical", "https://stream.laut.fm/lofi", "Music only"],
+  ["classicfm", "Classic FM", "Chill & classical", "https://media-ssl.musicradio.com/ClassicFMMP3", "English"],
+  ["p2", "Sveriges Radio P2", "Chill & classical", "https://live1.sr.se/p2-mp3-96", "Swedish"],
+  // News & talk
+  ["viker", "Vikerraadio", "News & talk", "https://icecast.err.ee/vikerraadio.mp3", "Estonian"],
+  ["p1", "Sveriges Radio P1", "News & talk", "https://live1.sr.se/p1-mp3-96", "Swedish"],
+  ["p4sth", "Sveriges Radio P4 Stockholm", "News & talk", "https://live1.sr.se/p4sth-mp3-96", "Swedish"],
+  ["bbcws", "BBC World Service", "News & talk", "https://stream.live.vc.bbcmedia.co.uk/bbc_world_service", "English"],
+  ["lbc", "LBC", "News & talk", "https://media-ssl.musicradio.com/LBCUK", "English"],
+  ["lbcnews", "LBC News", "News & talk", "https://media-ssl.musicradio.com/LBCNewsUK", "English"],
+  ["times", "Times Radio", "News & talk", "https://timesradio.wireless.radio/stream", "English"],
+  ["talksport", "talkSPORT", "News & talk", "https://radio.talksport.com/stream", "English"],
+  ["npr", "NPR", "News & talk", "https://npr-ice.streamguys1.com/live.mp3", "English"],
+  ["wnyc", "WNYC New York", "News & talk", "https://fm939.wnyc.org/wnycfm", "English"]
 ];
 var RADIO_DEF = ["retro", "rockfm", "hot97", "hh100", "old181", "rprock", "rpmain"];
 function radioIds() { var on = P.radio && Array.isArray(P.radio.on) ? P.radio.on : RADIO_DEF; return RADIOS.filter(function (r) { return on.indexOf(r[0]) >= 0; }); }
@@ -1974,6 +2017,7 @@ function radioPlay() {
   if (p && p.catch) p.catch(function () { if (RAD.id === s[0] && RAD.state === "load") { RAD.state = "err"; render(); } });
   try { if (navigator.mediaSession && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: s[1], artist: "OmniRama radio" }); } catch (e) {}
   render();
+  radioNow(true);
 }
 function radioStop() {
   if (RAD.a) { RAD.state = ""; RAD.a.pause(); RAD.a.removeAttribute("src"); RAD.a.load(); }   // dropping the address really ends the stream
@@ -1984,7 +2028,10 @@ function radioHtml() {
   if (!list.length) return '<div class="mrow radio"><span class="mut">No stations chosen. Pick some in Settings, Radio.</span></div>';
   var st = RAD.state, tip = st === "play" ? "Playing " + cur[1] : st === "load" ? "Connecting…" : st === "err" ? "Could not play this station right now" : "Play";
   return '<div class="mrow radio">' +
-    '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2]) + '">' + list.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>"; }).join("") + "</select>" +
+    // the list is grouped by genre, like the settings
+    '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2] + " · " + cur[4]) + '">' + list.map(function (r, i) {
+      return (i && list[i - 1][2] === r[2] ? "" : (i ? "</optgroup>" : "") + '<optgroup label="' + esc(r[2]) + '">') + '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>";
+    }).join("") + "</optgroup></select>" +
     '<button data-a="radplay" class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" aria-label="Play" title="' + tip + '"><svg ' + RI + '><path d="M8 5.500v13l10.500-6.500z"/></svg></button>' +
     '<button data-a="radstop" class="ib" aria-label="Stop" title="Stop"><svg ' + RI + '><rect x="6.500" y="6.500" width="11" height="11" rx="1.500"/></svg></button>' +
     '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
@@ -1993,7 +2040,7 @@ function radioHtml() {
 document.addEventListener("change", function (e) {
   if (e.target.id !== "radSel") return;
   radioSet("cur", e.target.value);
-  if (RAD.state) radioPlay(); else render();   // switching while it plays tunes straight to the new station
+  if (RAD.state) radioPlay(); else { render(); radioRefresh(); }   // switching while it plays tunes straight to the new station
 });
 document.addEventListener("input", function (e) {
   if (e.target.id !== "radVol") return;
@@ -2002,13 +2049,144 @@ document.addEventListener("input", function (e) {
   if ($("radVolN")) $("radVolN").textContent = v;
   P.radio = P.radio || {}; P.radio.vol = v; debounced("radVol", function () { persist(); });
 });
+// ---- What the radio is playing: hover the Radio box for the song, click it for everything about it ----
+// The song comes from the station's own stream (read by the feeds function, as a page cannot read it itself). The cover,
+// album, year and length are looked up at Apple's public music search, the writers at MusicBrainz; both straight from the browser.
+var RNP = { id: "", raw: null, at: 0, err: "" }, RADH = load("sp_radh", {}), SONGC = {}, WRITC = {};
+var RAD_REV = { mixmegapol: 1, rockklassiker: 1, nrjse: 1, svenskpop: 1, retrose: 1, nostalgi: 1, vinyl: 1 };   // these send "Title - Artist"
+// the stream's text -> { a: artist, s: song } when it names a song, otherwise { show: the text } (a programme name, or nothing)
+function radParse(st, raw) {
+  var t = String(raw || "").replace(/`/g, "'").replace(/\s+/g, " ").trim();
+  if (/^(p1|p2|p3|p4sth|dingata)$/.test(st[0])) { var sr = /spelar nu (.+)$/.exec(t); if (!sr) return { show: t }; t = sr[1]; }   // "Programme, spelar nu Artist - Song"
+  var ih = /^(.*?) - text="([^"]*)"(.*)$/.exec(t);                                                                                 // iHeart's format
+  if (ih) return /song_spot="[TF]"/.test(ih[3]) || !ih[2] ? { show: "" } : { a: ih[1].trim(), s: ih[2].trim() };
+  if (!t || /^[-_\s]*$/.test(t) || /adbreak|tracklist:|https?:\/\//i.test(t)) return { show: "" };
+  var p = t.split(" - ");
+  if (st[2] === "News & talk" || p.length < 2) return { show: t };
+  var a = RAD_REV[st[0]] ? p[p.length - 1] : p[0], s = RAD_REV[st[0]] ? p.slice(0, -1).join(" - ") : p.slice(1).join(" - ");
+  var flat = function (x) { return x.toLowerCase().replace(/[^a-z0-9]/g, ""); };
+  if (!a.trim() || !s.trim() || flat(st[1]).indexOf(flat(a)) === 0 || flat(a).indexOf(flat(st[1]).slice(0, 6)) === 0) return { show: t };   // the station naming itself
+  return { a: a.trim(), s: s.trim() };
+}
+function radSong() { var st = radioCur(); return st && RNP.id === st[0] && RNP.raw != null ? radParse(st, RNP.raw) : null; }
+function radHist(id) { return Array.isArray(RADH[id]) ? RADH[id] : []; }
+// asks what the chosen station is playing (at most every 20 seconds) and notes each new song, newest first, six per station
+function radioNow(force) {
+  var st = radioCur();
+  if (!st || !sb || !USER) return Promise.resolve();
+  if (!force && RNP.id === st[0] && Date.now() - RNP.at < 20000) return Promise.resolve();
+  if (RNP.id !== st[0]) { RNP.raw = null; RNP.err = ""; }
+  RNP.id = st[0]; RNP.at = Date.now();
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { np: st[3] } }).then(function (r) {
+    if (RNP.id !== st[0]) return;
+    var v = r.data && r.data.np;
+    if (!v) { RNP.raw = ""; RNP.err = "This needs the updated feeds function (redeploy super-function)."; }
+    else {
+      RNP.raw = unent(String(v.t || "")); RNP.err = "";
+      var x = radParse(st, RNP.raw), h = radHist(st[0]);
+      if (x.a && !(h[0] && h[0].a === x.a && h[0].s === x.s)) { h.unshift({ a: x.a, s: x.s, ts: Date.now() }); RADH[st[0]] = h.slice(0, 6); save("sp_radh", RADH); }
+    }
+    radioRefresh();
+  }).catch(function () {});
+}
+setInterval(function () { if (RAD.state === "play") radioNow(); }, 25000);
+// "Song (feat. X) [Clean]" -> "Song": the plain name finds the song more reliably
+function songPlain(s) { return String(s).replace(/\s*[\[(][^\])]*[\])]/g, "").replace(/\s+(feat\.?|ft\.?|f\/|featuring)\s.*$/i, "").trim(); }
+function songInfo(a, s) {
+  var key = (a + "|" + s).toLowerCase();
+  if (SONGC[key]) return SONGC[key];
+  return (SONGC[key] = fetch("https://itunes.apple.com/search?entity=song&limit=6&term=" + encodeURIComponent(songPlain(a).replace(/\s*[&,]\s.*$/, "") + " " + songPlain(s))).then(function (r) { return r.json(); }).then(function (j) {
+    var flat = function (x) { return String(x || "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""); }, fa = flat(songPlain(a)).slice(0, 8), fs = flat(songPlain(s)).slice(0, 8);
+    var list = (j && j.results) || [], hit = list.filter(function (x) { return flat(x.artistName).indexOf(fa.slice(0, 5)) >= 0 && flat(x.trackName).indexOf(fs.slice(0, 5)) >= 0; })[0] || list.filter(function (x) { return flat(x.trackName).indexOf(fs.slice(0, 5)) >= 0; })[0];
+    if (!hit) return {};
+    return { art: safeUrl(String(hit.artworkUrl100 || "").replace("100x100bb", "300x300bb")), sm: safeUrl(hit.artworkUrl100), album: hit.collectionName || "", year: (hit.releaseDate || "").slice(0, 4), date: hit.releaseDate || "", genre: hit.primaryGenreName || "",
+      ms: +hit.trackTimeMillis || 0, url: safeUrl(hit.trackViewUrl), artist: hit.artistName || "", track: hit.trackName || "", no: hit.trackNumber && hit.trackCount ? hit.trackNumber + " of " + hit.trackCount : "" };
+  }).catch(function () { delete SONGC[key]; return {}; }));
+}
+// who wrote it: MusicBrainz knows the recording, the work it is a recording of, and the work's composers and lyricists
+function songWriters(a, s) {
+  var key = (a + "|" + s).toLowerCase(), MB = "https://musicbrainz.org/ws/2/", q = function (x) { return songPlain(x).replace(/["\\]/g, " "); };
+  if (WRITC[key]) return WRITC[key];
+  return (WRITC[key] = fetch(MB + "recording?fmt=json&limit=5&query=" + encodeURIComponent('recording:"' + q(s) + '" AND artist:"' + q(a).replace(/\s*[&,]\s.*$/, "") + '"')).then(function (r) { return r.json(); }).then(function (j) {
+    var rec = ((j && j.recordings) || []).filter(function (x) { return x.score >= 85; })[0];
+    if (!rec) return [];
+    return fetch(MB + "recording/" + rec.id + "?fmt=json&inc=work-rels").then(function (r) { return r.json(); }).then(function (d) {
+      var w = ((d && d.relations) || []).filter(function (x) { return x.work; })[0];
+      if (!w) return [];
+      return fetch(MB + "work/" + w.work.id + "?fmt=json&inc=artist-rels").then(function (r) { return r.json(); }).then(function (wk) {
+        var seen = {}, out = [];
+        ((wk && wk.relations) || []).forEach(function (x) { if (x.artist && /composer|lyricist|writer/.test(x.type || "") && !seen[x.artist.name]) { seen[x.artist.name] = 1; out.push(x.artist.name); } });
+        return out.slice(0, 6);
+      });
+    });
+  }).catch(function () { delete WRITC[key]; return []; }));
+}
+function msText(ms) { var s = Math.round(ms / 1000); return Math.floor(s / 60) + ":" + pad2(s % 60); }
+var RAD_T = "Radio";
+function radioInfoHtml(info, writers) {
+  var st = radioCur(), x = radSong(), h = st ? radHist(st[0]) : [];
+  if (!st) return '<p class="mut">No station chosen.</p>';
+  var head;
+  if (!USER) head = '<p class="mut">Sign in to see what the station is playing.</p>';
+  else if (RNP.id !== st[0] || RNP.raw == null) head = '<p class="mut">Asking the station what it is playing…</p>';
+  else if (RNP.err) head = '<p class="mut">' + esc(RNP.err) + "</p>";
+  else if (!x || !x.a) head = '<p class="mut">' + (x && x.show ? "On now: <b>" + esc(x.show) + "</b>" : esc(st[1]) + " is not saying which song is on right now (talk, adverts, or a station that does not send it).") + "</p>";
+  else {
+    info = info || {};
+    var facts = [info.album, info.year, info.genre, info.ms ? msText(info.ms) : ""].filter(Boolean).join(" · "), find = encodeURIComponent(x.a + " " + songPlain(x.s));
+    head = '<div class="rnp">' + (info.art ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(info.art) + '">' : '<div class="rnpx">♪</div>') + '<div><h2 class="mh">' + esc(x.s) + "</h2><div class=\"rnpa\">" + esc(x.a) + "</div>" +
+      (facts ? '<div class="mut sn">' + esc(facts) + "</div>" : "") + (info.no ? '<div class="mut sn">Track ' + esc(info.no) + (info.date ? " · released " + esc(new Date(info.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })) : "") + "</div>" : "") +
+      '<div class="mut sn" id="rnpW">' + (writers == null ? "" : writers.length ? "Written by " + esc(writers.join(", ")) : "") + "</div>" +
+      '<p class="tools">' + (info.url ? linkBtn(info.url, "Apple Music") : "") + linkBtn("https://www.youtube.com/results?search_query=" + find, "YouTube") + linkBtn("https://genius.com/search?q=" + find, "Lyrics") + "</p></div></div>";
+  }
+  var before = h.filter(function (o, i) { return !(i === 0 && x && x.a === o.a && x.s === o.s); }).slice(0, 5);
+  return head + (before.length ? "<h3>Played before</h3>" + before.map(function (o) {
+    return '<div class="row rnph"><span><b>' + esc(o.s) + '</b> <span class="mut">' + esc(o.a) + '</span></span><span class="r mut">' + new Date(o.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) + "</span></div>";
+  }).join("") : "") +
+    '<p class="mut sn rnpf">' + esc(st[1]) + " · " + esc(st[2]) + " · " + esc(st[4]) + (USER ? " · Earlier songs are noted while the radio plays on this page." : "") + "</p>";
+}
+function openRadioInfo() {
+  openModal(RAD_T, radioInfoHtml());
+  radioNow(RNP.raw == null).then(radioRefresh);
+  radioRefresh();
+}
+// redraws the open window (and fills in cover and writers once they arrive)
+function radioRefresh() {
+  var st = radioCur(), x = radSong();
+  if ($("modal").hidden || $("mTitle").textContent !== RAD_T || !st) return;
+  if (!x || !x.a) { $("mBody").innerHTML = radioInfoHtml(); return; }
+  var key = x.a + "|" + x.s, same = function () { var y = radSong(); return !$("modal").hidden && $("mTitle").textContent === RAD_T && y && y.a + "|" + y.s === key; };
+  songInfo(x.a, x.s).then(function (info) {
+    if (!same()) return;
+    $("mBody").innerHTML = radioInfoHtml(info, null);
+    songWriters(x.a, x.s).then(function (w) { if (same() && $("rnpW")) $("rnpW").textContent = w.length ? "Written by " + w.join(", ") : ""; });
+  });
+}
+// hover card: small cover, song, artist, album
+function showRadioPeek(el) {
+  var st = radioCur();
+  if (!st || EDIT || !USER) return;
+  var draw = function (info) {
+    var x = radSong();
+    if (peekKey !== "radio" || !document.contains(el)) return;
+    info = info || {};
+    $("peek").innerHTML = '<div class="pk rpk">' + (info.sm ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(info.sm) + '">' : "") + "<div>" +
+      (x && x.a ? "<b>" + esc(x.s) + "</b><span>" + esc(x.a) + "</span>" + (info.album ? "<small>" + esc(info.album) + (info.year ? " · " + esc(info.year) : "") + "</small>" : "") : "<span>" + esc(x && x.show ? x.show : RNP.raw == null ? "Asking the station…" : "No song information right now") + "</span>") +
+      "<small>" + esc(st[1]) + (RAD.state === "play" ? " · playing" : "") + " · click for more</small></div></div>";
+    $("peek").classList.add("fpk");
+    placePeek(el, true);
+  };
+  draw();
+  radioNow().then(function () { var x = radSong(); draw(); if (x && x.a) songInfo(x.a, x.s).then(draw); });
+}
+
 // Settings > Radio: one tick box per station, grouped by kind
 function renderRadioList() {
   var on = {}, groups = {}, order = [];
   radioIds().forEach(function (r) { on[r[0]] = 1; });
   RADIOS.forEach(function (r) { if (!groups[r[2]]) { groups[r[2]] = []; order.push(r[2]); } groups[r[2]].push(r); });
   $("radList").innerHTML = order.map(function (g) {
-    return '<div class="sub"><b>' + esc(g) + "</b>" + groups[g].map(function (r) { return "<label>" + esc(r[1]) + ' <input type="checkbox" data-a="radtoggle" data-k="' + r[0] + '"' + (on[r[0]] ? " checked" : "") + "></label>"; }).join("") + "</div>";
+    return '<div class="sub"><b>' + esc(g) + "</b>" + groups[g].map(function (r) { return '<label><span>' + esc(r[1]) + ' <small class="rlang">' + esc(r[4]) + '</small></span> <input type="checkbox" data-a="radtoggle" data-k="' + r[0] + '"' + (on[r[0]] ? " checked" : "") + "></label>"; }).join("") + "</div>";
   }).join("");
 }
 function radioToggle(id, isOn) {
@@ -2271,6 +2449,7 @@ document.addEventListener("click", function (e) {
     }).catch(function () { alert("Could not copy automatically. Select the text below and copy it manually (Ctrl+C or Cmd+C)."); });
     return;
   }
+  if (a === "radinfo") { if (!e.target.closest("select, button, input, .dd, .tools")) openRadioInfo(); return; }
   if (a === "radplay") { radioPlay(); return; }
   if (a === "radstop") { radioStop(); return; }
   if (a === "radvol") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "vol" ? "" : "vol"; render(); return; }
@@ -2881,9 +3060,12 @@ function showMailPeek(el, i) {
   placePeek(el, true);
 }
 function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; $("peek").classList.remove("fpk"); }
-var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"]';
+var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"], #grid [data-a="radinfo"]';
 document.addEventListener("mouseover", function (e) {
-  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : b.dataset.k);
+  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", rad = b && b.dataset.a === "radinfo", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : rad ? "radio" : b.dataset.k);
+  // the Radio box: the song card shows while the mouse is on the box itself, not on its list and buttons
+  if (rad && (e.target.closest("select, button, input, .dd") || MENU_OPEN)) { if (peekKey === "radio") hidePeek(); return; }
+  if (rad) { if (peekKey === "radio") return; clearTimeout(peekT); peekKey = "radio"; peekT = setTimeout(function () { if (peekKey === "radio" && document.contains(b) && $("modal").hidden) showRadioPeek(b); }, 350); return; }
   if (!b || !(mail || ftr || /^[amrpt]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
