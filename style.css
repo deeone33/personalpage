@@ -672,8 +672,10 @@ button.danger:hover{background:var(--down);color:#fff}
 .spk.u path{stroke:var(--up)}
 .spk.d path{stroke:var(--down)}
 /* with the charts on, the percentages share one width, so the charts start in the same place on every row */
-.spk+span{min-width:5.1em;text-align:right;box-sizing:border-box}
-@container (max-width:265px){.spk{display:none}.spk+span{min-width:0}}
+.spk+span{min-width:5.6em;text-align:right;box-sizing:border-box}
+/* a narrow box gets a shorter chart; it is only dropped when there is really no room left for it */
+@container (max-width:300px){.spk{width:2em}}
+@container (max-width:238px){.spk{display:none}.spk+span{min-width:0}}
 
 /* ---- League table in a game's window ---- */
 .sptabw{max-height:17.5em;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:10px}
