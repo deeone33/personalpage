@@ -1,4 +1,4 @@
-var VERSION = 84;
+var VERSION = 85;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1629,9 +1629,14 @@ function positionClocks() {
   var box = $("clocks");
   box.hidden = !alarms().length;
   var mail = document.querySelector('[data-id="mail"]'), dateEl = $("date");
-  // level with the mail box, but never on top of the "next in your calendar" line when that one is long
+  // Level with the mail box. When the "next in your calendar" line is too long for that, the timers line up with the
+  // boxes further right instead: the first above the Radio box, the second above the menu box.
   var nu = $("nextUp"), clear = nu && !nu.hidden ? Math.round(nu.getBoundingClientRect().right) + 14 : 0;
-  box.style.left = Math.max(mail ? Math.round(mail.getBoundingClientRect().left) : 16, clear) + "px";
+  var left = function (id) { var el = document.querySelector('#grid [data-id="' + id + '"]'); return el ? Math.round(el.getBoundingClientRect().left) : 0; };
+  var mailL = mail ? Math.round(mail.getBoundingClientRect().left) : 16, liveL = left("live"), menuL = left("menu"), first = box.querySelector(".clk");
+  var shift = clear > mailL && (liveL || menuL) >= clear, startL = shift ? (liveL || menuL) : Math.max(mailL, clear);
+  box.style.left = startL + "px";
+  if (first) first.style.marginRight = shift && liveL && menuL > liveL ? Math.max(0, menuL - liveL - first.offsetWidth - 6) + "px" : "";   // the gap that puts the second one above the menu box
   box.style.top = (dateEl ? Math.round(dateEl.getBoundingClientRect().top) : 14) + "px";
 }
 function startStopwatch() {
