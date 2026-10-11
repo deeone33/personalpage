@@ -1,4 +1,4 @@
-var VERSION = 105;
+var VERSION = 107;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -415,6 +415,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
+  renderNfLog();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -483,7 +484,7 @@ function render() {
     NG = newsGroups();
     // A story (one or several sources merged into a row) is new only while you have seen and opened NONE of its
     // articles. Another source reporting a story that is already in your list does not mark it as new again.
-    var gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !READ[x.u]; }); };
+    var gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !isRead(x.u); }); };
     nNew = NG.filter(gNew).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
     nb = (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
@@ -491,7 +492,7 @@ function render() {
       var n = g[0], srcs = g.src || g.map(function (x) { return x.s; }), t0 = g.t0 || n.ts, b = g.fav ? "★ Favorite sources" : bucket(t0);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
       var bk = b !== lastB ? ' data-b="' + b + '"' : ""; lastB = b;
-      var hot = srcs.length >= 3 && nowN - n.ts < 10800000, nw = gNew(g), rd = !nw && g.some(function (x) { return READ[x.u]; });
+      var hot = srcs.length >= 3 && nowN - n.ts < 10800000, nw = gNew(g), rd = !nw && g.some(function (x) { return isRead(x.u); });
       var cls = (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : "") + '<span class="mut">' + ago(t0) + "</span>", "a:" + n.u, cls, bk);   // the time is always the last thing on the row
     }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : ""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
@@ -510,11 +511,11 @@ function render() {
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
   var tgMulti = allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
-  var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !READ[g.u]; }).length;
+  var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !isRead(g.u); }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.slice(0, cntOf("tg")).map(function (g) {
-    var cls = (isNewItem(g, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
+    var cls = (isNewItem(g, "tg") && !isRead(g.u) ? " new" : "") + (isRead(g.u) ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
   }).join("") + (PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
@@ -561,12 +562,12 @@ function render() {
   var rSubs = rdSrc(), RS = rdSort();
   var rp = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); });
   if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
-  var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !READ[x.u]; }).length : 0;
+  var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !isRead(x.u); }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
-    var cls = (RS === "new" && isNewItem(x, "rd") && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
+    var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
 
@@ -1118,10 +1119,52 @@ function cleanLink(u) {
   return u + hash;
 }
 function cleanLinks(list) { (list || []).forEach(function (x) { if (x && x.u) x.u = cleanLink(x.u); }); return list || []; }
+// ---- What you have seen, opened and been told about follows your account to every device ----
+// It lives in P.sy, which is saved and merged with the rest of your settings:
+//   seen   per box, the time up to which everything counts as seen ("x new" pressed, or you came back to the page)
+//   read   the posts you opened            once   what has already been announced (so no device announces it again)
+//   nclear / nseen   when the notification history was cleared / last looked at
+//   nalert / mail    up to where highlight-word and new-mail notifications have been given
+// Links and announcement keys are stored as short fingerprints, to keep this small.
+var SEENREMOTE = {}, LASTSTAMP = load("sp_stamp", {});
+function hs(s) { s = String(s); var a = 5381, b = 52711; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); a = ((a * 33) ^ c) | 0; b = ((b * 33) ^ c) | 0; } return ((a >>> 0) * 4096 + ((b >>> 0) % 4096)).toString(36); }
+function sy() {
+  if (!P.sy || typeof P.sy !== "object") P.sy = {};
+  ["seen", "read", "once", "mail"].forEach(function (k) { if (!P.sy[k] || typeof P.sy[k] !== "object") P.sy[k] = {}; });
+  return P.sy;
+}
+function syCap(o, n) { var k = Object.keys(o); if (k.length > n) k.sort(function (a, b) { return o[a] - o[b]; }).slice(0, k.length - n).forEach(function (x) { delete o[x]; }); }
+function isRead(u) { return !!(READ[u] || (P.sy && P.sy.read && P.sy.read[hs(u)])); }
+// Take in what another device did (called when your settings arrive from the account, at sign-in and whenever they change)
+function adoptSync() {
+  var s = P.sy;
+  if (!s || typeof s !== "object") return;
+  var ch = false;
+  var lists = { news: NEWSALL, tg: TGP, rd: RD }, fch = false;
+  ["news", "tg", "rd"].forEach(function (b) {
+    var t = +(s.seen && s.seen[b]) || 0;
+    if (t <= (NSEEN[b] || 0)) return;
+    NSEEN[b] = t; SEENREMOTE[b] = 1; ch = true;
+    // posts this device happened to load after that moment, but which are from before it, are not new either
+    (lists[b] || []).forEach(function (x) { if (x.u && x.ts && x.ts <= t && FIRST[x.u] > t) { FIRST[x.u] = x.ts; fch = true; } });
+  });
+  if (ch) save("sp_nseen", NSEEN);
+  if (fch) save("sp_first", FIRST);
+  if ((+s.nalert || 0) > load("sp_nalert", 0)) save("sp_nalert", +s.nalert);
+  [0, 1].forEach(function (i) { var t = +(s.mail && s.mail[i]) || 0; if (t > load("sp_mailts" + i, 0)) save("sp_mailts" + i, t); });
+  var nc = +s.nclear || 0, nsn = +s.nseen || 0, n0 = NLOG.length, dirty = false;
+  if (nc) NLOG = NLOG.filter(function (e) { return e.ts > nc; });
+  NLOG.forEach(function (e) { if (!e.seen && e.ts <= nsn) { e.seen = 1; dirty = true; } });
+  if (dirty || NLOG.length !== n0) save("sp_nlog", NLOG);
+}
 function stampFirst(list, box) {
   var now = Date.now(), init = !FIRST._i[box], changed = init;
+  // Everything was marked as seen on another device since this one last looked: posts from before that moment are
+  // not new here either, even though this device meets them for the first time now.
+  var away = !!SEENREMOTE[box] && (LASTSTAMP[box] || 0) < (NSEEN[box] || 0);
   FIRST._i[box] = 1;
-  (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init ? x.ts : now; changed = true; } });
+  (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init ? x.ts : away ? Math.min(now, x.ts || now) : now; changed = true; } });
+  LASTSTAMP[box] = now; save("sp_stamp", LASTSTAMP); SEENREMOTE[box] = 0;
   if (!changed) return;
   var k = Object.keys(FIRST);
   if (k.length > 3000) {
@@ -1136,12 +1179,15 @@ function stampFirst(list, box) {
 }
 function isNewItem(x, box) { return PREVIEW ? !!x.nw : isNewTs(FIRST[x.u] || x.ts, box); }
 function markSeen(box, t) {
-  (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = t || Date.now(); });
+  var s = sy();
+  (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = Math.max(NSEEN[b] || 0, t || Date.now()); if (!t) SEENREMOTE[b] = 0; s.seen[b] = Math.max(+s.seen[b] || 0, NSEEN[b]); });
   save("sp_nseen", NSEEN);
+  persist();
 }
 function markReadUrl(u) {
   if (!u) return;
   READ[u] = Date.now();
+  var sr = sy().read; sr[hs(u)] = READ[u]; syCap(sr, 300); persist();
   var k = Object.keys(READ);
   if (k.length > 400) k.sort(function (a, b) { return READ[a] - READ[b]; }).slice(0, k.length - 400).forEach(function (x) { delete READ[x]; });
   save("sp_nread", READ);
@@ -1179,6 +1225,7 @@ function newsAlerts() {
   if (!hi.length) return;
   var last = load("sp_nalert", 0), top = last, sent = {}, n = 0;
   if (!last) { save("sp_nalert", Date.now()); return; }
+  var last0 = last;
   NEWS.concat(TGP).sort(function (a, b) { return b.ts - a.ts; }).forEach(function (x) {
     if (x.ts <= last || !hasWord(x.tx || x.t, hi)) return;
     if (x.ts > top) top = x.ts;
@@ -1189,6 +1236,7 @@ function newsAlerts() {
     toast("words", x.s, hd(x.t, 140), { a: isTg ? "tg" : "news", k: x.u });
   });
   save("sp_nalert", top);
+  if (top > last0) { sy().nalert = Math.max(+sy().nalert || 0, top); persist(); }
 }
 function notifyTxt(title, body, onclick) {
   try {
@@ -1632,6 +1680,7 @@ function mailAlerts(i, m) {
   if (!last) { save(key, top || Date.now()); return; }
   if (!fresh.length) return;
   save(key, top);
+  sy().mail[i] = Math.max(+sy().mail[i] || 0, top); persist();
   var nm = (P.mail[i] && P.mail[i].name) || "Mail", who = function (x) { return (x.from || "").replace(/<.*>/, "").replace(/"/g, "").trim() || x.from || "?"; };
   fresh.sort(function (a, b) { return b.ts - a.ts; });
   toast("mail", nm + " · " + who(fresh[0]), fresh[0].subject || "(no subject)", { a: "mail", k: i });
@@ -1679,8 +1728,36 @@ function audio() {
   return AC;
 }
 document.addEventListener("click", function () { audio(); }, { once: true });
+// Why a sound was made: the last 15 notifications and alarms on this device, with the reason for each and whether it
+// could be heard. Shown under Settings > Notifications, so a sound without a visible card can be traced.
+var SNDLOG = load("sp_sndlog", []);
+var SND_WHY = { news: "Big news: several of your sources reported the same story", words: "A headline or post contained one of your highlight words", stock: "A stock on your list moved more than your limit", live: "A streamer you starred went live",
+  cal: "A calendar reminder or a special day you asked to be reminded of", mail: "New email arrived", sport: "A team, fighter or player you starred: start, goal or result" };
+function sndLog(title, why, heard) {
+  SNDLOG.push({ ts: Date.now(), t: String(title || "").slice(0, 120), why: String(why || ""), snd: heard, bg: !!document.hidden });
+  if (SNDLOG.length > 15) SNDLOG = SNDLOG.slice(-15);
+  save("sp_sndlog", SNDLOG);
+  renderNfLog();
+}
+function renderNfLog() {
+  var el = $("nfLog");
+  if (!el) return;
+  el.innerHTML = SNDLOG.length ? SNDLOG.slice(-5).reverse().map(function (e) {
+    var snd = e.snd === "on" ? "sound played" : e.snd === "blocked" ? "no sound (the browser had not allowed sound on this tab yet)" : e.snd === "off" ? "no sound (ping sound is switched off)" : "sound played";
+    return '<div class="nflog"><b>' + esc(e.t) + '</b><span class="mut">' + new Date(e.ts).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " · " + snd + (e.bg ? " · the tab was in the background" : "") + "</span><span>" + esc(e.why) + "</span></div>";
+  }).join("") : '<div class="mut sn">Nothing yet on this device.</div>';
+}
+function canSound() { var ac = audio(); return !!ac && ac.state === "running"; }
 function beep(freq, t0, dur, type) {
   var ac = audio(); if (!ac) return;
+  // Before you have clicked anywhere on the page, the browser keeps sound switched off. A sound asked for then must be
+  // dropped: it would otherwise wait and play, out of nowhere, at your first click (possibly hours later).
+  // (A sound you ask for with your very first click still plays: the browser switches sound on within a moment.)
+  if (ac.state !== "running") {
+    var asked = Date.now();
+    try { ac.resume().then(function () { if (Date.now() - asked < 1500 && ac.state === "running") beep(freq, t0, dur, type); }, function () {}); } catch (e) {}
+    return;
+  }
   var o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime + t0, peak = 0.25 * vol();
   o.type = type || "sine"; o.frequency.value = freq;
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -1693,7 +1770,10 @@ function ring(kind) {
   else for (var j = 0; j < 3; j++) beep(880, j * 0.3, 0.18, "sine");
 }
 var RINGING = {};
-function startRinging(a) { ring(a.snd); stopRinging(a.id); RINGING[a.id] = setInterval(function () { ring(a.snd); }, 2600); }
+function startRinging(a) {
+  sndLog((a.label || (a.k === "t" ? "Timer" : "Countdown")) + " finished", "A timer or countdown reached its end. It keeps ringing until you press Stop on it.", canSound() ? "on" : "blocked");
+  ring(a.snd); stopRinging(a.id); RINGING[a.id] = setInterval(function () { ring(a.snd); }, 2600);
+}
 function stopRinging(id) { if (RINGING[id]) { clearInterval(RINGING[id]); delete RINGING[id]; } }
 function notify(a) {
   try { if (window.Notification && Notification.permission === "granted") new Notification((a.label || (a.k === "t" ? "Timer" : "Countdown")) + " is done"); } catch (e) {}
@@ -2556,7 +2636,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
   if (a === "openfb") { MENU_OPEN = ""; render(); $("panel").hidden = true; FBMSG = ""; openFeedback(); return; }
   if (a === "fbkind") { fbKeep(); FB.kind = k; FBMSG = ""; openFeedback(); return; }
@@ -2621,9 +2701,9 @@ document.addEventListener("click", function (e) {
     });
     return;
   }
-  if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); return; }
+  if (a === "bellmenu") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); sy().nseen = Date.now(); persist(); } render(); return; }
   if (a === "bellgo") { var be = NLOG[+k]; MENU_OPEN = ""; render(); if (be) runAct(be.act); return; }
-  if (a === "bellclear") { NLOG = []; save("sp_nlog", NLOG); MENU_OPEN = ""; render(); return; }
+  if (a === "bellclear") { NLOG = []; save("sp_nlog", NLOG); sy().nclear = Date.now(); sy().nseen = Date.now(); persist(); MENU_OPEN = ""; render(); return; }
   if (a === "rdrefresh") { fetchReddit(true); return; }
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
@@ -2768,8 +2848,18 @@ function merge3(base, mine, theirs) {
   }
   return mine;
 }
+// merge3, and then for the "seen up to here" times the later of the two devices always wins
+function mergeP(base, mine, theirs) {
+  var m = merge3(base, mine, theirs), a = m && m.sy, b = theirs && theirs.sy;
+  if (isPlain(a) && isPlain(b)) {
+    ["nalert", "nclear", "nseen"].forEach(function (k) { if ((+b[k] || 0) > (+a[k] || 0)) a[k] = b[k]; });
+    ["seen", "mail"].forEach(function (g) { if (isPlain(b[g])) { if (!isPlain(a[g])) a[g] = {}; Object.keys(b[g]).forEach(function (k) { if ((+b[g][k] || 0) > (+a[g][k] || 0)) a[g][k] = b[g][k]; }); } });
+  }
+  return m;
+}
 function syncApply(prefs) {
   P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, prefs);
+  adoptSync();
   save("sp_prefs", P); applyTheme(); render(); renderClocks();
 }
 function syncRow(uid, cols) { return sb.from("user_prefs").select(cols).eq("user_id", uid).maybeSingle(); }
@@ -2792,7 +2882,7 @@ function syncSave() {
     // another device saved in the meantime: take its changes in before saving
     return syncRow(uid, "prefs,updated_at").then(function (q) {
       if (!USER || USER.id !== uid || q.error || !q.data || !q.data.prefs || !q.data.prefs.theme) return;
-      var merged = merge3(BASE, P, q.data.prefs);
+      var merged = mergeP(BASE, P, q.data.prefs);
       BASE = cloneP(q.data.prefs); SYNC_AT = Date.parse(q.data.updated_at) || 0;
       if (!sameP(merged, P)) syncApply(merged);
     });
@@ -2815,7 +2905,7 @@ function syncPull() {
     if (r.error || !at || at === SYNC_AT) return;
     return syncRow(uid, "prefs,updated_at").then(function (q) {
       if (!USER || USER.id !== uid || q.error || !q.data || !q.data.prefs || !q.data.prefs.theme) return;
-      var merged = BASE ? merge3(BASE, P, q.data.prefs) : q.data.prefs, mineToo = !sameP(merged, q.data.prefs);
+      var merged = BASE ? mergeP(BASE, P, q.data.prefs) : q.data.prefs, mineToo = !sameP(merged, q.data.prefs);
       BASE = cloneP(q.data.prefs); SYNC_AT = Date.parse(q.data.updated_at) || 0;
       if (!sameP(merged, P)) syncApply(merged);
       if (mineToo) persist();
@@ -2851,6 +2941,7 @@ function onUser(u) {
     if (r.data && r.data.prefs && r.data.prefs.theme) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
       BASE = cloneP(r.data.prefs); SYNC_AT = Date.parse(r.data.updated_at) || 0;
+      adoptSync();
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); isNew = true; }   // no saved settings yet: a brand-new account
     if (!$("modal").hidden && $("mTitle").textContent === "Account") closeModal();
@@ -3123,8 +3214,10 @@ function NTF() { return Object.assign({ news: true, words: true, stock: true, li
 var NOTIFIED = load("sp_notified", {});
 // true the first time a key is seen, so the same thing is never announced twice (also after a reload)
 function once(key) {
-  if (NOTIFIED[key]) return false;
+  var so = sy().once, h = hs(key);
+  if (NOTIFIED[key] || so[h]) return false;   // announced before, here or on another of your devices
   NOTIFIED[key] = Date.now();
+  so[h] = NOTIFIED[key]; syCap(so, 200); persist();
   var k = Object.keys(NOTIFIED);
   if (k.length > 300) k.sort(function (a, b) { return NOTIFIED[a] - NOTIFIED[b]; }).slice(0, k.length - 300).forEach(function (x) { delete NOTIFIED[x]; });
   save("sp_notified", NOTIFIED);
@@ -3158,7 +3251,14 @@ function toast(kind, title, body, act, sticky, force) {
   el.innerHTML = '<div class="tb" data-a="toastgo" data-k="' + id + '" role="button" tabindex="0"><b><i>' + (TICON[kind] || "●") + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + '</div><button class="tx" data-a="toastx" data-k="' + id + '" aria-label="Dismiss">✕</button>';
   box.appendChild(el);
   while (box.children.length > 4) toastAct("toastout", box.firstChild.id.slice(2));
-  if (!sticky) setTimeout(function () { toastAct("toastout", id); }, 20000);
+  // The card goes away by itself after 20 seconds, but only counted while you can see the page: one that arrives while
+  // the tab is in the background (you hear it) is still there when you come back.
+  if (!sticky) {
+    var arm = function () { setTimeout(function () { toastAct("toastout", id); }, 20000); };
+    if (!document.hidden) arm();
+    else { var onBack = function () { if (document.hidden) return; document.removeEventListener("visibilitychange", onBack); if (TOASTS[id]) arm(); }; document.addEventListener("visibilitychange", onBack); }
+  }
+  sndLog(title, force ? "A test button was pressed" : SND_WHY[kind] || "Notification", !n.sound ? "off" : canSound() ? "on" : "blocked");
   if (n.sound) { if (kind === "cal") ring("chime"); else beep(1175, 0, 0.22, "sine"); }
   if (n.desktop && document.hidden) notifyTxt(title, body, function () { runAct(act); });
   if (n.email && !force) MAILQ.push(entry);
@@ -3661,7 +3761,7 @@ function briefHtml() {
   h += sec("Today in your calendar", todayEv.map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join(""));
   var top = NEWS.length ? topStories(6) : [];
   h += sec("Top stories", top.map(function (g) {
-    return '<div class="row' + (g.some(function (x) { return READ[x.u]; }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
+    return '<div class="row' + (g.some(function (x) { return isRead(x.u); }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
   }).join(""));
   var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, 6);
   h += sec("Biggest movers", mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "");
@@ -5285,7 +5385,7 @@ var KEY_ACTS = [
   ["cal", "c", "Calendar", function () { CALV = null; openCal(); }],
   ["brief", "b", "Summary", function () { openBrief(); }],
   ["weather", "w", "Weather", function () { openWeather(); }],
-  ["bell", "a", "Notification history", function () { MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); } render(); }],
+  ["bell", "a", "Notification history", function () { MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); sy().nseen = Date.now(); persist(); } render(); }],
   ["seen", "x", "Mark everything as seen", function () { markSeen(""); render(); }],
   ["filter", "f", "Filter the news", function () { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } }],
   ["timer", "i", "New timer", function () { audio(); openClock("t"); }],

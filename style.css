@@ -913,6 +913,11 @@ body.noshadow #srchAns{box-shadow:none}
   .auth.fb .seg button{flex:1 1 45%;white-space:normal}
 }
 
+/* Settings > Notifications: the last notifications and their reason */
+.nflog{display:flex;flex-direction:column;gap:1px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;line-height:1.35}
+.nflog:first-child{border-top:0}
+.nflog .mut{font-size:11.5px}
+
 /* ---- Feedback window ---- */
 .mbox:has(.fb){width:min(460px,100%)}
 .fb{gap:8px}
