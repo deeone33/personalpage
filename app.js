@@ -1,4 +1,4 @@
-var VERSION = 111;
+var VERSION = 116;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -210,6 +210,7 @@ function applyTheme() {
   var nc = /^#[0-9a-f]{6}$/i.test(P.nextCol || "") ? P.nextCol : "";
   if (nc) r.style.setProperty("--nextc", nc); else r.style.removeProperty("--nextc");
   $("cNext").value = nc || P.accent;
+  applyClk();
   applyBoxCols();
 }
 function applyWall() {
@@ -295,12 +296,180 @@ function setWall(file) {
 }
 
 // ---- Date and day (Tallinn time) ----
-function tick() {
-  var d = new Date(), tz = { timeZone: TZ };
-  $("day").textContent = d.toLocaleDateString("en-GB", Object.assign({ weekday: "long" }, tz));
-  $("date").textContent = d.toLocaleDateString("en-GB", Object.assign({ day: "numeric", month: "long", year: "numeric" }, tz)) +
-    " · " + d.toLocaleTimeString("en-GB", Object.assign({ hour: "2-digit", minute: "2-digit" }, tz)) + " · " + LOCNAME;
+// ---- The day, date and time at the top of the page, and the world clocks (Settings > Clock & alarms) ----
+// P.clk holds only what you changed: day / date / year / time / loc / wd / sec (what is shown), fmt ("eu" | "us"),
+// style ("long" | "short" | "num"), h ("" follows fmt, "24", "12"), font / size / col (the day name),
+// wc (your cities: [{ n, tz }]), wcMode ("off" | "hover" | "line"), wcN (how many on the page).
+var CK_FONTS = {
+  logo: ["Like the OmniTree logo", '"Montserrat","Bricolage Grotesque",system-ui,sans-serif', 500, "uppercase", ".22em", 18],
+  classic: ["Big and bold (as it was before)", "inherit", 800, "none", "-1px", 40],
+  page: ["Same as the rest of the page", "inherit", 600, "none", "0", 20],
+  serif: ["Serif", 'Georgia,"Times New Roman",serif', 600, "none", "0", 22],
+  mono: ["Typewriter", 'ui-monospace,Consolas,"Courier New",monospace', 600, "none", "0", 20]
+};
+var CK_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function clk() {
+  var c = P.clk && typeof P.clk === "object" ? P.clk : {};
+  return { day: c.day !== false, date: c.date !== false, year: c.year !== false, time: c.time !== false, loc: c.loc !== false, wd: !!c.wd, sec: !!c.sec,
+    fmt: c.fmt === "us" ? "us" : "eu", style: c.style === "num" || c.style === "short" ? c.style : "long", h: c.h === "12" || c.h === "24" ? c.h : "",
+    font: CK_FONTS[c.font] ? c.font : "logo", size: +c.size >= 12 && +c.size <= 56 ? +c.size : 0, col: /^#[0-9a-f]{6}$/i.test(c.col || "") ? c.col : "",
+    wc: (Array.isArray(c.wc) ? c.wc : []).filter(function (w) { return w && w.n && w.tz; }).slice(0, 5), wcMode: c.wcMode === "hover" || c.wcMode === "line" ? c.wcMode : "off", wcN: Math.min(5, Math.max(1, +c.wcN || 3)) };
 }
+var CK_DTF = {};
+// the pieces of a moment in one time zone: weekday, day, month (name and number), year, hour, minute, second
+function clkParts(d, tz) {
+  var f = CK_DTF[tz];
+  if (!f) {
+    var opt = { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" };
+    try { f = new Intl.DateTimeFormat("en-GB", Object.assign({ timeZone: tz }, opt)); } catch (e) { f = new Intl.DateTimeFormat("en-GB", opt); }   // an unknown zone: this computer's own
+    CK_DTF[tz] = f;
+  }
+  var o = {};
+  f.formatToParts(d).forEach(function (p) { o[p.type] = p.value; });
+  return { wd: o.weekday || "", d: +o.day || 1, mon: o.month || "", m: CK_MONTHS.indexOf(o.month) + 1, y: +o.year || 0, H: (+o.hour || 0) % 24, M: o.minute || "00", S: o.second || "00" };
+}
+function clkP2(n) { return n < 10 ? "0" + n : "" + n; }
+function clkTime(p, c, noSec) {
+  var h12 = c.h ? c.h === "12" : c.fmt === "us", s = c.sec && !noSec ? ":" + p.S : "";
+  return h12 ? (p.H % 12 || 12) + ":" + p.M + s + (p.H < 12 ? " AM" : " PM") : clkP2(p.H) + ":" + p.M + s;
+}
+function clkDate(p, c, wd, year) {
+  var us = c.fmt === "us", s;
+  if (c.style === "num") { var yy = clkP2(p.y % 100); s = us ? p.m + "/" + p.d + (year ? "/" + yy : "") : clkP2(p.d) + "." + clkP2(p.m) + (year ? "." + yy : ""); }
+  else { var mo = c.style === "short" ? p.mon.slice(0, 3) : p.mon; s = us ? mo + " " + p.d + (year ? ", " + p.y : "") : p.d + " " + mo + (year ? " " + p.y : ""); }
+  return wd ? (c.style === "long" ? p.wd : p.wd.slice(0, 3)) + (c.style === "num" ? " " : ", ") + s : s;
+}
+function clkLine(d, tz, loc, c) {
+  var p = clkParts(d, tz), out = [];
+  if (c.date) out.push(clkDate(p, c, c.wd, c.year)); else if (c.wd) out.push(c.style === "long" ? p.wd : p.wd.slice(0, 3));
+  if (c.time) out.push(clkTime(p, c));
+  if (c.loc && loc) out.push(loc);
+  return out.join(" · ");
+}
+function setTxt(el, t) { if (el.textContent !== t) el.textContent = t; }
+function tick() {
+  var d = new Date(), c = clk(), line = clkLine(d, TZ, LOCNAME, c);
+  setTxt($("day"), clkParts(d, TZ).wd); $("day").hidden = !c.day;
+  setTxt($("date"), line); $("date").hidden = !line;
+  renderWc(d, c);
+  if ($("ckPrev") && !$("panel").hidden) ckPreview(d, c);
+}
+function applyClk() {
+  var c = clk(), f = CK_FONTS[c.font], el = $("day"), s = el.style;
+  s.fontFamily = f[1]; s.fontWeight = f[2]; s.textTransform = f[3]; s.letterSpacing = f[4];
+  s.setProperty("--dayfs", (c.size || f[5]) + "px");
+  if (c.col) s.setProperty("--dayc", c.col); else s.removeProperty("--dayc");
+  el.classList.toggle("grad", c.font === "classic" && !c.col);   // the old look had its color fade into the accent color
+}
+// ---- World clocks ----
+// one city at this moment: its time, its date, and how far ahead of or behind your own clock it is
+function wcNow(d, w, c, here) {
+  var p = clkParts(d, w.tz), mins = Math.round((Date.UTC(p.y, p.m - 1, p.d, p.H, +p.M) - Date.UTC(here.y, here.m - 1, here.d, here.H, +here.M)) / 60000);
+  var dd = Math.round((Date.UTC(p.y, p.m - 1, p.d) - Date.UTC(here.y, here.m - 1, here.d)) / 86400000), ah = Math.abs(mins) / 60;
+  return { n: w.n, t: clkTime(p, c, true), date: clkDate(p, Object.assign({}, c, { style: c.style === "num" ? "num" : "short" }), true, false), dd: dd,
+    off: !mins ? "same time" : (mins > 0 ? "+" : "−") + (ah % 1 ? ah.toFixed(1) : ah) + " h" };
+}
+function renderWc(d, c) {
+  var el = $("wclk"), here = clkParts(d, TZ), line = c.wcMode === "line" ? c.wc.slice(0, c.wcN) : [];
+  el.hidden = !line.length;
+  var h = line.map(function (w) { var x = wcNow(d, w, c, here); return "<span>" + esc(x.n) + " <b>" + x.t + "</b>" + (x.dd ? "<sup>" + (x.dd > 0 ? "+" : "−") + Math.abs(x.dd) + "</sup>" : "") + "</span>"; }).join("<i>·</i><wbr>");   // <wbr>: where the line may break on a narrow screen
+  if (el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); }
+  $("hdl").classList.toggle("haswc", c.wcMode !== "off" && c.wc.length > 0);
+  if (!$("wcPop").hidden) wcPopFill(d, c);
+}
+function wcPopFill(d, c) {
+  var here = clkParts(d || new Date(), TZ);
+  c = c || clk();
+  var h = '<div class="wcr me"><span>' + esc(LOCNAME) + "</span><b>" + clkTime(here, c, true) + "</b><small>" + clkDate(here, Object.assign({}, c, { style: c.style === "num" ? "num" : "short" }), true, false) + "</small><small>here</small></div>" +
+    c.wc.map(function (w) { var x = wcNow(d || new Date(), w, c, here); return '<div class="wcr"><span>' + esc(x.n) + "</span><b>" + x.t + "</b><small>" + x.date + "</small><small>" + x.off + "</small></div>"; }).join("");
+  var pop = $("wcPop");
+  if (pop.getAttribute("data-h") !== h) { pop.innerHTML = h; pop.setAttribute("data-h", h); }
+}
+function wcPopShow(on) {
+  var c = clk(), pop = $("wcPop");
+  if (!on || c.wcMode === "off" || !c.wc.length) { pop.hidden = true; return; }
+  wcPopFill(new Date(), c);
+  var under = !$("wclk").hidden ? $("wclk") : $("date").hidden ? $("day") : $("date");
+  pop.style.top = (under.offsetTop + under.offsetHeight + 5) + "px";
+  pop.hidden = false;
+}
+$("hdl").addEventListener("mouseover", function (e) { if (e.target.closest("#date,#wclk,#day,#wcPop")) wcPopShow(true); });
+$("hdl").addEventListener("mouseleave", function () { wcPopShow(false); });
+// on a phone there is no pointing: a tap on the date opens the box, a tap anywhere else closes it
+document.addEventListener("click", function (e) {
+  var on = e.target.closest && e.target.closest("#date,#wclk,#day");
+  if (on && $("wcPop").hidden) wcPopShow(true); else if (!e.target.closest || !e.target.closest("#wcPop")) wcPopShow(false);
+});
+// ---- Settings > Clock & alarms ----
+var WCRES = [];
+function ckPreview(d, c) {
+  var p = clkParts(d, TZ), f = CK_FONTS[c.font], line = clkLine(d, TZ, LOCNAME, c);
+  var h = (c.day ? '<div class="ckd" style="font-family:' + esc(f[1]) + ";font-weight:" + f[2] + ";text-transform:" + f[3] + ";letter-spacing:" + f[4] + ";font-size:" + Math.min(c.size || f[5], 30) + "px" + (c.col ? ";color:" + c.col : "") + '">' + esc(p.wd) + "</div>" : "") +
+    (line ? '<div class="mut">' + esc(line) + "</div>" : "") + (!c.day && !line ? '<div class="mut">Nothing is ticked, so nothing is shown.</div>' : "");
+  var el = $("ckPrev");
+  if (el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); }
+}
+function renderClkSet() {
+  if (!$("ckFmt")) return;
+  var c = clk(), d = new Date(), p = clkParts(d, TZ), ex = function (o) { var x = Object.assign({}, c, o); return clkDate(p, x, false, true) + ", " + clkTime(p, x, true); };
+  $("ckDay").checked = c.day; $("ckDate").checked = c.date; $("ckYear").checked = c.year; $("ckTime").checked = c.time; $("ckLoc").checked = c.loc; $("ckWd").checked = c.wd; $("ckSec").checked = c.sec;
+  var opts = function (id, list, cur) { $(id).innerHTML = list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join(""); };
+  opts("ckFmt", [["eu", "Europe: " + ex({ fmt: "eu", h: "" })], ["us", "United States: " + ex({ fmt: "us", h: "" })]], c.fmt);
+  opts("ckStyle", [["long", "Month in full: " + clkDate(p, Object.assign({}, c, { style: "long" }), false, true)], ["short", "Short month: " + clkDate(p, Object.assign({}, c, { style: "short" }), false, true)], ["num", "Numbers only: " + clkDate(p, Object.assign({}, c, { style: "num" }), false, true)]], c.style);
+  $("ckH").value = c.h;
+  opts("ckFont", Object.keys(CK_FONTS).map(function (k) { return [k, CK_FONTS[k][0]]; }), c.font);
+  $("ckSize").value = c.size || CK_FONTS[c.font][5];
+  $("ckCol").value = c.col || cols().fg;
+  $("ckWcMode").value = c.wcMode; $("ckWcN").value = String(c.wcN); $("ckWcNRow").hidden = c.wcMode !== "line";
+  $("wcList").innerHTML = c.wc.length ? c.wc.map(function (w, i) {
+    return '<div class="row"><span><b>' + esc(w.n) + '</b> <small class="mut">' + clkTime(clkParts(d, w.tz), c, true) + " · " + esc(String(w.tz).replace(/_/g, " ")) + '</small></span><span class="r"><button data-a="wcmv" data-k="' + i + '|-1" title="Move up" aria-label="Move up">▲</button><button data-a="wcmv" data-k="' + i + '|1" title="Move down" aria-label="Move down">▼</button><button data-a="wcdel" data-k="' + i + '" title="Remove" aria-label="Remove">✕</button></span></div>';
+  }).join("") : '<div class="mut sn">No cities yet. Search for one above.</div>';
+  ckPreview(d, c);
+}
+function clkSave(k, v) {
+  if (!P.clk || typeof P.clk !== "object") P.clk = {};
+  if (v === undefined) delete P.clk[k]; else P.clk[k] = v;
+  persist(); applyClk(); tick(); renderClkSet(); positionClocks();
+}
+function clkAct(a, k) {
+  var c = clk(), wc = c.wc.slice(), p = String(k || "").split("|");
+  if (a === "ckreset") { clkSave(k === "col" ? "col" : "size", undefined); return; }
+  if (a === "wcgo") {
+    var q = $("wcIn").value.trim();
+    if (!q) return;
+    $("wcRes").innerHTML = '<p class="mut sn">Searching…</p>';
+    fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=6&language=en&format=json").then(function (r) { return r.json(); }).then(function (j) {
+      WCRES = (j.results || []).filter(function (x) { return x.timezone; }).map(function (x) { return { n: String(x.name).slice(0, 40), tz: String(x.timezone).slice(0, 60), label: [x.admin1, x.country].filter(Boolean).join(", ") }; });
+      $("wcRes").innerHTML = WCRES.length ? WCRES.map(function (x, i) { return '<div class="row"><span>' + esc(x.n) + ' <small class="mut">' + esc(x.label) + '</small></span><button data-a="wcadd" data-k="' + i + '">Add</button></div>'; }).join("") : '<p class="mut sn">No city found.</p>';
+    }).catch(function () { $("wcRes").innerHTML = '<p class="mut sn">The search did not work. Try again.</p>'; });
+    return;
+  }
+  if (a === "wcadd") {
+    var x = WCRES[+k];
+    if (!x) return;
+    if (wc.length >= 5) { $("wcRes").innerHTML = '<p class="mut sn">You already have 5 cities. Remove one first.</p>'; return; }
+    if (!wc.some(function (w) { return w.n === x.n && w.tz === x.tz; })) wc.push({ n: x.n, tz: x.tz });
+    $("wcRes").innerHTML = ""; $("wcIn").value = ""; WCRES = [];
+    if (c.wcMode === "off") { if (!P.clk || typeof P.clk !== "object") P.clk = {}; P.clk.wcMode = "hover"; }   // adding the first city switches them on
+    clkSave("wc", wc); return;
+  }
+  if (a === "wcdel") { wc.splice(+k, 1); clkSave("wc", wc); return; }
+  if (a === "wcmv") { var i = +p[0], j = i + (+p[1] || 0); if (j < 0 || j >= wc.length) return; var it = wc.splice(i, 1)[0]; wc.splice(j, 0, it); clkSave("wc", wc); return; }
+}
+document.addEventListener("change", function (e) {
+  var t = e.target, map = { ckDay: "day", ckDate: "date", ckYear: "year", ckTime: "time", ckLoc: "loc", ckWd: "wd", ckSec: "sec" };
+  if (!t || !t.id || t.id.indexOf("ck") !== 0) return;
+  if (map[t.id]) clkSave(map[t.id], t.checked);
+  else if (t.id === "ckFmt") clkSave("fmt", t.value);
+  else if (t.id === "ckStyle") clkSave("style", t.value);
+  else if (t.id === "ckH") clkSave("h", t.value);
+  else if (t.id === "ckFont") { if (P.clk) delete P.clk.size; clkSave("font", t.value); }   // each font starts at its own natural size
+  else if (t.id === "ckCol") clkSave("col", t.value);
+  else if (t.id === "ckWcMode") clkSave("wcMode", t.value);
+  else if (t.id === "ckWcN") clkSave("wcN", +t.value);
+});
+document.addEventListener("input", function (e) { if (e.target && e.target.id === "ckSize") { if (!P.clk || typeof P.clk !== "object") P.clk = {}; P.clk.size = +e.target.value; persist(); applyClk(); ckPreview(new Date(), clk()); positionClocks(); } });
+document.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target && e.target.id === "wcIn") { e.preventDefault(); clkAct("wcgo"); } });
 
 // ---- Rows with favorite / hide controls in edit mode ----
 function row(key, main, sub, right, op, cls, attr) {
@@ -417,7 +586,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet();
+  renderNfLog(); renderBmSet(); renderClkSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -1971,7 +2140,13 @@ function positionClocks() {
   var mail = document.querySelector('[data-id="mail"]'), dateEl = $("date");
   // Level with the mail box. When the "next in your calendar" line is too long for that, the timers line up with the
   // boxes further right instead: the first above the Radio box, the second above the menu box.
-  var nu = $("nextUp"), clear = nu && !nu.hidden ? Math.round(nu.getBoundingClientRect().right) + 14 : 0;
+  // where the text of the "next up" line ends (the line itself may be wider than its text)
+  var nu = $("nextUp"), clear = 0;
+  if (nu && !nu.hidden) {
+    var nr = nu.getBoundingClientRect(), tr = nr;
+    try { var rg = document.createRange(); rg.selectNodeContents(nu); tr = rg.getBoundingClientRect(); } catch (e) {}
+    clear = Math.round(Math.min(nr.right, tr.width ? tr.right : nr.right)) + 14;
+  }
   var left = function (id) { var el = document.querySelector('#grid [data-id="' + id + '"]'); return el ? Math.round(el.getBoundingClientRect().left) : 0; };
   var mailL = mail ? Math.round(mail.getBoundingClientRect().left) : 16, liveL = left("live"), menuL = left("menu"), first = box.querySelector(".clk");
   var shift = clear > mailL && (liveL || menuL) >= clear, startL = shift ? (liveL || menuL) : Math.max(mailL, clear);
@@ -2658,9 +2833,9 @@ function showCity(c, j) {
   if (j) { $("cityBody").innerHTML = cityTools(c) + wxHtml(j); return; }
   $("cityBody").innerHTML = '<p class="mut">Loading ' + esc(c.name) + "...</p>";
   loadWx(c).then(function (x) {
-    if (!WXM || WXM.c !== c) return;
+    if (!WXM || WXM.c !== c || !$("cityBody")) return;   // the window was closed, or another city picked, in the meantime
     WXM.j = x; $("cityBody").innerHTML = x && x.current ? cityTools(c) + wxHtml(x) : '<p class="mut">Could not load the weather.</p>';
-  }).catch(function () { $("cityBody").innerHTML = '<p class="mut">Could not load the weather.</p>'; });
+  }).catch(function () { if ($("cityBody")) $("cityBody").innerHTML = '<p class="mut">Could not load the weather.</p>'; });
 }
 function openWeather() {
   openModal("Weather", '<div class="add"><input type="text" id="cityIn" placeholder="Search a city, e.g. Stockholm"><button data-a="citygo">Search</button></div><div id="cityRes"></div><div id="cityChips" class="tools"></div><div id="cityBody"></div>');
@@ -2800,7 +2975,8 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); return; }
+  if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
   if (a === "openfb") { MENU_OPEN = ""; render(); $("panel").hidden = true; FBMSG = ""; openFeedback(); return; }
@@ -3344,7 +3520,7 @@ function openHelp() {
     '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: shown in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +

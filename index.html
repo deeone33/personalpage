@@ -23,7 +23,7 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"OmniTree","url":"https://omnitr.ee/","description":"A free, customizable start page and personal dashboard: news, live sports scores, stocks, Twitch, YouTube, Reddit, mail, weather, radio, notes and calendar in one browser tab.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any (web browser)","browserRequirements":"Requires JavaScript","image":"https://omnitr.ee/preview.jpg","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"featureList":["News from the sources you choose, with duplicates grouped","Live sports scores, tables and match details","Stocks and crypto with small charts","Twitch and YouTube inside the page","Reddit and Telegram channels","Gmail unread count","Weather, radio, notes, to-dos, calendar, timers","Drag-and-drop layout, colors and wallpaper","Syncs between devices with a free account"]}</script>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Montserrat:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head><body>
 <div id="wall"></div>
@@ -35,7 +35,7 @@
 <main id="app">
   <nav id="bm" aria-label="Bookmarks" hidden></nav>
   <header>
-    <div><div id="day">Day</div><div id="date" class="mut">Date</div><button id="nextUp" data-a="nextday" title="Open the calendar on this day" hidden></button></div>
+    <div id="hdl"><div id="day">Day</div><div id="date" class="mut">Date</div><div id="wclk" class="mut" hidden></div><button id="nextUp" data-a="nextday" title="Open the calendar on this day" hidden></button><div id="wcPop" role="status" hidden></div></div>
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search… (type help for info)" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <div id="logoImg" role="img" aria-label="OmniTree"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
   </header>
@@ -266,7 +266,37 @@
   </section>
 
   <section class="setgrp" data-cat="Alerts" data-sec="Clock &amp; alarms">
-    <label>Location for the date and time <button data-a="opensettingsloc">Change</button></label>
+    <div class="sub"><b>Date and time at the top of the page</b>
+      <div id="ckPrev" class="ckprev" aria-label="How it looks"></div>
+      <div class="mut sn">Tick what you want to see:</div>
+      <div class="cktick">
+        <label><input type="checkbox" id="ckDay"> Day name (the top line)</label>
+        <label><input type="checkbox" id="ckDate"> Date</label>
+        <label><input type="checkbox" id="ckYear"> Year</label>
+        <label><input type="checkbox" id="ckTime"> Time</label>
+        <label><input type="checkbox" id="ckLoc"> Location</label>
+        <label><input type="checkbox" id="ckWd"> Weekday in front of the date</label>
+        <label><input type="checkbox" id="ckSec"> Seconds</label>
+      </div>
+      <label>Written as in <select id="ckFmt"></select></label>
+      <label>The date <select id="ckStyle"></select></label>
+      <label>The clock <select id="ckH"><option value="">Follows “Written as in”</option><option value="24">24-hour: 21:41</option><option value="12">12-hour: 9:41 PM</option></select></label>
+      <label>Location for the date and time <button data-a="opensettingsloc">Change</button></label>
+    </div>
+    <div class="sub"><b>How the day name looks</b>
+      <label>Font <select id="ckFont"></select></label>
+      <label>Size <span><input type="range" id="ckSize" min="12" max="56" step="1"> <button data-a="ckreset" data-k="size">Reset</button></span></label>
+      <label>Color <span><input type="color" id="ckCol"> <button data-a="ckreset" data-k="col">Reset</button></span></label>
+    </div>
+    <div class="sub"><b>World clocks</b>
+      <div class="mut sn">The time in up to 5 other cities.</div>
+      <label>Show them <select id="ckWcMode"><option value="off">Not at all</option><option value="hover">In a small box when I point at the date</option><option value="line">On the page, under the date</option></select></label>
+      <label id="ckWcNRow">How many on the page <select id="ckWcN"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+      <div class="add"><input type="text" id="wcIn" placeholder="Add a city, e.g. New York" aria-label="City" autocomplete="off"><button data-a="wcgo">Search</button></div>
+      <div id="wcRes"></div>
+      <div id="wcList"></div>
+      <div class="mut sn">Pointing at the date (on a phone: tapping it) shows all your cities with their date and how many hours they are ahead or behind.</div>
+    </div>
     <label>Alarm volume <input type="range" id="volSlider" min="0" max="100"></label>
   </section>
 
