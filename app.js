@@ -1,4 +1,4 @@
-var VERSION = 83;
+var VERSION = 84;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1967,6 +1967,15 @@ var RADIOS = [
   ["dingata", "Sveriges Radio P3 Din Gata", "Hip-hop & R&B", "https://live1.sr.se/dingata-mp3-96", "Swedish"],
   ["rpr1", "RPR1 Old School Hip Hop", "Hip-hop & R&B", "https://streams.rpr1.de/rpr-hiphop-128-mp3", "German"],
   ["bigrap", "bigFM Deutschrap", "Hip-hop & R&B", "https://stream.bigfm.de/rapfeature/mp3-128/", "German"],
+  // Reggae
+  ["irie", "Irie FM (Jamaica)", "Reggae", "https://stream.iriefm.net:8008/stream", "English"],
+  ["zip", "Zip FM 103 (Jamaica)", "Reggae", "https://stream.zeno.fm/c0ytcn43vxquv", "English"],
+  ["stylz", "Stylz FM (Jamaica)", "Reggae", "https://stream.zeno.fm/0d1hpcmqqy5tv", "English"],
+  ["reg181", "181.fm Reggae Roots", "Reggae", "https://listen.181fm.com/181-reggae_128k.mp3", "English"],
+  ["fm1reg", "1.FM Reggae Trade", "Reggae", "https://strm112.1.fm/reggae_mobile_mp3", "Music only"],
+  ["chillcafe", "Reggae Chill Cafe", "Reggae", "https://maggie.torontocast.com:2020/stream/reggaechillcafe", "Music only"],
+  ["lautreg", "Reggae (laut.fm)", "Reggae", "https://stream.laut.fm/reggae", "Music only"],
+  ["lautdub", "Dub (laut.fm)", "Reggae", "https://stream.laut.fm/dub", "Music only"],
   // Dance
   ["capdance", "Capital Dance", "Dance", "https://media-ssl.musicradio.com/CapitalDance", "English"],
   ["heartdance", "Heart Dance", "Dance", "https://media-ssl.musicradio.com/HeartDanceMP3", "English"],
