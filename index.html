@@ -4,7 +4,23 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
-<title>OmniTree</title>
+<title>OmniTree – free start page for news, sports, stocks, Twitch and mail</title>
+<meta name="description" content="OmniTree is a free, customizable start page and personal dashboard: your news, live sports scores, stocks, Twitch, YouTube, Reddit, mail, weather, radio, notes and calendar in one browser tab.">
+<link rel="canonical" href="https://omnitr.ee/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OmniTree">
+<meta property="og:url" content="https://omnitr.ee/">
+<meta property="og:title" content="OmniTree – your start page, everything in one tab">
+<meta property="og:description" content="News, live sports scores, stocks, Twitch, YouTube, Reddit, mail, weather, radio, notes and calendar on one customizable page. Free.">
+<meta property="og:image" content="https://omnitr.ee/preview.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The OmniTree start page with news, stocks, sports and streams side by side">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OmniTree – your start page, everything in one tab">
+<meta name="twitter:description" content="News, live sports scores, stocks, Twitch, YouTube, Reddit, mail, weather, radio, notes and calendar on one customizable page. Free.">
+<meta name="twitter:image" content="https://omnitr.ee/preview.jpg">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"OmniTree","url":"https://omnitr.ee/","description":"A free, customizable start page and personal dashboard: news, live sports scores, stocks, Twitch, YouTube, Reddit, mail, weather, radio, notes and calendar in one browser tab.","applicationCategory":"UtilitiesApplication","operatingSystem":"Any (web browser)","browserRequirements":"Requires JavaScript","image":"https://omnitr.ee/preview.jpg","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"featureList":["News from the sources you choose, with duplicates grouped","Live sports scores, tables and match details","Stocks and crypto with small charts","Twitch and YouTube inside the page","Reddit and Telegram channels","Gmail unread count","Weather, radio, notes, to-dos, calendar, timers","Drag-and-drop layout, colors and wallpaper","Syncs between devices with a free account"]}</script>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
@@ -25,7 +41,13 @@
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the radio, the search bar, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
   <div id="clocks"></div>
   <div id="grid"></div>
-  <footer class="mut">OmniTree · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button></footer>
+  <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
+  <section id="intro">
+    <h1>OmniTree: your start page, everything in one tab</h1>
+    <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
+    <p>You decide what is on the page: switch boxes on and off, drag them where you want them, and pick colors and a wallpaper. A free account saves your setup and brings it to every device.</p>
+  </section>
+  <footer class="mut">OmniTree · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button><span id="ftLinks"> · <a href="about">About</a> · <a href="features">Features</a> · <a href="help">Help page</a> · <a href="privacy">Privacy</a></span></footer>
 </main>
 <div id="panel" hidden>
  <div class="setwin" role="dialog" aria-modal="true" aria-label="Settings">
@@ -249,6 +271,7 @@
       <div id="delMsg" class="sn" role="status"></div>
     </div>
     <div id="delSignedOut" class="mut" hidden>Sign in first to delete an account.</div>
+    <div class="mut sn">What is stored about you and why: <a href="privacy" target="_blank" rel="noopener">Privacy policy</a></div>
   </section>
 
   <section class="setgrp" data-cat="Account" data-sec="Admin" data-admin="1">

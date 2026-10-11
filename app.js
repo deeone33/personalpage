@@ -1,4 +1,4 @@
-var VERSION = 97;
+var VERSION = 99;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2693,11 +2693,17 @@ function persist() {
       .then(function (r) { if (r.error) setMsg("Could not save to your account: " + r.error.message); });
   }, 600);
 }
+var TITLE0 = document.title;
+// a saved sign-in in this browser: hide the visitor parts at once, so they do not flash by before the account has loaded
+try { for (var ti = 0; ti < localStorage.length; ti++) if (/^sb-.+-auth-token$/.test(localStorage.key(ti) || "")) { $("intro").hidden = true; $("ftLinks").hidden = true; document.title = "OmniTree"; break; } } catch (e) {}
 function renderAccount() {
   $("who").textContent = USER ? "signed in as " + USER.email : "not signed in";
   $("pwSignedIn").hidden = !USER;
   $("pwSignedOut").hidden = !!USER;
   $("delSignedIn").hidden = !USER; $("delSignedOut").hidden = !!USER;
+  // the introduction, the links to the plain pages and the long title are for visitors; signed in, the page is just yours
+  $("intro").hidden = !!USER; $("ftLinks").hidden = !!USER;
+  document.title = USER ? "OmniTree" : TITLE0;
   buildSetNav();
 }
 function onUser(u) {

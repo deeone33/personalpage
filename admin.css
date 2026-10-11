@@ -36,6 +36,7 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .tag.k-bug{border-color:var(--down);color:var(--down)}
 .tag.k-improve{border-color:var(--ac);color:var(--fg)}
 .tag.k-idea{border-color:var(--up);color:var(--up)}
+.tag.k-privacy{border-color:#7aa7ff;color:#7aa7ff}
 tr.frow{cursor:pointer}
 tr.frow.isnew .mail{font-weight:700}
 .fd{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}

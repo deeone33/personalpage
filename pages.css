@@ -1,0 +1,46 @@
+/* OmniTree plain pages (About, Features, Help, Privacy). Always dark; builds on style.css (colors, buttons, form fields). */
+:root{--ac:#f5b942;--acfg:#111;--acsoft:rgba(245,185,66,.16);--acglow:rgba(245,185,66,.35)}
+body.page{background:var(--bg);color:var(--fg)}
+.phead{max-width:860px;margin:auto;padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.plogo{display:flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:800;font-size:20px;letter-spacing:.02em}
+.plogo img{height:34px;width:auto}
+.phead nav{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:14px}
+.phead nav a{color:var(--mut);text-decoration:none}
+.phead nav a:hover,.phead nav a[aria-current]{color:var(--fg)}
+.phead nav a.go{color:var(--acfg);background:var(--ac);border-radius:9px;padding:6px 12px;font-weight:600}
+.pmain{max-width:760px;margin:auto;padding:18px 20px 30px;font-size:15px;line-height:1.6}
+.pmain h1{font-size:30px;line-height:1.15;margin:22px 0 8px;font-weight:800;letter-spacing:-.5px}
+.pmain h2{font-size:19px;margin:28px 0 6px;font-weight:700}
+.pmain h3{font-size:15px;margin:20px 0 4px;font-weight:700;scroll-margin-top:12px}
+.pmain p{margin:0 0 10px}
+.pmain ul,.pmain ol{margin:0 0 10px;padding-left:22px}
+.pmain li{margin-bottom:4px}
+.pmain a{color:var(--ac)}
+.pmain .lead{font-size:17px;color:var(--mut)}
+.pmain code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:13px}
+.pmain kbd{background:var(--card);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font:inherit;font-size:12.5px}
+.pmain table{border-collapse:collapse;width:100%;font-size:14px;margin:0 0 12px}
+.pmain th,.pmain td{text-align:left;vertical-align:top;padding:6px 10px 6px 0;border-top:1px solid var(--line)}
+.pmain th{color:var(--mut);font-weight:600;font-size:12.5px;border-top:0}
+.pmain .upd{color:var(--mut);font-size:13px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0 14px}
+.pgrid>div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45}
+.pgrid b{display:block;margin-bottom:2px}
+.ptoc{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.ptoc a{font-size:12.5px;color:var(--fg);text-decoration:none;border:1px solid var(--line);border-radius:99px;padding:2px 10px;background:var(--card)}
+.ptoc a:hover{border-color:var(--ac)}
+.pcta{margin:26px 0 0;padding:14px 16px;border:1px solid var(--ac);background:var(--acsoft);border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pcta a{color:var(--acfg);background:var(--ac);border-radius:9px;padding:7px 14px;font-weight:600;text-decoration:none}
+.pfoot{max-width:760px;margin:auto;padding:0 20px 40px;font-size:12.5px;text-align:left;opacity:.8}
+.pfoot a{color:var(--ac)}
+/* the privacy request form */
+.pform{display:flex;flex-direction:column;gap:9px;max-width:480px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.pform label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
+.pform input,.pform select,.pform textarea{font:inherit;font-size:14px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 10px;max-width:none;width:100%;box-sizing:border-box}
+.pform textarea{resize:vertical}
+.pform button{align-self:flex-start;padding:8px 14px;font-size:14px}
+#prMsg:empty{display:none}
+#prMsg{font-size:13.5px}
+/* pieces of the in-app Help that the Help page reuses */
+.pmain .safe{margin:8px 0 12px}
+.pmain img{max-width:100%}

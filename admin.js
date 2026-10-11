@@ -82,7 +82,7 @@
   };
   function clickLabel(k) { var p = k.split(":"), w = BOXES[p[0]] || WHERE[p[0]] || p[0]; return w + ": " + (ACT[p[1]] || p[1]); }
   // feedback types: name in the list, then the questions the sender answered (same order as in the Feedback window)
-  var FBK = { bug: ["Bug", "What went wrong", "How to make it happen again", "What was expected"], improve: ["Improvement", "What should be better", "How it should work", ""], idea: ["New idea", "What it should do", "When it would be used", ""], other: ["Other", "Message", "", ""] };
+  var FBK = { bug: ["Bug", "What went wrong", "How to make it happen again", "What was expected"], improve: ["Improvement", "What should be better", "How it should work", ""], idea: ["New idea", "What it should do", "When it would be used", ""], other: ["Other", "Message", "", ""], privacy: ["Privacy request", "Request", "", ""] };
   function fbWho(f, byId) { var u = f.user_id && byId[f.user_id]; return u ? u.email : f.contact || (f.user_id ? "a deleted account" : ""); }
   function fbAct(kind, id) {
     var f = D && (D.feedback || []).filter(function (x) { return String(x.id) === String(id); })[0];
