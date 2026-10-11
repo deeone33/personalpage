@@ -308,6 +308,36 @@ button.pill{cursor:pointer;line-height:1.5}
 .setgrp .add input{flex:1 1 90px}
 .add{display:flex;gap:6px;margin-top:8px}
 .add input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 10px}
+/* web page boxes: the page sits in a layer over the grid, exactly on top of its (empty) box */
+#gridw{position:relative}
+#embeds iframe{position:absolute;border:0;border-radius:8px;background:#fff;z-index:1;color-scheme:normal}
+#embeds iframe.edit{pointer-events:none;opacity:.4}
+.embph{border-radius:8px;background:var(--bg);border:1px dashed var(--line)}
+.embrow .add{flex-wrap:wrap}
+.embrow .add input{flex:1 1 220px}
+.embrow .add .embn{flex:0 1 160px}
+.bnm{font-weight:600;white-space:nowrap;color:var(--fg)}
+.bmimpl{max-height:260px;overflow:auto;margin:6px 0}
+.bmimpr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0}
+.bmimpr label{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;font-size:13px;flex:1 1 auto}
+.bmimpr label small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.bmimpr label{flex:1 1 0}
+.bmimpr .bnm{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.bmimpr label small{flex:0 2 auto}
+.card[data-id^="embed"] .th{min-width:0}
+.card[data-id^="embed"] .th h3{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 0;display:block}
+.card[data-id^="embed"] .th .hc{flex:none}
+.card[data-id^="embed"] .th .hc a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:inherit}
+.bmimpr select{flex:none;font-size:12px;padding:2px 6px;max-width:45%}
+.icsrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.icsrow input{flex:1 1 140px;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:5px 10px}
+.icsrow button{flex:none;padding:3px 9px}
+.icsrow select{flex:0 1 150px;min-width:0}
+.icsst{flex-basis:100%}
+.icsl{grid-template-columns:1fr}
+.calcn{border:1px solid var(--line);border-radius:99px;padding:0 6px;font-size:.8em;color:var(--mut)}
+#icsMsg:empty,#bmImpMsg:empty{display:none}
+#icsMsg,#bmImpMsg{margin-top:6px}
 .stfile{align-items:center;flex-wrap:wrap}
 .stfile .filebtn{flex:none}
 .stfile input.vis-hidden{flex:none!important;width:1px!important;min-width:0!important;padding:0!important;border:0!important}
@@ -629,6 +659,8 @@ body.dockslim #dockGrip{display:none}
 .sprow .r{flex:0 1 auto;width:var(--stw,3.4em);min-width:0;overflow:hidden;justify-content:flex-end}
 .sprow.spx .r{width:auto;flex:none}
 .sprow{gap:4px}
+.spday{font-size:calc(11px*var(--fs,1));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:6px 0 2px;border-bottom:1px solid var(--line)}
+.spday:first-child{padding-top:0}
 .sprow .pill{padding:0 5px}
 .list[data-list=sports]{overflow-x:hidden;container-type:inline-size}
 /* a very narrow Sports box has no room for everything: the sport icon and crests step aside so the names and score stay */

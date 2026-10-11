@@ -1,4 +1,4 @@
-var VERSION = 122;
+var VERSION = 123;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -493,8 +493,10 @@ function shown(key) { return !P.hidden[key]; }
 function favFirst(a, b) { return (P.fav[b.key] ? 1 : 0) - (P.fav[a.key] ? 1 : 0); }
 function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + title + "</h3>" + body + "</div>"; }
 
-var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6 };
+// embed1-3 are the web page boxes: off until you give one an address (Settings > Web page boxes)
+var EMB_IDS = ["embed1", "embed2", "embed3"];
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"].concat(EMB_IDS);
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, embed1: 6, embed2: 6, embed3: 6 };
 // The layout a new visitor or a new account starts with: sizes, text sizes, list lengths and order.
 // Top row of small boxes, News and Telegram side by side, then Stocks, Twitch, YouTube and (stacked) Reddit over Sports.
 var DEF_LAYOUT = {
@@ -528,6 +530,7 @@ function adjust(a, id, d) {
   if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
   else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
   else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
+  else if (isEmb(id)) { L.rows = L.rows || {}; L.rows[id] = Math.max(4, Math.min(30, (L.rows[id] || 10) + d * 2)); }
   else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" || id === "sports" ? 6 : 10)) + d));
   persist(); render();
 }
@@ -593,7 +596,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet(); renderClkSet();
+  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -609,8 +612,8 @@ function tile(id, title, body, click, hx) {
     var arw = function (a, b) { return '<span class="ad">' + a + '</span><span class="ap">' + b + "</span>"; };
     t = '<div class="tools">' + bt("mv", -1, arw("◀", "▲"), "Move earlier") + bt("mv", 1, arw("▶", "▼"), "Move later") +
       (noW ? "" : bt("w", -1, "W−", "Narrower", "wbt") + bt("w", 1, "W+", "Wider", "wbt")) +
-      bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text") +
-      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") +
+      (isEmb(id) ? "" : bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text")) +
+      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : isEmb(id) ? bt("h", -1, "H−", "Lower box") + bt("h", 1, "H+", "Taller box") : "") +
       (id === "menu" ? "" : '<button data-a="boxoff" data-k="' + id + '" title="Hide this whole box. Bring it back in Settings, Layout.">Hide</button>') + "</div>";
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
@@ -751,7 +754,7 @@ function render() {
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
 
-  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + "</select>");
+  T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
   var SL = P.stocks || D.stocks;
   var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
@@ -784,6 +787,7 @@ function render() {
     return row(x.key, ico(x.id, x.logo) + "<b" + (x.name ? ' title="' + esc(x.name) + '"' : "") + ">" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), spk + (c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>"), 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
+  EMB_IDS.forEach(function (id) { T[id] = embOn(id) ? embTile(id) : ""; });
   var pp = pairPct();
   var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
   var menuBox = T.menu.replace('style="--fs:', 'style="flex:' + (100 - pp) + ' 1 0%;--fs:');
@@ -823,6 +827,7 @@ function render() {
   $("pv").hidden = !PREVIEW;
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   packGrid();
+  placeEmbeds();
   Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
   grid0.style.minHeight = "";
   if (sy0 > 0) {
@@ -900,6 +905,423 @@ var packT = 0;
 window.addEventListener("resize", function () { clearTimeout(packT); packT = setTimeout(packGrid, 80); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { packGrid(); });
 
+// ---- Bookmarks: import from the file a browser exports (Chrome, Edge, Brave, Firefox, Safari and Opera all write the same kind) ----
+// The file is read here in the browser. Its folders are listed with tick boxes; nothing is added before you press Import.
+var BMIMP = null;
+function bmParseFile(text) {
+  var doc = new DOMParser().parseFromString(String(text).slice(0, 6000000), "text/html"), out = [], loose = { n: "Not in a folder", path: "", bar: false, links: [] };
+  var kids = function (el, tag) { return Array.prototype.filter.call(el.children, function (c) { return c.tagName === tag; }); };
+  var walk = function (dl, path, into) {
+    var dts = kids(dl, "DT");
+    kids(dl, "P").forEach(function (p) { dts = dts.concat(kids(p, "DT")); });
+    dts.forEach(function (dt) {
+      var a = kids(dt, "A")[0], h = kids(dt, "H3")[0];
+      if (a) {
+        var u = safeUrl(a.getAttribute("href"));
+        if (u && into.links.length < 500) into.links.push({ t: (a.textContent || "").trim().slice(0, 40), u: u.slice(0, 500) });
+      } else if (h) {
+        var name = (h.textContent || "").trim().slice(0, 40) || "Folder", sub = kids(dt, "DL")[0] || (dt.nextElementSibling && dt.nextElementSibling.tagName === "DL" ? dt.nextElementSibling : null);
+        var f = { n: name, path: path, bar: h.hasAttribute("personal_toolbar_folder"), links: [] };
+        out.push(f);
+        if (sub && out.length < 300) walk(sub, (path ? path + " › " : "") + name, f);
+      }
+    });
+  };
+  var top = doc.querySelector("dl");
+  if (!top) return null;
+  walk(top, "", loose);
+  if (loose.links.length) out.unshift(loose);
+  return out.filter(function (f) { return f.links.length; });
+}
+function bmImpDraw() {
+  var el = $("bmImp");
+  if (!el) return;
+  if (!BMIMP) { el.innerHTML = ""; return; }
+  el.innerHTML = '<div class="stimp"><b>Found ' + BMIMP.reduce(function (n, f) { return n + f.links.length; }, 0) + " bookmarks in " + BMIMP.length + (BMIMP.length === 1 ? " folder" : " folders") + '</b><span class="mut sn"> Tick the folders you want. Bookmarks you already have are skipped.</span><div class="bmimpl">' +
+    BMIMP.map(function (f, i) {
+      return '<div class="bmimpr"><label><input type="checkbox" data-bmi="' + i + '"' + (f.on ? " checked" : "") + '> <span class="bnm">' + esc(f.n) + '</span> <small class="mut">' + (f.path ? esc(f.path) + " · " : "") + f.links.length + (f.links.length === 1 ? " link" : " links") + "</small></label>" +
+        '<select data-bmis="' + i + '" aria-label="How to add ' + esc(f.n) + '"><option value="f"' + (f.as === "f" ? " selected" : "") + '>As a folder</option><option value="l"' + (f.as === "l" ? " selected" : "") + ">As links on the bar</option></select></div>";
+    }).join("") + '</div><div class="tools"><button class="pri" data-a="bmimpgo">Import the ticked ones</button><button data-a="bmimpno">Cancel</button></div></div>';
+}
+function bmImpMsg(t) { if ($("bmImpMsg")) $("bmImpMsg").textContent = t || ""; }
+function bmImpRead(text) {
+  var fs = bmParseFile(text);
+  BMIMP = null;
+  if (!fs) { bmImpDraw(); bmImpMsg("That is not a bookmarks file. In your browser, use “Export bookmarks” and choose the .html file it saves."); return; }
+  if (!fs.length) { bmImpDraw(); bmImpMsg("No bookmarks found in that file."); return; }
+  // ticked from the start: the browser's own bookmarks bar (its loose links go straight onto the bar) and the folders on it
+  var bar = fs.filter(function (f) { return f.bar; })[0];
+  fs.forEach(function (f) { f.on = bar ? f === bar || f.path === bar.n : fs.length <= 3; f.as = f === bar || f.path === "" && f.n === "Not in a folder" ? "l" : "f"; });
+  BMIMP = fs; bmImpMsg(""); bmImpDraw();
+}
+function bmImpGo() {
+  if (!BMIMP) return;
+  var B = bm(), have = {}, added = 0, skipped = 0, cut = 0;
+  B.items.forEach(function (x) { if (x.u) have[x.u] = 1; (x.kids || []).forEach(function (k) { have[k.u] = 1; }); });
+  Array.prototype.forEach.call(document.querySelectorAll("#bmImp [data-bmi]"), function (b) {
+    var f = BMIMP[+b.dataset.bmi], sel = document.querySelector('#bmImp [data-bmis="' + b.dataset.bmi + '"]'), asLinks = sel && sel.value === "l";
+    if (!b.checked || !f) return;
+    var fresh = f.links.filter(function (l) { if (have[l.u]) { skipped++; return false; } have[l.u] = 1; return true; });
+    var max = asLinks ? 30 : 60;
+    if (fresh.length > max) { cut += fresh.length - max; fresh = fresh.slice(0, max); }
+    if (!fresh.length) return;
+    var items = fresh.map(function (l, n) { return { id: bmId() + n.toString(36), t: l.t || bmHost(l.u), u: l.u }; });
+    if (asLinks) B.items = B.items.concat(items); else B.items.push({ id: bmId() + "f", t: f.n, kids: items });
+    added += items.length;
+  });
+  BMIMP = null; bmImpDraw();
+  if (added && !B.on) B.on = true;
+  bmImpMsg(added ? "Imported " + added + " bookmark" + (added === 1 ? "" : "s") + "." + (skipped ? " " + skipped + " you already had were skipped." : "") + (cut ? " " + cut + " were left out: a folder holds 60 links at most, the bar 30 per import." : "") : skipped ? "Nothing new: you already have all of those." : "Nothing was ticked.");
+  if (added) bmChanged();
+}
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "bmFile" || !e.target.files[0]) return;
+  var f = e.target.files[0], fr = new FileReader();
+  e.target.value = "";
+  if (f.size > 20000000) { bmImpMsg("That file is too large."); return; }
+  fr.onload = function () { bmImpRead(String(fr.result || "")); };
+  fr.onerror = function () { bmImpMsg("Could not read that file."); };
+  fr.readAsText(f);
+});
+
+// ---- Calendars from elsewhere: an .ics file copied in once, or a calendar address that is read again every half hour ----
+function icsLines(text) { return String(text).replace(/\r\n?/g, "\n").replace(/\n[ \t]/g, "").split("\n"); }
+function icsTxt(v) { return String(v).replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1").replace(/\s+/g, " ").trim(); }
+// a clock time in a named time zone -> the moment it means
+function icsZoned(y, mo, d, h, mi, tz) {
+  var guess = Date.UTC(y, mo - 1, d, h, mi);
+  try {
+    var f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    var at = function (ms) { var p = {}; f.formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = +x.value; }); return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute); };
+    var t = guess - (at(guess) - guess);
+    return new Date(guess - (at(t) - t));   // the second pass settles the hours around a clock change
+  } catch (e) { return new Date(y, mo - 1, d, h, mi); }   // a zone name this browser does not know: taken as your own time
+}
+// DTSTART and friends -> { ds: "2026-10-12", tm: "14:00" } in this device's time; a date without a time is an all-day event
+function icsWhen(val, prm) {
+  var m = /^(\d{4})(\d\d)(\d\d)(?:T(\d\d)(\d\d)(\d\d)?(Z)?)?/.exec(String(val).trim());
+  if (!m) return null;
+  var y = +m[1], mo = +m[2], d = +m[3];
+  if (!m[4]) return { ds: m[1] + "-" + m[2] + "-" + m[3], tm: "" };
+  var dt = m[7] ? new Date(Date.UTC(y, mo - 1, d, +m[4], +m[5])) : prm && prm.TZID ? icsZoned(y, mo, d, +m[4], +m[5], prm.TZID) : new Date(y, mo - 1, d, +m[4], +m[5]);
+  return isNaN(dt) ? null : { ds: ymd(dt), tm: pad2(dt.getHours()) + ":" + pad2(dt.getMinutes()) };
+}
+function dsAdd(ds, days) { var d = new Date(ds + "T12:00:00"); d.setDate(d.getDate() + days); return ymd(d); }
+var ICS_DAYS = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+// Returns { name, ev: [{ t, d, tm, rep, iv, u, x }] }: `rep` as the calendar's own repeats (d w m y), `iv` every how many,
+// `u` the last day it repeats, `x` days it skips. One-time events older than 30 days and repeats that have ended are left out.
+function icsParse(text) {
+  var name = "", raw = [], cur = null, deep = 0;
+  if (!/BEGIN:VCALENDAR/i.test(String(text).slice(0, 3000))) return null;
+  icsLines(text).forEach(function (ln) {
+    var c = ln.indexOf(":");
+    if (c < 0) return;
+    var parts = ln.slice(0, c).split(";"), key = parts[0].toUpperCase(), val = ln.slice(c + 1), prm = {};
+    parts.slice(1).forEach(function (p) { var i = p.indexOf("="); if (i > 0) prm[p.slice(0, i).toUpperCase()] = p.slice(i + 1).replace(/^"|"$/g, ""); });
+    if (key === "BEGIN") { if (val.toUpperCase() === "VEVENT" && !cur) { cur = { x: [] }; deep = 0; } else if (cur) deep++; return; }
+    if (key === "END") {
+      if (cur && deep) { deep--; return; }
+      if (cur && val.toUpperCase() === "VEVENT") { if (raw.length < 4000) raw.push(cur); cur = null; }
+      return;
+    }
+    if (!cur) { if (key === "X-WR-CALNAME") name = icsTxt(val).slice(0, 40); return; }
+    if (deep) return;
+    if (key === "SUMMARY") cur.t = icsTxt(val).slice(0, 120);
+    else if (key === "DTSTART") cur.s = icsWhen(val, prm);
+    else if (key === "DTEND") cur.e = icsWhen(val, prm);
+    else if (key === "RRULE") cur.rr = val;
+    else if (key === "UID") cur.uid = val.trim();
+    else if (key === "STATUS") cur.st = val.trim().toUpperCase();
+    else if (key === "RECURRENCE-ID") cur.rid = icsWhen(val, prm);
+    else if (key === "EXDATE") val.split(",").forEach(function (v) { var w = icsWhen(v, prm); if (w && cur.x.length < 60) cur.x.push(w.ds); });
+  });
+  var today = ymd(new Date()), old = dsAdd(today, -30), out = [], master = {};
+  raw.forEach(function (r) { if (r.uid && r.rr && !r.rid) master[r.uid] = r; });
+  // an occurrence that was moved or changed comes as its own event: the series skips that day
+  raw.forEach(function (r) { if (r.rid && r.uid && master[r.uid] && master[r.uid].x.length < 60) master[r.uid].x.push(r.rid.ds); });
+  raw.forEach(function (r) {
+    if (!r.s || r.st === "CANCELLED") return;
+    var t = r.t || "(no title)", base = { t: t, d: r.s.ds };
+    if (r.s.tm) base.tm = r.s.tm;
+    // several days: shown on the first day, with the last day in the name (an all-day event ends the day after its last day)
+    if (r.e) { var last = r.s.tm ? r.e.ds : dsAdd(r.e.ds, -1); if (last > r.s.ds) base.t = (t + " (until " + dayLabel(last) + ")").slice(0, 120); }
+    if (!r.rr || r.rid) { if (base.d >= old) out.push(base); return; }
+    var rule = {};
+    r.rr.split(";").forEach(function (p) { var i = p.indexOf("="); if (i > 0) rule[p.slice(0, i).toUpperCase()] = p.slice(i + 1).toUpperCase(); });
+    var rep = { DAILY: "d", WEEKLY: "w", MONTHLY: "m", YEARLY: "y" }[rule.FREQ], iv = Math.max(1, Math.min(99, +rule.INTERVAL || 1)), days = (rule.BYDAY || "").split(",").filter(Boolean);
+    if (!rep) { if (base.d >= old) out.push(base); return; }
+    var until = "", uw = rule.UNTIL ? icsWhen(rule.UNTIL) : null, cnt = +rule.COUNT || 0;
+    if (uw) until = uw.ds;
+    else if (cnt) {
+      // "N times": worked out as a last day (close enough for a rule with several weekdays)
+      var per = rep === "w" && days.length > 1 ? Math.ceil(cnt / days.length) : cnt, n = (per - 1) * iv, a = new Date(base.d + "T12:00:00");
+      if (rep === "d") a.setDate(a.getDate() + n); else if (rep === "w") a.setDate(a.getDate() + n * 7 + 6); else if (rep === "m") a.setMonth(a.getMonth() + n); else a.setFullYear(a.getFullYear() + n);
+      until = ymd(a);
+    }
+    if (until && until < old) return;
+    var x = r.x.length ? r.x.slice(0, 60) : null, make = function (d) { var e = { t: base.t, d: d, rep: rep }; if (base.tm) e.tm = base.tm; if (iv > 1) e.iv = iv; if (until) e.u = until; if (x) e.x = x; return e; };
+    // "the second Tuesday of the month" and the like: not something this calendar can repeat, so the next eight are written out
+    if (rep === "m" && days.length && /^-?\d/.test(days[0])) {
+      var nth = parseInt(days[0], 10), wd = ICS_DAYS[days[0].replace(/^[-+]?\d+/, "")], st = new Date(base.d + "T12:00:00"), now = new Date();
+      if (wd == null) { out.push(make(base.d)); return; }
+      for (var k = 0, made = 0; k < 14 && made < 8; k++) {
+        var M = Math.max(st.getFullYear() * 12 + st.getMonth(), now.getFullYear() * 12 + now.getMonth() - 1) + k;
+        var Y = Math.floor(M / 12), Mo = M % 12, dim = new Date(Y, Mo + 1, 0).getDate(), hits = [];
+        for (var dd = 1; dd <= dim; dd++) if (new Date(Y, Mo, dd).getDay() === wd) hits.push(dd);
+        var pick = nth > 0 ? hits[nth - 1] : hits[hits.length + nth];
+        if (!pick) continue;
+        var ds = Y + "-" + pad2(Mo + 1) + "-" + pad2(pick);
+        if (ds < base.d || (until && ds > until) || (x && x.indexOf(ds) >= 0) || ((M - (st.getFullYear() * 12 + st.getMonth())) % iv)) continue;
+        var one = { t: base.t, d: ds }; if (base.tm) one.tm = base.tm;
+        out.push(one); made++;
+      }
+      return;
+    }
+    // weekly on several weekdays: one repeating event per weekday, each starting in the week the series starts
+    if (rep === "w" && days.length) {
+      var s0 = new Date(base.d + "T12:00:00"), mon = (s0.getDay() + 6) % 7, done = {};
+      days.forEach(function (dn) {
+        var w = ICS_DAYS[dn.replace(/^[-+]?\d+/, "")];
+        if (w == null || done[w]) return;
+        done[w] = 1;
+        var off = (w + 6) % 7 - mon, d2 = dsAdd(base.d, off < 0 ? off + 7 * iv : off);
+        out.push(make(d2));
+      });
+      if (!Object.keys(done).length) out.push(make(base.d));
+      return;
+    }
+    out.push(make(base.d));
+  });
+  return { name: name, ev: out.slice(0, 600) };
+}
+// ---- an .ics file: its events are copied into your own calendar (after a look at what was found) ----
+var ICSIMP = null;
+function icsMsg(t) { if ($("icsMsg")) $("icsMsg").textContent = t || ""; }
+function icsImpDraw() {
+  var el = $("icsImp");
+  if (!el) return;
+  if (!ICSIMP) { el.innerHTML = ""; return; }
+  var rep = ICSIMP.ev.filter(function (e) { return e.rep; }).length, room = Math.max(0, 300 - (P.cal || []).length), n = Math.min(ICSIMP.ev.length, room);
+  el.innerHTML = '<div class="stimp"><b>Found ' + ICSIMP.ev.length + " event" + (ICSIMP.ev.length === 1 ? "" : "s") + (ICSIMP.name ? " in " + esc(ICSIMP.name) : "") + '</b><span class="mut sn"> ' + (rep ? rep + " of them repeat. " : "") + "One-time events older than a month are left out." + (ICSIMP.dup ? " " + ICSIMP.dup + " you already have were skipped." : "") + "</span>" +
+    '<div class="stimpl icsl">' + ICSIMP.ev.slice(0, 12).map(function (e) { return '<label><span class="bnm">' + esc(dayLabel(e.d)) + "</span> <small class=\"mut\">" + esc((e.tm ? e.tm + " " : "") + e.t) + (e.rep ? " ↻" : "") + "</small></label>"; }).join("") + (ICSIMP.ev.length > 12 ? '<label><small class="mut">…and ' + (ICSIMP.ev.length - 12) + " more</small></label>" : "") + "</div>" +
+    (n < ICSIMP.ev.length ? '<p class="mut sn">The calendar holds 300 events of your own; there is room for ' + n + " of these (the nearest ones are taken first).</p>" : "") +
+    '<div class="tools">' + (n ? '<button class="pri" data-a="icsimpgo">Add ' + n + " to my calendar</button>" : "") + '<button data-a="icsimpno">Cancel</button></div></div>';
+}
+function icsImpRead(text) {
+  var p = icsParse(text);
+  ICSIMP = null;
+  if (!p) { icsImpDraw(); icsMsg("That is not a calendar file. Export the calendar as .ics (iCalendar) and choose that file."); return; }
+  var have = {}, dup = 0;
+  (P.cal || []).forEach(function (e) { have[e.t + "|" + e.d + "|" + (e.tm || "")] = 1; });
+  var ev = p.ev.filter(function (e) { var k = e.t + "|" + e.d + "|" + (e.tm || ""); if (have[k]) { dup++; return false; } have[k] = 1; return true; });
+  if (!ev.length) { icsImpDraw(); icsMsg(dup ? "Nothing new: you already have all " + dup + " events of that file." : "No current events found in that file."); return; }
+  // repeating ones first, then the nearest dates: if there is not room for all, the far future is what is left out
+  ev.sort(function (a, b) { return (a.rep ? 0 : 1) - (b.rep ? 0 : 1) || a.d.localeCompare(b.d); });
+  ICSIMP = { name: p.name, ev: ev, dup: dup }; icsMsg(""); icsImpDraw();
+}
+function icsImpGo() {
+  if (!ICSIMP) return;
+  P.cal = P.cal || [];
+  var room = Math.max(0, 300 - P.cal.length), take = ICSIMP.ev.slice(0, room), stamp = Date.now().toString(36);
+  take.forEach(function (e, i) { var o = { id: "e" + stamp + i.toString(36), t: e.t, d: e.d }; ["tm", "rep", "iv", "u", "x"].forEach(function (k) { if (e[k] != null) o[k] = e[k]; }); P.cal.push(o); });
+  ICSIMP = null; icsImpDraw();
+  icsMsg("Added " + take.length + " event" + (take.length === 1 ? "" : "s") + " to your calendar.");
+  persist(); render(); refreshCalAny();
+}
+function refreshCalAny() { if (sideOf("cal") || (!$("modal").hidden && $("mTitle").textContent === WIDGETS.cal.t)) { if (!(document.activeElement && document.activeElement.closest && document.activeElement.closest("#calAdd"))) openCal(); } }
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "icsFile" || !e.target.files[0]) return;
+  var f = e.target.files[0], fr = new FileReader();
+  e.target.value = "";
+  if (f.size > 5000000) { icsMsg("That file is too large (5 MB at most)."); return; }
+  fr.onload = function () { icsImpRead(String(fr.result || "")); };
+  fr.onerror = function () { icsMsg("Could not read that file."); };
+  fr.readAsText(f);
+});
+// ---- a calendar address: P.ics = [{ id, n, u, rem }]. The events are kept on this device only and read again every 30 minutes ----
+var ICSC = load("sp_icsc", {}), icsBusy = {}, ICSERR = {}, icsMemoKey = "", icsMemo = [];
+function icsSubs() { return Array.isArray(P.ics) ? P.ics.filter(function (s) { return s && s.id && safeUrl(s.u); }).slice(0, 4) : []; }
+// every subscribed event, ready for the calendar: read-only, with the calendar's name and (if you chose one) its reminder
+function icsEvs() {
+  var subs = icsSubs(), key = subs.map(function (s) { return s.id + ":" + ((ICSC[s.id] || {}).t || 0) + ":" + (s.rem == null ? "" : s.rem) + ":" + (s.n || ""); }).join("|");
+  if (key === icsMemoKey) return icsMemo;
+  var out = [];
+  subs.forEach(function (s) {
+    ((ICSC[s.id] || {}).ev || []).forEach(function (e) {
+      var o = { id: "ic:" + s.id + ":" + hs(e.t + e.d + (e.tm || "")), t: e.t, d: e.d, ro: 1, cn: s.n || "Calendar" };
+      ["tm", "rep", "iv", "u", "x"].forEach(function (k) { if (e[k] != null) o[k] = e[k]; });
+      if (s.rem != null && s.rem !== "") o.rem = +s.rem;
+      out.push(o);
+    });
+  });
+  icsMemoKey = key; icsMemo = out;
+  return out;
+}
+function fetchIcs(force) {
+  if (!sb || !USER) return;
+  icsSubs().forEach(function (s) {
+    var c = ICSC[s.id];
+    if (icsBusy[s.id] || (!force && c && Date.now() - c.t < 1800000)) return;
+    icsBusy[s.id] = 1;
+    sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { ics: s.u } }).then(function (r) {
+      delete icsBusy[s.id];
+      var d = r.data && r.data.ics, p = d && typeof d.text === "string" ? icsParse(d.text) : null;
+      if (!p) { ICSERR[s.id] = (d && d.err) || (d ? "That address did not give a calendar." : "Calendar addresses need the newest server function."); if (ICSC[s.id]) ICSC[s.id].t = Date.now() - 1500000; renderIcsSet(); return; }   // try again in five minutes
+      delete ICSERR[s.id];
+      ICSC[s.id] = { t: Date.now(), ev: p.ev };
+      if (!s.n && p.name) { s.n = p.name; persist(); }
+      save("sp_icsc", ICSC);
+      render(); renderIcsSet(); refreshCalAny();
+    }).catch(function () { delete icsBusy[s.id]; ICSERR[s.id] = "Could not reach the server."; renderIcsSet(); });
+  });
+}
+setInterval(function () { if (!document.hidden) fetchIcs(); }, 300000);
+function renderIcsSet() {
+  var el = $("icsList");
+  if (!el) return;
+  var subs = icsSubs();
+  el.innerHTML = subs.map(function (s) {
+    var c = ICSC[s.id], st = ICSERR[s.id] ? '<span class="down">' + esc(ICSERR[s.id]) + "</span>" : icsBusy[s.id] && !c ? "Reading…" : c ? c.ev.length + " event" + (c.ev.length === 1 ? "" : "s") + " · read " + ago(c.t) + " ago" : USER ? "Not read yet" : "Sign in to read it";
+    return '<div class="icsrow"><input type="text" data-ics="n" data-id="' + esc(s.id) + '" value="' + esc(s.n || "") + '" placeholder="Name" aria-label="Name of this calendar" maxlength="40">' +
+      '<select data-ics="rem" data-id="' + esc(s.id) + '" aria-label="Reminder for its events" title="Reminder for its events">' + opts(REMS, s.rem == null ? "" : String(s.rem)) + "</select>" +
+      '<button data-a="icsreload" data-k="' + esc(s.id) + '" title="Read it again now" aria-label="Read it again now">↻</button><button data-a="icsdel" data-k="' + esc(s.id) + '" title="Stop following this calendar" aria-label="Remove">✕</button>' +
+      '<span class="mut sn icsst">' + st + "</span></div>";
+  }).join("");
+}
+function icsAct(a, k) {
+  if (a === "icsimpgo") { icsImpGo(); return; }
+  if (a === "icsimpno") { ICSIMP = null; icsImpDraw(); icsMsg(""); return; }
+  if (a === "icsreload") { delete ICSERR[k]; fetchIcs(true); renderIcsSet(); return; }
+  if (a === "icsdel") {
+    P.ics = icsSubs().filter(function (s) { return s.id !== k; });
+    delete ICSC[k]; delete ICSERR[k]; save("sp_icsc", ICSC);
+    persist(); render(); renderIcsSet(); refreshCalAny();
+  }
+}
+document.addEventListener("submit", function (e) {
+  if (e.target.id !== "icsAdd") return;
+  e.preventDefault();
+  var u = $("icsUrl").value.trim().replace(/^webcals?:\/\//i, "https://");
+  if (!/^https:\/\/\S+$/i.test(u)) { icsMsg("Paste the address of the calendar. It starts with https:// or webcal:// and usually ends in .ics."); return; }
+  if (!sb || !USER) { icsMsg("Sign in first: a calendar address is read through your account. An .ics file can be imported without one."); return; }
+  var subs = icsSubs();
+  if (subs.some(function (s) { return s.u === u; })) { icsMsg("You already follow that calendar."); return; }
+  if (subs.length >= 4) { icsMsg("Four calendars at most. Remove one first."); return; }
+  subs.push({ id: "c" + Date.now().toString(36), n: "", u: u.slice(0, 1000) });
+  P.ics = subs; $("icsUrl").value = ""; icsMsg("");
+  persist(); renderIcsSet(); fetchIcs(true);
+});
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (!t || !t.dataset || !t.dataset.ics) return;
+  var s = icsSubs().filter(function (x) { return x.id === t.dataset.id; })[0];
+  if (!s) return;
+  if (t.dataset.ics === "n") s.n = t.value.trim().slice(0, 40);
+  else if (t.dataset.ics === "rem") { if (t.value === "") delete s.rem; else { s.rem = +t.value; if (NTF().desktop) askNotify(); } }
+  P.ics = icsSubs(); persist(); render(); refreshCalAny();
+});
+
+// ---- Web page boxes: any web page shown inside a box (Settings > Web page boxes; all three are off until you fill one in) ----
+// The page itself lives in a layer on top of the grid, exactly over its box. The grid is rebuilt on every redraw, and a
+// page that sat inside it would be thrown away and loaded again each time; this way it loads once and only moves.
+function isEmb(id) { return EMB_IDS.indexOf(id) >= 0; }
+function emb(id) { var E = P.emb && typeof P.emb === "object" ? P.emb : {}; return E[id] && typeof E[id] === "object" ? E[id] : {}; }
+function embUrl(id) { var u = safeUrl(emb(id).u); return /^https:\/\//i.test(u) ? u : ""; }
+function embOn(id) { return !!emb(id).on && !!embUrl(id); }
+function embName(id) { return emb(id).t || bmHost(embUrl(id)) || "Web page"; }
+function embH(id) { return Math.round(((LAY().rows || {})[id] || 10) * 32.4); }
+function embTile(id) {
+  var u = embUrl(id);
+  return tile(id, esc(embName(id)), '<div class="embph" data-emb="' + id + '" style="height:' + embH(id) + 'px"></div>', 0,
+    '<a class="ib sm" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer" title="Open this page in its own tab" aria-label="Open this page in its own tab"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H5v14h14v-4M13 5h6v6M19 5l-8 8"/></svg></a>');
+}
+// puts each page exactly over its box (or removes it when its box is off)
+function placeEmbeds() {
+  var layer = $("embeds"), wrap = $("gridw");
+  if (!layer || !wrap) return;
+  var wr = wrap.getBoundingClientRect();
+  EMB_IDS.forEach(function (id) {
+    var ph = document.querySelector('#grid .embph[data-emb="' + id + '"]'), fr = layer.querySelector('iframe[data-emb="' + id + '"]'), u = embUrl(id);
+    if (!ph || !u) { if (fr) fr.remove(); return; }
+    if (!fr) {
+      fr = document.createElement("iframe");
+      fr.setAttribute("data-emb", id);
+      // the page can run and open links in new tabs, but it cannot take over this tab or see anything of OmniTree
+      fr.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
+      fr.setAttribute("referrerpolicy", "no-referrer");
+      fr.setAttribute("loading", "lazy");
+      fr.setAttribute("allow", "fullscreen");
+      layer.appendChild(fr);
+    }
+    fr.title = embName(id);
+    if (fr.getAttribute("data-u") !== u) { fr.setAttribute("data-u", u); fr.src = u; fr.setAttribute("data-t", String(Date.now())); }
+    var r = ph.getBoundingClientRect();
+    fr.style.left = (r.left - wr.left).toFixed(2) + "px"; fr.style.top = (r.top - wr.top).toFixed(2) + "px";
+    fr.style.width = r.width.toFixed(2) + "px"; fr.style.height = r.height.toFixed(2) + "px";
+    fr.classList.toggle("edit", !!EDIT);   // while editing, the page lets clicks and drags through to the box
+  });
+}
+function embReload(id) { var fr = $("embeds") && $("embeds").querySelector('iframe[data-emb="' + id + '"]'); if (fr && embUrl(id)) { fr.src = embUrl(id); fr.setAttribute("data-t", String(Date.now())); } }
+EMB_IDS.forEach(function (id) { REFRESH[id] = function () { embReload(id); }; });
+// "Reload every ...": only while the tab is in view
+setInterval(function () {
+  if (document.hidden) return;
+  EMB_IDS.forEach(function (id) {
+    var min = +emb(id).r || 0, fr = $("embeds") && $("embeds").querySelector('iframe[data-emb="' + id + '"]');
+    if (min && fr && Date.now() - (+fr.getAttribute("data-t") || 0) > min * 60000) embReload(id);
+  });
+}, 30000);
+if (window.ResizeObserver && $("grid")) new ResizeObserver(function () { placeEmbeds(); }).observe($("grid"));
+var EMBMSG = {};
+function renderEmbSet() {
+  var el = $("embSet");
+  if (!el) return;
+  el.innerHTML = EMB_IDS.map(function (id, i) {
+    var e = emb(id), m = EMBMSG[id];
+    return '<div class="sub embrow"><b>Web page ' + (i + 1) + '</b><label>Show this box <input type="checkbox" data-emb="on" data-id="' + id + '"' + (embOn(id) ? " checked" : "") + "></label>" +
+      '<div class="add"><input type="text" data-emb="u" data-id="' + id + '" value="' + esc(e.u || "") + '" placeholder="Address of the page, e.g. https://example.com/page" aria-label="Address of the page" maxlength="600" autocomplete="off"><input type="text" class="embn" data-emb="t" data-id="' + id + '" value="' + esc(e.t || "") + '" placeholder="Name (optional)" aria-label="Name of the box" maxlength="30" autocomplete="off"></div>' +
+      '<label>Reload the page by itself <select data-emb="r" data-id="' + id + '">' + opts([["0", "Never"], ["1", "Every minute"], ["5", "Every 5 minutes"], ["15", "Every 15 minutes"], ["60", "Every hour"]], String(+e.r || 0)) + "</select></label>" +
+      (m ? '<div class="sn ' + (m.ok === false ? "down" : m.ok ? "up" : "mut") + '" role="status">' + esc(m.t) + "</div>" : "") + "</div>";
+  }).join("");
+}
+// asks the server whether the site lets other pages show it (most large sites do not); the answer is only advice
+function embCheck(id) {
+  var u = embUrl(id);
+  if (!u) return;
+  var note = "If the box stays empty, that site does not allow being shown inside other pages.";
+  if (!sb || !USER) { EMBMSG[id] = { t: note }; renderEmbSet(); return; }
+  EMBMSG[id] = { t: "Checking whether " + bmHost(u) + " can be shown in a box…" }; renderEmbSet();
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { frameok: u } }).then(function (r) {
+    if (embUrl(id) !== u) return;
+    var d = r.data && r.data.frameok;
+    EMBMSG[id] = !d ? { t: note } : d.ok ? { ok: true, t: "✓ " + bmHost(u) + " can be shown in a box." }
+      : d.why === "err" ? { t: "Could not reach " + bmHost(u) + " to check it. " + note }
+      : { ok: false, t: "✗ " + bmHost(u) + " does not allow other sites to show it in a box, so this box will stay empty. Most large sites do this. Many have a special “embed” or “share” address that does work; look for Share → Embed on that site." };
+    renderEmbSet();
+  }).catch(function () { EMBMSG[id] = { t: note }; renderEmbSet(); });
+}
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (!t || !t.dataset || !t.dataset.emb || !t.dataset.id || !isEmb(t.dataset.id)) return;
+  var id = t.dataset.id, k = t.dataset.emb;
+  P.emb = P.emb && typeof P.emb === "object" ? P.emb : {};
+  var E = P.emb[id] = Object.assign({}, emb(id));
+  if (k === "u") {
+    var raw = t.value.trim(), u = raw ? bmUrl(raw.replace(/^http:\/\//i, "https://")) : "", host = bmHost(u);
+    if (raw && (!u || !/^https:\/\//i.test(u) || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host))) { EMBMSG[id] = { ok: false, t: "That is not a web address. It should look like https://example.com/page." }; renderEmbSet(); return; }
+    if (u && (host === location.hostname.replace(/^www\./, "") || /(^|\.)omnitr\.ee$/.test(host))) { EMBMSG[id] = { ok: false, t: "OmniTree cannot be shown inside itself." }; renderEmbSet(); return; }
+    E.u = u.slice(0, 600);
+    if (u) { E.on = true; delete EMBMSG[id]; } else { delete E.on; delete EMBMSG[id]; }
+    persist(); render(); renderEmbSet();
+    if (u) embCheck(id);
+    return;
+  }
+  if (k === "on") { if (t.checked && !embUrl(id)) { EMBMSG[id] = { t: "Type the address of the page first." }; renderEmbSet(); return; } E.on = t.checked; }
+  else if (k === "t") E.t = t.value.trim().slice(0, 30);
+  else if (k === "r") E.r = +t.value || 0;
+  persist(); render(); renderEmbSet();
+});
+
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -929,14 +1351,15 @@ function renderHidden() {
   }).join("") : "Nothing hidden.";
   renderSpList();
   // Settings > Layout: one switch per box
-  $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu"; }).map(function (id) {
+  $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu" && !isEmb(id); }).map(function (id) {
     return "<label>" + BOX_NAMES[id] + ' <input type="checkbox" data-a="boxtoggle" data-k="' + id + '"' + (boxOff(id) ? "" : " checked") + "></label>";
   }).join("");
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
 var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
-function boxOff(id) { var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
+function boxOff(id) { if (isEmb(id)) return !embOn(id); var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
 function setBoxOff(id, off) {
+  if (isEmb(id)) { P.emb = P.emb && typeof P.emb === "object" ? P.emb : {}; P.emb[id] = Object.assign({}, emb(id), { on: !off }); persist(); render(); renderEmbSet(); return; }
   var L = LAY();
   L.off = L.off || {};
   if (off) L.off[id] = 1; else delete L.off[id];
@@ -3264,6 +3687,9 @@ document.addEventListener("click", function (e) {
   if (a === "opennotes") { openNotes(); return; }
   if (a === "acctmenu2") { e.stopPropagation(); if (!USER) { MENU_OPEN = ""; ACCTMSG = ""; render(); openAuth(); return; } MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
+  if (a === "bmimpgo") { bmImpGo(); return; }
+  if (a === "bmimpno") { BMIMP = null; bmImpDraw(); bmImpMsg(""); return; }
+  if (/^ics(impgo|impno|reload|del)$/.test(a)) { icsAct(a, k); return; }
   if (a === "stpick") { stPick(k); return; }
   if (a === "stimpgo") { stImpGo(); return; }
   if (a === "stimpno") { STIMP = null; stImpDraw(); stMsg(""); return; }
@@ -3287,7 +3713,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); return; }
   if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
@@ -3365,6 +3791,7 @@ document.addEventListener("click", function (e) {
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
+  if (a === "spfilt") { SPFIND = !(SPFIND || SPQ); if (!SPFIND) SPQ = ""; render(); var sq = $("spQ"); if (sq) { sq.value = ""; sq.focus(); } return; }
   if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
   if (a === "twpop") { twPop(k); return; }
   if (a === "twchat") { twChat(k); return; }
@@ -3603,7 +4030,7 @@ function onUser(u) {
     if (resume) setTimeout(function () { openWizard(resume); }, 300);
     else if (isNew && !P.onboarded) setTimeout(function () { openWizard(); }, 600);
     checkDevice(); checkAdmin();
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz();
+    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz(); fetchIcs();
   });
 }
 function auth(fn) {
@@ -3832,12 +4259,19 @@ function openHelp() {
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
   html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
   html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups, NBA, NHL, NFL, MLB, tennis, Formula 1, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
-    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+    '<p><b>Results:</b> choose <b>Results</b> in the view list to go back in time: finished games, fight cards, races and tournaments, newest first, with a small heading for each day. Click one for the same full details as a live game (a finished UFC card opens with every fight, and each fight with its numbers). Team leagues go back to the start of the month (in the first week of a month, the month before as well); UFC cards, Formula 1 weekends and golf tournaments four weeks; tennis, SHL and esports about a week. The list shows the 120 newest; pick one sport in the first list to see further back in that sport.</p>' +
+    '<p><b>Search:</b> press ⌕ at the top of the box and type a team, player, fighter, league or event. It looks through everything that is loaded for the leagues you follow, whatever the view: what is live, what is coming up this month and the recent results, in that order. Several words narrow it down (for example <code>ufc allen</code>). Press ⌕ again to close the search.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
+    '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +
+    '<li><b>Import an .ics file:</b> copies the events into your own calendar, once. You first see what was found and how many there is room for (the calendar holds 300 events of your own). Repeating events keep repeating, one-time events older than a month are left out, and events you already have are skipped. Afterwards they are yours: change the repeat or delete them like any other event. Good for a school term, a sports schedule or moving over from another calendar.</li>' +
+    '<li><b>Follow a calendar by its address:</b> paste the calendar&rsquo;s .ics address and press Follow. Its events show next to yours with the calendar&rsquo;s name after them, and are read again every half hour, so changes made in the other calendar turn up here by themselves. They are not copied and cannot be changed here. You can give each followed calendar a name and a reminder for all its events, and follow up to four. This needs you to be signed in.</li></ul>' +
+    '<p><b>Where to find the address:</b> <b>Google Calendar:</b> Settings → click the calendar under &ldquo;Settings for my calendars&rdquo; → Integrate calendar → <b>Secret address in iCal format</b>. <b>Outlook.com:</b> Settings → Calendar → Shared calendars → Publish a calendar → the <b>ICS</b> link. <b>Apple iCloud:</b> share the calendar as a Public Calendar and copy the link. The file for a one-time import is in the same places (Google: Settings → Import &amp; export → Export). A secret address lets anyone who has it read that calendar, so treat it like a password; it is saved with your settings and used only to read the calendar.</p>' +
+    '<p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
     '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
   html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
@@ -4006,14 +4440,19 @@ function stockAlerts(data) {
 // ---- Calendar: your own events with optional reminders and repeats (saved with your settings) ----
 function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 function ymd(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+// An imported event can also repeat every second (third...) time (iv), stop on a day (u) and skip days (x).
 function evOn(e, ds) {
-  if (ds < e.d) return false;
-  if (ds === e.d || e.rep === "d") return true;
+  if (ds < e.d || (e.u && ds > e.u) || (e.x && e.x.indexOf(ds) >= 0)) return false;
+  if (ds === e.d) return true;
   if (!e.rep) return false;
-  var a = new Date(e.d + "T12:00:00"), b = new Date(ds + "T12:00:00");
-  return e.rep === "w" ? a.getDay() === b.getDay() : e.rep === "m" ? a.getDate() === b.getDate() : e.rep === "y" || e.rep === "b" ? a.getDate() === b.getDate() && a.getMonth() === b.getMonth() : false;   // b = a birthday: every year, like y
+  var a = new Date(e.d + "T12:00:00"), b = new Date(ds + "T12:00:00"), iv = e.iv > 1 ? e.iv : 0;
+  if (e.rep === "d") return !iv || Math.round((b - a) / 86400000) % iv === 0;
+  if (e.rep === "w") return a.getDay() === b.getDay() && (!iv || Math.round((b - a) / 604800000) % iv === 0);
+  if (e.rep === "m") return a.getDate() === b.getDate() && (!iv || ((b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth()) % iv === 0);
+  if (e.rep === "y" || e.rep === "b") return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && (!iv || (b.getFullYear() - a.getFullYear()) % iv === 0);   // b = a birthday: every year, like y
+  return false;
 }
-function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(spCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
+function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(icsEvs().filter(function (e) { return evOn(e, ds); }), spCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
 var CALV = null, REPS = { "": "Once", b: "Birthday (every year)", y: "Yearly", m: "Monthly", w: "Weekly", d: "Daily" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
 function openCal() {
@@ -4218,8 +4657,8 @@ function calHtml() {
   var evRow = function (e, ds, withDay) {
     return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + (e.sp ? '<button class="lnk calsp" data-a="open" data-k="' + esc("p:" + e.sp) + '" title="A favorite\'s game. Click for the details.">' + spIcon(e.spo) + esc(e.t) + "</button>" : esc(e.t)) +
       // a birthday with the birth year in its name ("Anna 1990") also says which birthday it is
-      (e.rep === "b" ? " <small>🎂" + (function () { var by = /\b(19|20)\d\d\b/.exec(e.t), n = by ? +ds.slice(0, 4) - +by[0] : 0; return n > 0 && n < 130 ? " turns " + n : ""; })() + "</small>" : e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
-      "</span>" + (withDay || e.sp ? "" : '<span class="r"><button data-a="calrep" data-k="' + e.id + '" title="Repeat: ' + esc(REPS[e.rep || ""]) + '. Press to change (Once, Birthday, Yearly, Monthly, Weekly, Daily)." aria-label="Change how this event repeats">↻</button><button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button></span>') + "</div>";
+      (e.rep === "b" ? " <small>🎂" + (function () { var by = /\b(19|20)\d\d\b/.exec(e.t), n = by ? +ds.slice(0, 4) - +by[0] : 0; return n > 0 && n < 130 ? " turns " + n : ""; })() + "</small>" : e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.cn ? ' <small class="calcn" title="From a calendar you follow">' + esc(e.cn) + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
+      "</span>" + (withDay || e.sp || e.ro ? "" : '<span class="r"><button data-a="calrep" data-k="' + e.id + '" title="Repeat: ' + esc(REPS[e.rep || ""]) + '. Press to change (Once, Birthday, Yearly, Monthly, Weekly, Daily)." aria-label="Change how this event repeats">↻</button><button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button></span>') + "</div>";
   };
   var up = [];
   for (var k = 1; k <= 90 && up.length < 5; k++) {
@@ -4470,15 +4909,15 @@ function spSports() {
   spLeagues().forEach(function (l) { if (!seen[l.sp]) { seen[l.sp] = 1; out.push([l.sp, SP_NAME[l.sp] || l.sp]); } });
   return out;
 }
-var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["fav", "Favorites"]];
+var SP_NOW = {}, SP_UP = {}, SPERR = "", SP_OPEN = "", SP_VIEWS = [["now", "Live & today"], ["up", "Upcoming"], ["past", "Results"], ["fav", "Favorites"]];
 // Your favorite sport (Settings > Sports) gets a view of its own in the box: everything on now, today and coming up
 function spFavSport() { var s = P.spFavSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
 function spViews() { var f = spFavSport(); return SP_VIEWS.concat(f ? [["sport", "★ " + (SP_NAME[f] || f)]] : []); }
-function spView() { return P.spView === "up" || P.spView === "fav" || (P.spView === "sport" && spFavSport()) ? P.spView : "now"; }
+function spView() { return P.spView === "up" || P.spView === "fav" || P.spView === "past" || (P.spView === "sport" && spFavSport()) ? P.spView : "now"; }
 function spSport() { if (spView() === "sport") return spFavSport(); var s = P.spSport || ""; return s && spLeagues().some(function (l) { return l.sp === s; }) ? s : ""; }
 function spFavs() { return P.spFav || []; }
 function spIsFav(name) { return spFavs().indexOf(name) >= 0; }
-function spParse(lg, j, pri) {
+function spParse(lg, j, pri, past) {
   var now = Date.now();
   return ((j && j.events) || []).map(function (e) {
     var st = (e.status && e.status.type) || {}, link = safeUrl(((e.links || [])[0] || {}).href);
@@ -4506,7 +4945,7 @@ function spParse(lg, j, pri) {
         if (!/singles/i.test(gname)) return;
         (g.competitions || []).forEach(function (c) {
           var cs = (c.status && c.status.type) || {}, ts = Date.parse(c.date);
-          if (cs.state !== "in" && Math.abs(ts - now) > 129600000) return;
+          if (past ? cs.state !== "post" || now - ts > SP_PASTD.tour * 86400000 : cs.state !== "in" && Math.abs(ts - now) > 129600000) return;
           var sets = function (x) { return ((x || {}).linescores || []).map(function (l) { return Math.round(l.value); }).join(" "); };
           ms.push(pair(c, (c.round || {}).displayName || gname, cs.state === "pre" ? "" : sets(c.competitors[0]) + " / " + sets(c.competitors[1])));
         });
@@ -4514,7 +4953,9 @@ function spParse(lg, j, pri) {
       var rank = function (m) { return m.state === "in" ? 0 : m.state === "pre" ? 1 : 2; };
       o.fights = ms.sort(function (a, b) { return rank(a) - rank(b) || (a.state === "post" ? b.ts - a.ts : a.ts - b.ts); }).slice(0, 40);
       o.title = e.name || e.shortName || lg.n;
-      o.cardTitle = "Matches (live first, then the nearest)";
+      o.cardTitle = past ? "Results (latest first)" : "Matches (live first, then the nearest)";
+      // the Results view keeps its own copy of a tournament (finished matches of the last days), next to the live one
+      if (past) { o.id += "~r"; o.te = ms.reduce(function (m, x) { return Math.max(m, x.ts || 0); }, 0); o.state = "post"; o.fights = o.fights.slice().sort(function (a, b) { return b.ts - a.ts; }); o.names = []; return o.fights.length ? (o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []), o) : null; }
       var liveN = ms.filter(function (m) { return m.state === "in"; }).length;
       var nextM = ms.filter(function (m) { return m.state === "pre"; }).sort(function (a, b) { return a.ts - b.ts; })[0];
       if (liveN) { o.state = "in"; o.detail = liveN + " live"; }
@@ -4530,6 +4971,7 @@ function spParse(lg, j, pri) {
         return { n: (c.type || {}).abbreviation || (c.type || {}).text || "", state: cs.state || "pre", ts: Date.parse(c.date), detail: cs.shortDetail || "",
           res: (cs.state || "pre") === "pre" ? [] : byOrder(c.competitors).filter(function (x) { return x.order; }).slice(0, 30).map(function (x) { return (x.athlete || {}).displayName || "?"; }) };
       }).filter(function (s) { return s.n; });
+      o.te = o.sessions.reduce(function (m, s) { return s.state === "post" ? Math.max(m, s.ts || 0) : m; }, 0);
       var lead = ((e.competitions || [])[(e.competitions || []).length - 1] || {}).competitors || [];
       // golf: the leaderboard with the score to par and each round
       if (lg.sp === "golf") o.field = byOrder(lead).slice(0, 80).map(function (c) {
@@ -4564,15 +5006,23 @@ function spParse(lg, j, pri) {
     }
     if (o.fights) o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
     return o;
-  }).filter(function (o) { return !isNaN(o.ts); });
+  }).filter(function (o) { return o && !isNaN(o.ts); });
 }
-function spGet(lg, pri, month) {
-  var store = month ? SP_UP : SP_NOW, key = lg.id + (month || "");
+// Results. Team leagues: the finished games are already in the month's fixtures (the same file Upcoming reads; early in a
+// month the month before is read too). Fight cards, race weekends, golf and tennis are asked for by date: four weeks back
+// for the rare ones, eight days for tennis (a tournament has hundreds of matches).
+var SP_PASTD = { tour: 8, card: 28, race: 28 }, SP_PAST = {}, SPQ = "", SPFIND = false;
+function spPastDates(lg) {
+  var d = function (ms) { return new Date(ms).toISOString().slice(0, 10).replace(/-/g, ""); };
+  return d(Date.now() - (SP_PASTD[lg.kind || "team"] || 7) * 86400000) + "-" + d(Date.now() + 86400000);
+}
+function spGet(lg, pri, month, past) {
+  var store = past ? SP_PAST : month ? SP_UP : SP_NOW, key = past ? lg.id : lg.id + (month || "");
   store[key] = store[key] || { t: 0, ev: [] };
   store[key].t = Date.now();
   return fetch("https://site.api.espn.com/apis/site/v2/sports/" + lg.id + "/scoreboard" + (month ? "?dates=" + month + "&limit=200" : ""))
     .then(function (r) { if (!r.ok) throw new Error("ESPN answered " + r.status); return r.json(); })
-    .then(function (j) { store[key].ev = spParse(lg, j, pri); store[key].ok = 1; SPERR = ""; SPV++; })
+    .then(function (j) { store[key].ev = spParse(lg, j, pri, past); store[key].ok = 1; SPERR = ""; SPV++; })
     .catch(function (e) { if (!store[key].ok) SPERR = String((e && e.message) || e); });
 }
 // Today's scoreboards: every minute for a league with a game in play (tennis every three: its file is large), otherwise
@@ -4590,9 +5040,13 @@ function fetchSports(force) {
     var due = force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000);
     if (lg.x) { if (due && sb && USER) xs.push(lg); return; }
     if (due) jobs.push(spGet(lg, pri));
-    if ((spView() !== "now" || SPCALWANT) && lg.kind !== "tour" && !lg.x) {
+    // Results and the search also read the finished games of the last days: when that view is opened, then every 30 minutes
+    var wantPast = spView() === "past" || !!SPQ;
+    if (wantPast && lg.kind && !lg.x) { var pc = SP_PAST[lg.id]; if (!pc || now - pc.t > 1800000) jobs.push(spGet(lg, pri, spPastDates(lg), true)); }
+    if ((spView() !== "now" || SPCALWANT || SPQ) && lg.kind !== "tour" && !lg.x) {
       var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
       if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
+      if (wantPast && !lg.kind && d.getDate() <= 7) { var pm = new Date(d.getFullYear(), d.getMonth() - 1, 1); months.push(pm.getFullYear() + pad2(pm.getMonth() + 1)); }
       months.forEach(function (m) { var u = SP_UP[lg.id + m]; if (!u || now - u.t > 1800000) jobs.push(spGet(lg, pri, m)); });
     }
   });
@@ -4687,11 +5141,25 @@ function refreshCal() {
 function spEvents() {
   var by = {}, view = spView(), sport = spSport(), now = Date.now(), on = {};
   spLeagues().forEach(function (l) { on[l.n] = 1; });
+  Object.keys(SP_PAST).forEach(function (k) { SP_PAST[k].ev.forEach(function (e) { by[e.id] = e; }); });
   Object.keys(SP_UP).forEach(function (k) { SP_UP[k].ev.forEach(function (e) { by[e.id] = e; }); });
   Object.keys(SP_NOW).forEach(function (k) { SP_NOW[k].ev.forEach(function (e) { by[e.id] = e; }); });   // today's data is fresher, so it wins
   var all = Object.keys(by).map(function (k) { return by[k]; }).filter(function (e) { return on[e.lg] && (!sport || e.sp === sport); });
   all.forEach(function (e) { e.fav = e.names.some(spIsFav); });
   var live = function (e) { return e.state === "in" ? 1 : 0; }, day = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); };
+  var isR = function (e) { return e.id.slice(-2) === "~r"; }, end = function (e) { return e.te || e.ts; }, rank = function (e) { return e.state === "in" ? 0 : e.state === "pre" ? 1 : 2; };
+  // Searching looks through everything that is loaded, whatever the view: live first, then what is coming, then results (newest first)
+  if (SPQ) {
+    var words = SPQ.split(/\s+/).filter(Boolean);
+    return all.filter(function (e) {
+      if (e.kind === "tour" && by[e.id + "~r"] && e.state === "post") return false;   // the Results copy of the same tournament says more
+      var txt = (e.lg + " " + (SP_NAME[e.sp] || "") + " " + (e.title || "") + " " + e.names.join(" ") + " " + (e.recap || "")).toLowerCase();
+      return words.every(function (w) { return txt.indexOf(w) >= 0; });
+    }).sort(function (a, b) { return rank(a) - rank(b) || (a.state === "post" ? end(b) - end(a) : a.ts - b.ts); }).slice(0, 80);
+  }
+  // Results: finished games, fights, races and matches, newest first
+  if (view === "past") return all.filter(function (e) { return e.state === "post" && (e.kind !== "tour" || isR(e)) && now - end(e) < 29 * 86400000; }).sort(function (a, b) { return end(b) - end(a) || a.pri - b.pri; }).slice(0, SP_PASTN);
+  all = all.filter(function (e) { return !isR(e); });
   if (view === "up") return all.filter(function (e) { return e.state === "pre" && e.ts > now - 3600000; }).sort(function (a, b) { return a.ts - b.ts || a.pri - b.pri; }).slice(0, 60);
   if (view === "fav") return all.filter(function (e) { return e.fav && (e.state !== "post" || now - e.ts < 86400000); }).sort(function (a, b) { return live(b) - live(a) || a.ts - b.ts; }).slice(0, 60);
   // your favorite sport: what is on now, then everything today and coming up (soonest first), then today's results
@@ -4700,7 +5168,14 @@ function spEvents() {
   return all.filter(function (e) { return e.state === "in" || day(e.ts) === day(now) || (e.state === "post" && now - e.ts < 43200000 && e.kind === "team") || (e.kind !== "team" && e.state === "pre" && e.ts - now < 172800000); })
     .sort(function (a, b) { return live(b) - live(a) || (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.state === "post" ? 1 : 0) - (b.state === "post" ? 1 : 0) || a.pri - b.pri || a.ts - b.ts; }).slice(0, 60);
 }
-function spWhen(e) {
+// `dated`: a finished game shows its date instead of "FT" (used where results of several days are mixed)
+var SP_PASTN = 120;
+function spDayName(ts) {
+  var k = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); }, d = k(ts);
+  return d === k(Date.now()) ? "Today" : d === k(Date.now() - 86400000) ? "Yesterday" : new Date(ts).toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
+}
+function spWhen(e, dated) {
+  if (dated && e.state === "post") return '<span class="mut">' + new Date(e.te || e.ts).toLocaleDateString("en-GB", { timeZone: TZ, day: "numeric", month: "short" }) + "</span>";
   if (e.state === "in") return '<span class="pill live">' + esc(String(e.detail || "LIVE").replace("'+", "+")) + "</span>";   // 45'+2' -> 45+2'
   if (e.state === "post") return '<span class="mut">' + esc(e.kind === "team" ? (e.detail || "FT") : "Finished") + "</span>";
   var d = new Date(e.ts), today = d.toLocaleDateString("en-CA", { timeZone: TZ }) === new Date().toLocaleDateString("en-CA", { timeZone: TZ });
@@ -4737,26 +5212,39 @@ function spCrest(t) {
   return u && !BADIMG[u] ? '<img class="tl" alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(u) + '">' : "";
 }
 function sportsBody() {
-  var ev = spEvents(), view = spView();
+  var ev = spEvents(), view = spView(), past = view === "past" && !SPQ;
+  var find = SPFIND || SPQ ? '<input type="search" id="spQ" class="flt" placeholder="Search a team, player, league or event…" aria-label="Search the sports box">' : "";
   if (!spLeagues().length) return '<div class="empty">No leagues switched on. Choose some in Settings, Sports.</div>';
-  if (!ev.length) return '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : view === "sport" ? "Nothing on or coming up in " + esc(SP_NAME[spFavSport()] || "your sport") + " right now." : "No games today in these leagues. Try Upcoming.") + "</div>";
+  var ym = new Date().getFullYear() + pad2(new Date().getMonth() + 1), sportNow = spSport();
+  var pastWait = spLeagues().some(function (l) { if (l.x || (sportNow && l.sp !== sportNow)) return false; var c = l.kind ? SP_PAST[l.id] : SP_UP[l.id + ym]; return !(c && (c.ok || Date.now() - c.t > 20000)); });
+  if (!ev.length && (SPQ || past)) return find + '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : pastWait ? "Loading results…" : SPQ ? "Nothing found for “" + esc(SPQ) + "” in the leagues you follow (recent results, today and this month’s fixtures)." : "No results in the last days for these leagues.") + "</div>";
+  if (!ev.length) return find + '<div class="empty">' + (SPERR ? "Scores unavailable: " + esc(SPERR) : !Object.keys(SP_NOW).length ? "Loading scores…" : view === "fav" ? (spFavs().length ? "No games soon for your favorites." : "No favorites yet. Open a game and press ☆ next to a team or player.") : view === "up" ? "No upcoming games found." : view === "sport" ? "Nothing on or coming up in " + esc(SP_NAME[spFavSport()] || "your sport") + " right now." : "No games today in these leagues. Try Upcoming.") + "</div>";
   // The score and time columns are sized PER SPORT, for that sport's longest entry on screen: all football rows share
   // one set of columns, all basketball rows another. (One width for the whole list would let a "104–98" or a long
   // badge steal the room the team names need on every football row.) The names get all the width that is left.
   var W = {};
   ev.forEach(function (e) {
     if (e.kind !== "team") return;
-    var w = W[e.sp] = W[e.sp] || { sc: 1, st: 1.6 }, len = spWhen(e).replace(/<[^>]+>/g, "").length;
+    var w = W[e.sp] = W[e.sp] || { sc: 1, st: 1.6 }, len = spWhen(e, !!SPQ).replace(/<[^>]+>/g, "").length;
     if (e.state !== "pre") w.sc = Math.max(w.sc, (String(e.home.s != null ? e.home.s : "") + "–" + String(e.away.s != null ? e.away.s : "")).length);
     w.st = Math.max(w.st, e.state === "in" ? len * 0.55 + 0.75 : len * 0.5 + 0.1);   // a live badge has padding, plain text does not
   });
-  return lst("sports", '<div class="spl">' + ev.map(function (e) {
+  var lastHead = "";
+  return find + lst("sports", '<div class="spl">' + ev.map(function (e) {
+    // Results: a small heading per day. Search: one per part (live, coming up, results).
+    var hd = past ? spDayName(e.te || e.ts) : SPQ ? (e.state === "in" ? "Live" : e.state === "pre" ? "Coming up" : "Results") : "", head = "";
+    if (hd && hd !== lastHead) { lastHead = hd; head = '<div class="spday">' + hd + "</div>"; }
+    return head + spRowHtml(e, W, past);
+  }).join("") + "</div>", 6);
+}
+function spRowHtml(e, W, plain) {
+  return [e].map(function (e) {
     // a UFC card that is on: one row per fight (in the cage first, then what is next, then the results)
     if (e.kind === "card" && e.state === "in" && e.fights && e.fights.length) return fightsLive(e).map(function (f) { return fightRow(e, f); }).join("");
     var w = W[e.sp], vars = e.kind === "team" ? ' style="--scw:' + (w.sc * 0.6 + 0.2).toFixed(2) + "em;--stw:" + Math.min(w.st, 4).toFixed(2) + 'em"' : "";
-    return '<div class="row sprow' + (e.kind === "team" ? "" : " spx") + (e.state === "in" ? " splive" : "") + (e.state === "post" ? " rd" : "") + '"' + vars + '><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
-      '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e) + "</span></div>";
-  }).join("") + "</div>", 6);
+    return '<div class="row sprow' + (e.kind === "team" ? "" : " spx") + (e.state === "in" ? " splive" : "") + (e.state === "post" && !plain ? " rd" : "") + '"' + vars + '><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
+      '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e, !!SPQ) + "</span></div>";
+  }).join("");
 }
 // ---- The story of a game: who scored and when, cards, period scores, stats and top performers ----
 function spEvIcon(x) { return x.k === "goal" ? '<i class="evg" title="Goal">⚽</i>' : '<i class="evc ' + x.k + '" title="' + (x.k === "red" ? "Red card" : "Yellow card") + '"></i>'; }
@@ -5176,7 +5664,7 @@ function showSportPeek(el, id) {
 function openSport(id) {
   if (String(id).indexOf("#") > 0) { openFight(id); return; }
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
-  if (!e) { Object.keys(SP_NOW).concat(Object.keys(SP_UP)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); }); }
+  if (!e) e = spFind(id);
   if (!e) return;
   SP_OPEN = id; ES_CUR = "";
   var favBtn =function (n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; };
@@ -5285,6 +5773,7 @@ function fightRow(e, f) {
 }
 function spFind(id) {
   var e = null;
+  Object.keys(SP_PAST).forEach(function (k) { (SP_PAST[k].ev || []).forEach(function (x) { if (x.id === id) e = x; }); });
   Object.keys(SP_UP).concat(Object.keys(SP_NOW)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); });
   Object.keys(SP_NOW).forEach(function (k) { (SP_NOW[k].ev || []).forEach(function (x) { if (x.id === id) e = x; }); });   // today's data is fresher
   return e;
@@ -5920,6 +6409,7 @@ $("shadowOn").onchange = function () { P.shadow = this.checked; persist(); apply
 $("srcNamesOn").onchange = function () { P.hideSrc = !this.checked; persist(); render(); };
 $("dockChatOn").onchange = function () { P.dockChat = this.checked; persist(); };
 document.addEventListener("input", function (e) {
+  if (e.target.id === "spQ") { debounced("spQ", function () { SPQ = $("spQ") ? $("spQ").value.trim().toLowerCase().slice(0, 60) : ""; render(); fetchSports(); }); return; }
   if (e.target.id !== "newsQ") return;
   debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase() : ""; render(); });
 });
@@ -6163,7 +6653,7 @@ document.addEventListener("visibilitychange", function () {
 });
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates();
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);

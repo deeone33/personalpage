@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniTree – free start page for news, sports, stocks, Twitch and mail</title>
@@ -41,7 +41,7 @@
   </header>
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the radio, the search bar, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
   <div id="clocks"></div>
-  <div id="grid"></div>
+  <div id="gridw"><div id="grid"></div><div id="embeds"></div></div>
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
   <section id="intro">
     <h1>OmniTree: your start page, everything in one tab</h1>
@@ -106,6 +106,12 @@
       <div id="bmMsg" class="mut sn" role="status"></div>
       <span><button data-a="bmaddf">+ New folder</button></span>
       <div class="mut sn">A folder shows as one button on the bar and opens a small list. Put a link into it with the “On the bar / In: …” choice on the link’s row.</div>
+    </div>
+    <div class="sub"><b>Import from your browser</b>
+      <div class="mut sn">First save your browser's bookmarks to a file. <b>Chrome, Edge, Brave, Opera:</b> Bookmarks → Bookmark manager → ⋮ → Export bookmarks. <b>Firefox:</b> Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML. <b>Safari:</b> File → Export → Bookmarks. Then choose that file here and tick the folders you want.</div>
+      <span><label class="filebtn" for="bmFile">Choose the bookmarks file</label><input type="file" id="bmFile" accept=".html,.htm,text/html" class="vis-hidden"></span>
+      <div id="bmImpMsg" class="sn" role="status"></div>
+      <div id="bmImp"></div>
     </div>
     <div class="sub"><b>Your bookmarks</b>
       <div class="mut sn">Click the icon to change it. ◀ ▶ move a bookmark left and right on the bar. The small color square colors one bookmark.</div>
@@ -176,6 +182,12 @@
     <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
   </section>
 
+  <section class="setgrp wide" data-cat="Content" data-sec="Web page boxes">
+    <div class="mut sn" data-kw="embed iframe website web page box widget dashboard">Show any web page inside a box of its own, for example a dashboard, a live map, a webcam or a shared document. Paste its address and the box appears on your page; move and size it with Edit like any other box (H− and H+ change its height). All three are off until you fill one in.</div>
+    <div id="embSet"></div>
+    <div class="mut sn">Good to know: many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page, and then the box stays empty. Sites that offer an “embed” address do work. The page in the box is that site’s own: it can load its own content and set its own cookies, but it cannot read anything from OmniTree.</div>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Sports">
     <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
     <div id="spList"></div>
@@ -188,6 +200,16 @@
 
   <section class="setgrp" data-cat="Content" data-sec="Calendar">
     <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
+    <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
+      <b>Calendars from elsewhere</b>
+      <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
+      <div class="add stfile"><label class="filebtn" for="icsFile">Import an .ics file</label><input type="file" id="icsFile" accept=".ics,.ical,.ifb,text/calendar" class="vis-hidden"><span class="mut sn">Copies the events into your own calendar, once. You can change and delete them afterwards.</span></div>
+      <form id="icsAdd" class="add"><input id="icsUrl" placeholder="Or follow a calendar by its address (.ics)" aria-label="Calendar address" autocomplete="off" maxlength="1000"><button>Follow</button></form>
+      <div class="mut sn">A calendar you follow is read again every half hour and shown next to your own events, without copying them. Up to four. Needs you to be signed in.</div>
+      <div id="icsMsg" class="sn" role="status"></div>
+      <div id="icsImp"></div>
+      <div id="icsList"></div>
+    </div>
     <div class="sub">
       <b>Mark these days</b>
       <div id="sdGroups"></div>
