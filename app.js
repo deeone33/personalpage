@@ -1,4 +1,4 @@
-var VERSION = 108;
+var VERSION = 110;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1793,6 +1793,7 @@ function renderBm() {
   var el = $("bm"), B = bm();
   if (!el) return;
   el.hidden = !B.on;
+  el.setAttribute("data-al", B.al === "c" || B.al === "r" ? B.al : "l");
   if (!B.on) { el.innerHTML = ""; return; }
   el.innerHTML = B.items.map(function (x) {
     if (!x.kids) return bmLink(x, "bmi");
@@ -1800,6 +1801,9 @@ function renderBm() {
     return '<div class="bmf">' + '<button class="bmi' + (bmCol(x.c) || bmCol(B.col) ? " col" : "") + (open ? " on" : "") + '"' + bmStyle(x) + ' data-a="bmfolder" data-k="' + esc(x.id) + '" aria-expanded="' + open + '">' + bmIcon(x) + "<span>" + esc(x.t || "Folder") + '</span><i class="bmcar">▾</i></button>' +
       (open ? '<div class="menu bmmenu" role="menu">' + (x.kids.length ? x.kids.map(function (k) { return bmLink(k, "bmk"); }).join("") : '<div class="mut sn">Empty. Add links to it in Settings → Bookmarks.</div>') + "</div>" : "") + "</div>";
   }).join("") || '<button class="bmi" data-a="setgo" data-k="Bookmarks">+ Add your first bookmark</button>';
+  // an open folder's list never runs off the right edge of the screen (a folder near the right end opens leftwards)
+  var m = el.querySelector(".bmmenu");
+  if (m && m.getBoundingClientRect().right > document.documentElement.clientWidth - 6) { m.style.left = "auto"; m.style.right = "0"; }
 }
 // a click anywhere else closes an open folder; a click on a link inside it closes it too
 document.addEventListener("click", function (e) {
@@ -1825,7 +1829,7 @@ function bmRow(x, inFolder) {
 function renderBmSet() {
   var el = $("bmSet"), B = bm();
   if (!el) return;
-  $("bmOn").checked = !!B.on; $("bmNw").checked = !!B.nw;
+  $("bmOn").checked = !!B.on; $("bmNw").checked = !!B.nw; $("bmAl").value = B.al === "c" || B.al === "r" ? B.al : "l";
   $("bmColAll").value = bmCol(B.col) || "#8c93a3";
   var act = document.activeElement, keep = act && act.dataset && act.dataset.bm && el.contains(act) ? [act.dataset.bm, act.dataset.id] : null;
   el.innerHTML = B.items.length ? B.items.map(function (x) { return bmRow(x, null) + (x.kids || []).map(function (k) { return bmRow(k, x); }).join(""); }).join("") : '<div class="mut sn">No bookmarks yet. Add one above.</div>';
@@ -1864,6 +1868,7 @@ document.addEventListener("change", function (e) {
   if (!t || !t.id && !(t.dataset && t.dataset.bm)) return;
   if (t.id === "bmOn") { B.on = t.checked; bmChanged(); return; }
   if (t.id === "bmNw") { B.nw = t.checked; bmChanged(); return; }
+  if (t.id === "bmAl") { B.al = t.value === "c" || t.value === "r" ? t.value : "l"; bmChanged(); return; }
   if (t.id === "bmColAll") { B.col = bmCol(t.value); bmChanged(); return; }
   if (!t.dataset || !t.dataset.bm) return;
   var f = bmFind(t.dataset.id);
