@@ -1,4 +1,4 @@
-var VERSION = 91;
+var VERSION = 92;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2596,7 +2596,23 @@ document.addEventListener("click", function (e) {
 $("closeBtn").onclick = function () { $("panel").hidden = true; };
 // ---- Settings window: sections listed on the left, one section shown at a time ----
 var SETSEC = 0;
-function isAdmin() { return !!USER && (window.ADMIN_EMAILS || []).some(function (e) { return String(e).toLowerCase() === String(USER.email || "").toLowerCase(); }); }
+// Whether to list the Admin entry in Settings. The page does not know who the owner is: after you sign in it asks the
+// feeds function, which checks your sign-in against its own private list. (Showing the entry gives nobody access;
+// the admin page asks the function again for everything it shows.) The answer is remembered for 12 hours.
+var IS_ADMIN = false;
+function isAdmin() { return !!USER && IS_ADMIN; }
+function checkAdmin() {
+  IS_ADMIN = false;
+  if (!sb || !USER) return;
+  var uid = USER.id, c = load("sp_adm", null);
+  if (c && c.u === uid && Date.now() - c.t < 43200000) { IS_ADMIN = !!c.a; buildSetNav(); return; }
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { admin: { op: "am" } } }).then(function (r) {
+    if (!USER || USER.id !== uid) return;
+    IS_ADMIN = !!(r.data && r.data.ok === true && r.data.admin === true);
+    save("sp_adm", { u: uid, a: IS_ADMIN ? 1 : 0, t: Date.now() });
+    buildSetNav();
+  }).catch(function () {});
+}
 function buildSetNav() {
   var cat = "", gs = document.querySelectorAll("#panel .setgrp");
   if (gs[SETSEC] && gs[SETSEC].dataset.admin && !isAdmin()) SETSEC = 0;
@@ -2647,13 +2663,13 @@ function openAuth(tab) {
   if (tab) AUTHTAB = tab;
   var up = AUTHTAB === "up", seg = function (k, l) { return '<button data-a="authtab" data-k="' + k + '"' + (AUTHTAB === k ? ' class="on"' : "") + ">" + l + "</button>"; };
   openModal("Account", '<div class="auth"><div class="seg">' + seg("in", "Sign in") + seg("up", "Create account") + "</div>" +
-    '<p class="mut sn">' + (up ? "A free account saves your boxes, sources, notes and layout, and brings them to any device." : "Sign in to load your own setup.") + "</p>" +
+    '<p class="mut sn">' + (up ? "A free account saves your boxes, sources, notes and layout, and brings them to any device. All it needs is an email address and a password you choose here; the email is only used to sign you in and to send the confirmation and password-reset emails." : "Sign in to load your own setup.") + "</p>" +
     '<label>Email<input type="email" id="acctEmail" autocomplete="email" placeholder="you@example.com"></label>' +
     '<label>Password<input type="password" id="acctPass" autocomplete="' + (up ? "new-password" : "current-password") + '"' + (up ? ' placeholder="At least 8 characters"' : "") + "></label>" +
     (up ? '<label>Repeat password<input type="password" id="acctPass2" autocomplete="new-password"></label>' : "") +
     '<div id="acctMsg" class="sn" role="status">' + esc(ACCTMSG) + "</div>" +
     '<button class="pri" data-a="' + (up ? "signup" : "signin") + '">' + (up ? "Create account" : "Sign in") + "</button>" +
-    (up ? '<p class="mut sn">You then get an email with a confirmation link. Click it, come back and sign in. A short guide helps you pick your boxes and set them up.</p>'
+    (up ? '<p class="mut sn"><b>What happens next:</b> 1) you get an email with a confirmation link (look in spam if it is not there within a minute), 2) click the link, 3) come back here and sign in. A short guide then helps you pick your boxes and set them up; every step in it can be skipped.</p>'
         : '<button class="lnk2" data-a="forgotpw">Forgot password?</button>') + "</div>");
   $("acctEmail").value = keep;
   (keep ? $("acctPass") : $("acctEmail")).focus();
@@ -2691,7 +2707,7 @@ function onUser(u) {
     var resume = null; try { resume = JSON.parse(sessionStorage.getItem("sp_wiz") || "null"); sessionStorage.removeItem("sp_wiz"); } catch (e) {}
     if (resume) setTimeout(function () { openWizard(resume); }, 300);
     else if (isNew && !P.onboarded) setTimeout(function () { openWizard(); }, 600);
-    checkDevice();
+    checkDevice(); checkAdmin();
     fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz();
   });
 }
@@ -2711,9 +2727,9 @@ function auth(fn) {
 }
 function signOut() {
   if (sb) sb.auth.signOut();
-  try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
+  try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first", "sp_adm"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
   P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, shadow: P.shadow, fav: {}, hidden: {} };
-  TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; NEWSALL = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null;
+  TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; NEWSALL = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null; IS_ADMIN = false;
   FIRST = { _i: {} };
   loadMailForm(); loadExtraForm(); renderSide(); renderAccount();
   applyWall(); MENU_OPEN = ""; render();
@@ -2777,6 +2793,7 @@ function openHelp() {
   html += '<h3 id="help-weather">Weather &amp; Location</h3><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
   html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
+    '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google\'s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it at any time, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
     '<ol>' +
     '<li>Go to <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> and make sure you are signed in as the Gmail account you want to show (top right corner of the page).</li>' +
     '<li>Click <b>New project</b> (top left).</li>' +
@@ -2844,7 +2861,7 @@ function openHelp() {
     '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
     '</ol>';
 
-  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. A red play button means that station could not be reached just now. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
+  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
   html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
 
@@ -2855,8 +2872,11 @@ function openHelp() {
     '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. An esports game has <b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window.</p>';
-  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do.</p>';
+  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
+    '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
+    '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
+    '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
   html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
     '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
     '<p><b>Summary:</b> on your first visit each day a small "Since yesterday" window shows weather warnings, today\'s events, top stories, biggest movers, mail and who is live. Open it any time from the cogwheel menu or with <code>b</code>.</p>' +
@@ -4175,10 +4195,11 @@ function wizPage(id) {
     mock("id.twitch.tv", "<b>OmniTree wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
     (twToken() ? '<p><span class="pill ac">✓ Twitch is connected</span></p>' : '<p><button class="pri" data-a="wiztw">Connect Twitch</button></p>') +
+    '<div class="safe"><b>Is this safe?</b> Yes. You log in on Twitch\'s own page, so this site never sees your Twitch password. The only permission asked for is to read the list of channels you follow. You can take it back at any time on twitch.tv under Settings → Connections, or here in Settings → Twitch → Disconnect.</div>' +
     '<p class="mut sn">Tip: with Twitch Turbo or a sub, use <b>Pop out</b> on a stream to watch without ads.</p>';
   if (id === "youtube") {
     var nch = P.yt && P.yt.ch ? P.yt.ch.length : 0;
-    return "<p>YouTube does not let a website read your subscriptions directly, so you hand the page a small file with the list. It takes about five minutes, once.</p><ol>" +
+    return "<p>YouTube does not let a website read your subscriptions directly, so you hand the page a small file with the list. It takes about five minutes, once. The file only contains the names of the channels you subscribe to; no password, no watch history.</p><ol>" +
       '<li>Open <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> and press <b>Deselect all</b>.' + mock("takeout.google.com", '<span class="mkrow"><b>Select data to include</b>' + mkb("Deselect all", 1) + "</span>" + mkl(80) + mkl(65)) + "</li>" +
       "<li>Scroll down to <b>YouTube and YouTube Music</b> and tick it. Press <b>All YouTube data included</b>, untick everything, and tick only <b>subscriptions</b>." + mock("YouTube and YouTube Music", '<span class="mkrow"><span class="mkchk on"></span> YouTube and YouTube Music</span><span class="mkrow">' + mkb("All YouTube data included", 1) + '</span><span class="mkrow"><span class="mkchk"></span> history &nbsp; <span class="mkchk"></span> playlists &nbsp; <span class="mkchk on"></span> <b>subscriptions</b></span>') + "</li>" +
       "<li>Press <b>Next step</b>, then <b>Create export</b>. Google emails you a download link a few minutes later.</li>" +
@@ -4187,12 +4208,17 @@ function wizPage(id) {
   }
   if (id === "mail") {
     var m0 = (P.mail && P.mail[0]) || {};
-    return "<p>The Mail box shows your unread count without giving this site your Google password. You paste a small script into <b>your own</b> Google account, and it answers only to a secret token. It is all copy and paste; allow about ten minutes.</p><ol>" +
+    return "<p>The Mail box shows your unread count without giving this site your Google password. You paste a small script into <b>your own</b> Google account, and it answers only to a secret token. It is all copy and paste; allow about ten minutes. This is the one longer step, and you can skip it and do it later from Settings → Mail.</p>" +
+      '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both.<ul>' +
+      "<li>The script is made with Google Apps Script, Google's own tool for exactly this. It runs inside your Google account, under your name. Nothing is installed on your computer.</li>" +
+      "<li>This site never gets your Google password and cannot sign in as you. It can only ask your script a question, and the script only answers when it is shown the secret token.</li>" +
+      "<li>What the script does: counts your unread mail, lists sender, subject and the first line of the latest unread ones, and (only if you switch on email notifications) sends an email to your own address. It cannot delete, move or send mail to anyone else. You can read every line of it before you paste it.</li>" +
+      '<li>You stay in control: delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>, and it stops at once.</li></ul></div><ol>' +
       '<li>Open <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> (signed in as the Gmail account you want) and press <b>New project</b>.' + mock("script.google.com", '<span class="mkrow">' + mkb("+ New project", 1) + "</span>" + mkl(50) + mkl(70)) + "</li>" +
       '<li>Select all the sample code in the editor and delete it. Then copy our script and paste it in. <div class="codebox"><button class="copybtn" data-a="copycode">Copy the code</button><pre id="gsCode" hidden>' + GS_CODE + "</pre></div>" + mock("Code.gs", '<span class="mkcode">function doGet(e) {<br>&nbsp;&nbsp;…the pasted script…<br>}</span>') + "</li>" +
       "<li>Press <b>Deploy</b> (top right) → <b>New deployment</b>. Click the gear next to “Select type” and choose <b>Web app</b>. Set the two boxes exactly like this, then press Deploy:" + mock("New deployment", '<span class="mkrow">Execute as ' + mkb("Me", 1) + '</span><span class="mkrow">Who has access ' + mkb("Anyone", 1) + '</span><span class="mkrow">' + mkb("Deploy", 1) + "</span>") + "</li>" +
-      "<li>Google asks for permission. Press <b>Authorize access</b>, pick your account, then <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. The warning is normal: it is your own private script." + mock("Google hasn’t verified this app", mkl(75) + '<span class="mkrow">' + mkb("Advanced", 1) + mkb("Back to safety") + '</span><span class="mknote">then: Go to your project (unsafe) → Allow</span>') + "</li>" +
-      "<li>Copy the <b>Web app URL</b> (it ends in <code>/exec</code>). Open it once in a new tab: the page shows a <b>token</b>. Copy the token too; it is shown only this one time.</li>" +
+      "<li>Google asks for permission. Press <b>Authorize access</b>, pick your account, then <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. Google shows this warning for every script that has not been through its review for public apps. Yours is private: you wrote (pasted) it, and you are the only one using it, so the warning is expected." + mock("Google hasn’t verified this app", mkl(75) + '<span class="mkrow">' + mkb("Advanced", 1) + mkb("Back to safety") + '</span><span class="mknote">then: Go to your project (unsafe) → Allow</span>') + "</li>" +
+      "<li>Copy the <b>Web app URL</b> (it ends in <code>/exec</code>). Open it once in a new tab: the page shows a <b>token</b>, a long code between quotation marks. Copy the token too (without the quotation marks); it is shown only this one time. Treat it like a password.</li>" +
       "<li>Fill in the three fields and press Save:</li></ol>" +
       '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="password" id="wzT" placeholder="Token" autocomplete="off" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
       '<div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + '</div><p class="mut sn">A second inbox can be added the same way later, in Settings → Mail. The full written steps are in Help → Mail.</p>';
@@ -4200,7 +4226,9 @@ function wizPage(id) {
   return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its title; W / T / H change width, text size and list length.</li>" +
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
-    "<li><b>Weather:</b> click the weather box to pick your city.</li><li><b>Shortcuts:</b> press <code>?</code> for the full help.</li></ul>";
+    "<li><b>Weather:</b> click the weather box to pick your city.</li>" +
+    "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Type <code>help</code> in it to see everything.</li>" +
+    "<li><b>Radio:</b> pick your stations in Settings → Radio.</li><li><b>Help:</b> press <code>?</code>, or use the link at the bottom of the page, for the full guide.</li></ul>";
 }
 var WIZ_TITLES = { pick: "Welcome to OmniTree", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
 function wizRender() {

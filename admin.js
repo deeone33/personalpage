@@ -34,7 +34,7 @@
     msg("");
     $("aWho").textContent = "Loading…";
     sb.auth.getSession().then(function (s) {
-      if (!s.data || !s.data.session) { gate("Sign in first", "Sign in on the main page with the owner account, then open this page again."); return; }
+      if (!s.data || !s.data.session) { gate("Sign in first", "Sign in on the main page, then open this page again."); return; }
       return call({ op: "overview" }).then(function (d) { D = d; render(); });
     }).catch(function (e) {
       if (/not allowed/i.test(e.message)) gate("Not allowed", "This page is only for the site owner. Your account cannot see it.");

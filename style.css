@@ -841,6 +841,12 @@ body.noshadow #srchAns{box-shadow:none}
 .fpkh span{font-weight:600;line-height:1.25}
 .fpkh small{font-weight:400}
 
+/* ---- "Is this safe?" note in the setup guide and Help ---- */
+.safe{margin:8px 0 12px;padding:9px 12px;border:1px solid var(--line);border-left:3px solid var(--up);border-radius:10px;background:var(--bg);font-size:13px;line-height:1.45}
+.safe a{color:var(--ac)}
+.safe ul{margin:5px 0 0;padding-left:18px}
+.safe li{margin-bottom:3px}
+
 /* ---- "!" for a problem in a box, and its window ---- */
 .errb{font-weight:800;min-width:1.9em;justify-content:center}
 .berr{padding:8px 0;border-bottom:1px solid var(--line)}
