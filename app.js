@@ -1,4 +1,4 @@
-var VERSION = 81;
+var VERSION = 82;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -3096,11 +3096,11 @@ function sdSet(k, on) {
 }
 function refreshSdCal() { if (sideOf("cal") || (!$("modal").hidden && $("mTitle").textContent === WIDGETS.cal.t)) openCal(); }
 
-// ---- One small line under the date: the nearest thing in your calendar within a week (an event, a birthday, a
+// ---- One small line under the date: the next thing in your calendar, however far off (an event, a birthday, a
 // favorite's game, a marked day, a public holiday, payday). Only the closest day, and only its first entry.
 function nextUp() {
   var now = new Date(), hm = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
-  for (var k = 0; k <= 7; k++) {
+  for (var k = 0; k <= 366; k++) {   // whatever comes next, up to a year ahead
     var ds = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + k));
     var list = evsOn(ds).filter(function (e) { return k > 0 || !e.tm || e.tm >= hm; }).map(function (e) { return { t: e.t, tm: e.tm || "", b: e.rep === "b" }; })   // what is already over today is skipped
       .concat(specialsOn(ds).map(function (x) { return { t: x.n, tm: "" }; }));
@@ -3114,7 +3114,7 @@ function renderNextUp() {
   document.querySelector("header").classList.toggle("hasnext", !!n);
   if (!n) return;
   el.dataset.k = n.ds;
-  el.textContent = (n.k === 0 ? "Today" : n.k === 1 ? "Tomorrow" : dayLabel(n.ds)) + (n.first.tm ? " " + n.first.tm : "") + " · " + (n.first.b ? "🎂 " : "") + n.first.t + (n.more ? "  +" + n.more : "");
+  el.textContent = (n.k === 0 ? "Today" : n.k === 1 ? "Tomorrow" : dayLabel(n.ds) + (n.k > 7 ? ", in " + n.k + " days" : "")) + (n.first.tm ? " " + n.first.tm : "") + " · " + (n.first.b ? "🎂 " : "") + n.first.t + (n.more ? "  +" + n.more : "");
 }
 function calHtml() {
   var now = new Date(), today = ymd(now);
