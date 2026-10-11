@@ -36,6 +36,10 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .tag.k-bug{border-color:var(--down);color:var(--down)}
 .tag.k-improve{border-color:var(--ac);color:var(--fg)}
 .tag.k-idea{border-color:var(--up);color:var(--up)}
+.tag.kd-bot,.tag.kd-likely{border-color:var(--down);color:var(--down);cursor:help}
+.tag.kd-unsure{cursor:help}
+.tag.kd-person,.tag.kd-acct{border-color:var(--up);color:var(--up);cursor:help}
+.kdwhy{margin:0 0 6px}
 .tag.k-privacy{border-color:#7aa7ff;color:#7aa7ff}
 tr.frow{cursor:pointer}
 tr.frow.isnew .mail{font-weight:700}

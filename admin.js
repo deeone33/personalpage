@@ -67,6 +67,42 @@
     var os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad|iPod/.test(ua) ? "iPhone / iPad" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
     return br + (os ? " on " + os : "");
   }
+  // ---- Person or bot? A best guess per visitor from what the visit log holds. It is a guess, never certain:
+  // the reasons are shown when you hover the label. ----
+  // networks that crawlers and scanners run from, by the start of the IP address: [prefix, whose it is, 1 = a known crawler]
+  var NETS = [["66.249.", "Google's crawler", 1], ["192.178.", "Google", 1], ["74.125.", "Google", 1], ["64.233.", "Google", 1], ["72.14.", "Google", 1], ["209.85.", "Google", 1], ["216.239.", "Google", 1], ["142.250.", "Google", 1],
+    ["40.77.", "Microsoft's Bing crawler", 1], ["157.55.", "Microsoft's Bing crawler", 1], ["207.46.", "Microsoft's Bing crawler", 1], ["17.", "Apple's own network"],["31.13.", "Meta (link previews)", 1], ["66.220.", "Meta (link previews)", 1], ["69.171.", "Meta (link previews)", 1], ["173.252.", "Meta (link previews)", 1],
+    ["149.154.", "Telegram (link previews)", 1], ["91.108.", "Telegram (link previews)", 1], ["162.158.", "Cloudflare"], ["172.64.", "Cloudflare"], ["172.71.", "Cloudflare"], ["104.16.", "Cloudflare"],
+    ["3.", "an Amazon data centre"], ["13.", "a data centre (Amazon or Microsoft)"], ["18.", "an Amazon data centre"], ["34.", "a data centre (Amazon or Google)"], ["35.", "a data centre (Amazon or Google)"],["52.", "a data centre (Amazon or Microsoft)"], ["54.", "an Amazon data centre"],
+    ["20.", "a Microsoft data centre"], ["40.", "a Microsoft data centre"], ["104.196.", "a Google data centre"], ["104.154.", "a Google data centre"], ["159.203.", "a DigitalOcean data centre"], ["167.99.", "a DigitalOcean data centre"], ["138.68.", "a DigitalOcean data centre"], ["165.22.", "a DigitalOcean data centre"],
+    ["5.161.", "a Hetzner data centre"], ["65.108.", "a Hetzner data centre"], ["65.109.", "a Hetzner data centre"], ["95.216.", "a Hetzner data centre"], ["135.181.", "a Hetzner data centre"], ["51.15.", "a Scaleway data centre"], ["51.158.", "a Scaleway data centre"], ["45.33.", "a Linode data centre"], ["172.104.", "a Linode data centre"], ["139.162.", "a Linode data centre"]];
+  // which part of the world a country's time zones belong to, to spot a visitor whose clock is on another continent than its IP address
+  var ZONE_OF = {};
+  [["Europe", "AD AL AT AX BA BE BG BY CH CZ DE DK EE ES FI FO FR GB GG GI GR HR HU IE IM IS IT JE LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS SE SI SK SM UA VA XK"],
+    ["America", "US CA MX BR AR CL CO PE VE EC BO PY UY GT CU DO HN NI SV CR PA PR JM TT HT BS BB"],
+    ["Asia", "CN JP KR IN ID TH VN PH MY SG HK TW PK BD LK NP UZ AE SA IL IQ IR QA KW OM JO LB"],
+    ["Africa", "ZA NG EG KE MA DZ TN GH ET TZ UG SN CI CM AO"], ["Australia", "AU"], ["Pacific", "NZ"]].forEach(function (g) { g[1].split(" ").forEach(function (c) { ZONE_OF[c] = g[0]; }); });
+  var MYCHROME = +((navigator.userAgent.match(/Chrome\/(\d+)/) || [])[1] || 0);
+  // -> { k: "acct" | "bot" | "likely" | "unsure" | "person", l: label, why: [reasons] }
+  function kindOf(o, signedIn) {
+    var ua = String(o.ua || ""), tz = String(o.tz || ""), cc = String(o.cc || "").toUpperCase(), why = [], score = 0, sure = false;
+    if (signedIn) return { k: "acct", l: "Account", why: ["Signed in, so a real user."] };
+    if (!ua) { score += 2; why.push("the browser did not say what it is"); }
+    if (/bot|crawl|spider|slurp|preview|headless|monitor|curl|python|wget|lighthouse|pagespeed|scan|fetch|http-client|go-http|axios|node/i.test(ua)) { sure = true; why.push("it calls itself an automated program"); }
+    var net = NETS.filter(function (n) { return o.ip.indexOf(n[0]) === 0; })[0];
+    if (net) { if (net[2]) sure = true; else score += 3; why.push("the address belongs to " + net[1] + ", not a home or mobile connection"); }
+    if (/^(UTC|Etc\/)/.test(tz)) { score += 2; why.push("its clock is set to UTC, which servers use and people rarely do"); }
+    else if (!tz) { score += 1; why.push("it gave no time zone"); }
+    else if (ZONE_OF[cc] && /^(Europe|America|Asia|Africa|Australia)\//.test(tz) && tz.split("/")[0] !== ZONE_OF[cc]) { score += 2; why.push("its clock (" + tz + ") is on another continent than its address (" + country(cc) + "): a server, or a person on a VPN"); }
+    if (!o.lang) { score += 1; why.push("it gave no language"); }
+    var cv = +((ua.match(/Chrome\/(\d+)/) || [])[1] || 0);
+    if (cv && MYCHROME && MYCHROME - cv > 15) { score += 1; why.push("a very old browser version (Chrome " + cv + ")"); }
+    if (/Linux x86_64/.test(ua) && !/Android/.test(ua) && o.n <= 2 && !o.ref) { score += 1; why.push("desktop Linux with a single direct visit, typical of servers"); }
+    if (sure) return { k: "bot", l: "Bot", why: why };
+    if (score >= 3) return { k: "likely", l: "Likely a bot", why: why };
+    if (score >= 1) return { k: "unsure", l: "Unsure", why: why };
+    return { k: "person", l: "Looks like a person", why: ["Nothing about this visit looks automated" + (o.n > 1 ? ", and it came back " + o.n + " times." : ".")] };
+  }
   var CN = null; try { CN = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
   function country(cc) { cc = String(cc || "").toUpperCase(); if (!/^[A-Z]{2}$/.test(cc) || cc === "XX" || cc === "T1") return "Unknown"; try { return (CN && CN.of(cc)) || cc; } catch (e) { return cc; } }
   var BOXES = { weather: "Weather", mail: "Mail", live: "Radio", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
@@ -158,17 +194,18 @@
         panel("Where they are", "By the country of the IP address, last 30 days.", hbars(top(function (o) { return country(o.cc); }, 6)), "w3") +
         panel("How they got here", "The site they clicked from. “Direct” means they typed the address or used a bookmark.", hbars(top(function (o) { return o.ref || "Direct"; }, 6)), "w3") + "</div>";
       h += '<div class="apanel w12"><h2>Visitors by IP address <span class="achips">' + [["all", "Everyone"], ["anon", "Not signed in"], ["user", "Signed in"]].map(function (f) { return '<button data-vf="' + f[0] + '"' + (VF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
-        '<p class="ahint">One line per IP address, most recent first. Click a line to see each of its visits. Reloading within 30 minutes counts as the same visit. Kept for 90 days.</p>' +
-        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th>Last visit</th><th>Visits</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
+        '<p class="ahint">One line per IP address, most recent first. Click a line to see each of its visits. Reloading within 30 minutes counts as the same visit. Kept for 90 days. <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
+        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th>Last visit</th><th>Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
         (list.slice(0, 300).map(function (o) {
           var who = Object.keys(o.who).map(function (id) { var u = byId[id]; return u ? esc(u.email) + (u.admin ? ' <span class="tag y">you</span>' : "") : "a deleted account"; });
-          var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc(stamp(o.last)) + '">' + ago(o.last) + '</td><td class="num">' + o.n + "</td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
-          if (VOPEN[o.ip]) out += '<tr class="udetail"><td colspan="7"><div class="vlist">' + o.rows.slice(0, 40).map(function (v) {
+          var kd = kindOf(o, who.length > 0);
+          var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc(stamp(o.last)) + '">' + ago(o.last) + '</td><td class="num">' + o.n + '</td><td><span class="tag kd-' + kd.k + '" title="' + esc(kd.why.join("; ")) + '">' + kd.l + "</span></td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
+          if (VOPEN[o.ip]) out += '<tr class="udetail"><td colspan="8"><p class="ahint kdwhy"><b>' + kd.l + ":</b> " + esc(kd.why.join("; ")) + '</p><div class="vlist">' +o.rows.slice(0, 40).map(function (v) {
             var u = v.user_id && byId[v.user_id];
             return "<div><b>" + esc(stamp(Date.parse(v.at))) + "</b><span>" + (u ? esc(u.email) : v.user_id ? "a deleted account" : "not signed in") + "</span><span>" + esc(device(v.ua)) + "</span><span>" + esc(v.ref || "Direct") + "</span><span class=\"mut\">" + esc([v.lang, v.tz].filter(Boolean).join(" · ")) + "</span></div>";
           }).join("") + (o.rows.length > 40 ? '<div class="mut">… and ' + (o.rows.length - 40) + " earlier visits</div>" : "") + "</div></td></tr>";
           return out;
-        }).join("") || '<tr><td colspan="7" class="mut">' + (visits.length ? "Nobody matches." : "No visits recorded yet.") + "</td></tr>") +
+        }).join("") || '<tr><td colspan="8" class="mut">' + (visits.length ? "Nobody matches." : "No visits recorded yet.") + "</td></tr>") +
         "</tbody></table></div>" + (list.length > 300 ? '<p class="ahint">Showing the 300 most recent of ' + list.length + ".</p>" : "") + "</div>";
     }
 
