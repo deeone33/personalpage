@@ -925,6 +925,10 @@ body.noshadow #srchAns{box-shadow:none}
   .radio select{padding-top:2px;padding-bottom:2px}
 }
 
+/* ---- Less empty room above a box's title: the title row starts closer to the top edge (12px saved per box) ---- */
+#grid .card:not(.compact){padding-top:8px}
+#grid .card:not(.compact)>.th{min-height:24px}
+
 /* ---- Bookmarks bar: one slim row at the very top of the page (scrolls away with it) ---- */
 #bm{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;align-items:center}
 #bm[hidden]{display:none}

@@ -1,4 +1,4 @@
-var VERSION = 110;
+var VERSION = 111;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
