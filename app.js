@@ -1,4 +1,4 @@
-var VERSION = 92;
+var VERSION = 93;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2837,9 +2837,9 @@ function openHelp() {
     '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
   html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Twitch</b> &rarr; press <b>Connect</b>, log in if asked, and approve access. The box then shows who you follow that is live, with game and viewers; sort it or pick one category with the dropdowns. Hover a channel for a preview picture, the stream title and how long it has been live. Click a name to watch inside the page. Streamers you starred (Edit mode) who are offline are listed dimmed under the live ones with when they were last live; switch that off in Settings &rarr; Twitch.</p>' +
-    '<p><b>Ads even though you have Turbo or a sub?</b> The player inside this page is a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out and plays ads. Two fixes:</p><ol>' +
+    '<p><b>Chat says &ldquo;log in&rdquo;, or ads even though you have Turbo or a sub?</b> The player and chat inside this page are a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out: you cannot write in chat (the login window opens and closes again by itself) and you get ads. This is a browser setting, not a fault, and <b>Connect</b> in Settings does not change it. Two fixes:</p><ol>' +
     '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Twitch &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
-    '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only.<ul>' +
+    '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only. Quickest in Chrome and Edge: click the icon at the left end of the address bar while on this page and allow third-party cookies for this site. Or through the settings:<ul>' +
     '<li>Chrome: Settings &rarr; Privacy and security &rarr; Third-party cookies &rarr; <i>Sites allowed to use third-party cookies</i> &rarr; Add &rarr; <code>[*.]twitch.tv</code>.</li>' +
     '<li>Edge: Settings &rarr; Cookies and site permissions &rarr; Manage and delete cookies &rarr; <i>Allow</i> &rarr; Add <code>[*.]twitch.tv</code> (and set Tracking prevention to Balanced, not Strict).</li>' +
     '<li>Firefox: Settings &rarr; Privacy &amp; Security &rarr; Cookies and Site Data &rarr; Manage Exceptions &rarr; add <code>https://www.twitch.tv</code> and <code>https://player.twitch.tv</code> as <i>Allow</i>.</li>' +
@@ -4196,7 +4196,7 @@ function wizPage(id) {
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
     (twToken() ? '<p><span class="pill ac">✓ Twitch is connected</span></p>' : '<p><button class="pri" data-a="wiztw">Connect Twitch</button></p>') +
     '<div class="safe"><b>Is this safe?</b> Yes. You log in on Twitch\'s own page, so this site never sees your Twitch password. The only permission asked for is to read the list of channels you follow. You can take it back at any time on twitch.tv under Settings → Connections, or here in Settings → Twitch → Disconnect.</div>' +
-    '<p class="mut sn">Tip: with Twitch Turbo or a sub, use <b>Pop out</b> on a stream to watch without ads.</p>';
+    '<p class="mut sn">Good to know: if the chat inside this page asks you to log in, or you get ads despite Turbo or a sub, your browser is hiding your Twitch login from the player. Use <b>Pop out</b> on the stream, or see <b>Help &rarr; Twitch</b> for the one-time browser setting that fixes it.</p>';
   if (id === "youtube") {
     var nch = P.yt && P.yt.ch ? P.yt.ch.length : 0;
     return "<p>YouTube does not let a website read your subscriptions directly, so you hand the page a small file with the list. It takes about five minutes, once. The file only contains the names of the channels you subscribe to; no password, no watch history.</p><ol>" +
