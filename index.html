@@ -165,9 +165,13 @@
 
   <section class="setgrp" data-cat="Content" data-sec="Stocks">
     <div class="sub">
-      <form id="addStock" class="add"><input id="stockIn" placeholder="Add symbol, e.g. NASDAQ:NVDA" aria-label="Stock symbol"><button>Add</button></form>
-      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Import: paste your TradingView export, e.g. NASDAQ:NVDA,NASDAQ:AAPL" aria-label="Import watchlist"></textarea><button>Import</button></form>
-      <form id="linkStock" class="add"><input id="linkIn" placeholder="Or paste a shared TradingView watchlist link" aria-label="TradingView watchlist link"><button>Import</button></form>
+      <form id="addStock" class="add"><input id="stockIn" placeholder="Company name or symbol, e.g. Tesla or NVDA" aria-label="Company name or stock symbol" autocomplete="off"><button>Add</button></form>
+      <div id="stockRes"></div>
+      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Paste a list of symbols, e.g. NVDA, AAPL, BTCUSD (or a TradingView export)" aria-label="Import a list of symbols"></textarea><button>Import</button></form>
+      <form id="linkStock" class="add"><input id="linkIn" placeholder="Link to a Google Sheet or a shared TradingView watchlist" aria-label="Google Sheet or TradingView watchlist link"><button>Import</button></form>
+      <div class="add stfile"><label class="filebtn" for="stFile">Import a file</label><input type="file" id="stFile" accept=".csv,.txt,.tsv,text/csv,text/plain" class="vis-hidden"><span class="mut sn">A CSV export from your broker or portfolio site. Needs a Symbol, Ticker or ISIN column.</span></div>
+      <div id="stMsg" class="sn" role="status"></div>
+      <div id="stImp"></div>
     </div>
     <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
   </section>

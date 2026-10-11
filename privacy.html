@@ -51,6 +51,7 @@
   </table>
   <p>Reloading within 30 minutes does not add a new line. These lines are deleted after 90 days.</p>
   <p>Without an account, everything you set up stays in your own browser (its local storage) and is not sent to OmniTree.</p>
+  <p><b>Your starting city.</b> Until you choose a city, the weather and the clock use the main city of the time zone your device is set to (for example Stockholm for Swedish time). This is worked out in your own browser from its time zone setting. Your position is not requested, no permission is asked for, and your IP address is not used to locate you. To get the forecast, the name of that city is then sent to the weather service, exactly as when you pick a city yourself.</p>
 
   <h2 id="account">When you create an account</h2>
   <ul>
@@ -87,6 +88,9 @@
     <li><b>Twitch:</b> you log in on Twitch's own page. OmniTree receives an access code that only allows reading the list of channels you follow. It never sees your Twitch password. You can remove the access in Settings → Twitch or on twitch.tv.</li>
     <li><b>Gmail:</b> you install a small script in your own Google account. OmniTree stores the script's address and its secret code, and asks it for your unread count and the sender, subject and first line of the latest unread emails. These pass through OmniTree's server on the way to your browser and are not stored there. The script cannot delete or move mail. You can stop it at any time by deleting the script in your Google account.</li>
     <li><b>News, Reddit, Telegram, YouTube, some sports and esports:</b> OmniTree's server fetches these public sources for you. The list of sources you asked for is sent to the server for that purpose; the answers are kept for a few minutes to avoid fetching the same thing twice, not linked to you.</li>
+    <li><b>Stocks:</b> OmniTree's server fetches prices, charts and news for the symbols on your list from public market-data services. When you search for a company, the name you typed is sent the same way, and so are ISIN codes that need to be turned into symbols. These requests are made by the server, not linked to you, and the answers are kept briefly to avoid asking twice.</li>
+    <li><b>Importing stocks from a file:</b> the file is read in your own browser and is not uploaded. Only the symbols (or ISIN codes) you choose to add are kept; amounts, prices and account numbers in the file are ignored.</li>
+    <li><b>Importing stocks from a Google Sheet:</b> the link you paste is sent to OmniTree's server, which reads the sheet once from Google and passes it to your browser, where it is handled like a file. Neither the link nor the sheet is stored. It only works for sheets you have shared with “Anyone with the link”.</li>
     <li><b>Email notifications:</b> if you switch them on, they are sent by your own Gmail script to your own address.</li>
   </ul>
 

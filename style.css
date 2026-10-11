@@ -142,6 +142,7 @@ body.editing .card{border-style:dashed;border-color:color-mix(in srgb,var(--ac) 
 .tools{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
 .tools button{padding:2px 8px;font-size:11px;min-width:24px;text-align:center}
 .tools button.on{border-color:var(--ac);color:var(--ac)}
+.tools .ap{display:none}
 .mbox .tools button,.mbox p.tools button{font-size:13px;padding:6px 12px}
 p.tools{align-items:center;gap:6px}
 
@@ -307,6 +308,22 @@ button.pill{cursor:pointer;line-height:1.5}
 .setgrp .add input{flex:1 1 90px}
 .add{display:flex;gap:6px;margin-top:8px}
 .add input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 10px}
+.stfile{align-items:center;flex-wrap:wrap}
+.stfile .filebtn{flex:none}
+.stfile input.vis-hidden{flex:none!important;width:1px!important;min-width:0!important;padding:0!important;border:0!important}
+.stfile .sn{flex:1 1 180px;min-width:0}
+#stockRes .row,#wzRes .row{padding:4px 0;gap:8px}
+#stockRes .row>span:first-child,#wzRes .row>span:first-child{min-width:0;overflow-wrap:anywhere}
+#stockRes .row button,#wzRes .row button{flex:none;padding:2px 10px;font-size:12px}
+#stMsg:empty{display:none}
+#stMsg{margin-top:6px}
+.stimp{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.stimpl{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 10px;max-height:220px;overflow:auto;margin:6px 0}
+.stimpl label{display:flex;align-items:center;gap:6px;font-size:13px;min-width:0;justify-content:flex-start}
+.stimpl small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.stimp .tools{margin:6px 0 0}
+.wizcity{font-size:18px;margin:4px 0}
+.wizcity small{font-size:12px;color:var(--mut)}
 .imp{align-items:flex-start}
 .imp textarea{flex:1;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:6px 10px}
 label.add{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
@@ -699,6 +716,10 @@ body.dockslim #dockGrip{display:none}
 .wizdots i{width:6px;height:6px;border-radius:50%;background:var(--line)}
 .wizdots i.on{background:var(--ac)}
 .wiznav button:disabled{opacity:.35;cursor:default}
+.mbox:has(.wiz){overflow-x:hidden}
+.wizgrid .wizbox{min-width:0}
+.wizmail input{min-width:0;max-width:100%;box-sizing:border-box}
+@media(max-width:350px){.wiznav{flex-wrap:wrap}.wizdots{flex-basis:100%;order:-1}.wizgrid{grid-template-columns:1fr}}
 /* drawn pictures of the screens */
 .mock{margin:8px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);font-size:12.5px;max-width:420px}
 .mockbar{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--card);border-bottom:1px solid var(--line);color:var(--mut);font-size:11px}
@@ -743,6 +764,8 @@ button.danger:hover{background:var(--down);color:#fff}
   #logoImg{--lh:30px}
   #grid{grid-template-columns:1fr}
   #grid .card{grid-column:auto}
+  .tools .wbt,.tools .ad{display:none}
+  .tools .ap{display:inline}
   .pairwrap{grid-column:auto;flex-wrap:wrap}
   .pairwrap>.card,.pairwrap .paird{flex-basis:100% !important}
   .paird{display:none}

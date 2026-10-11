@@ -1,4 +1,4 @@
-var VERSION = 121;
+var VERSION = 122;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -603,10 +603,12 @@ function tile(id, title, body, click, hx) {
     at = ' data-a="' + pr[0] + '"' + (pr[1] != null ? ' data-k="' + pr[1] + '"' : "") + ' tabindex="0" role="button"';
   }
   if (EDIT) {
-    var bt = function (act, d, glyph, ttl) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '" title="' + ttl + '" aria-label="' + ttl + '">' + glyph + "</button>"; };
+    var bt = function (act, d, glyph, ttl, cls) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '" title="' + ttl + '" aria-label="' + ttl + '"' + (cls ? ' class="' + cls + '"' : "") + ">" + glyph + "</button>"; };
     var noW = id === "live" || id === "menu";
-    t = '<div class="tools">' + bt("mv", -1, "◀", "Move earlier") + bt("mv", 1, "▶", "Move later") +
-      (noW ? "" : bt("w", -1, "W−", "Narrower") + bt("w", 1, "W+", "Wider")) +
+    // on a phone the boxes sit in one column: the arrows point up and down there, and the width buttons are left out (style.css)
+    var arw = function (a, b) { return '<span class="ad">' + a + '</span><span class="ap">' + b + "</span>"; };
+    t = '<div class="tools">' + bt("mv", -1, arw("◀", "▲"), "Move earlier") + bt("mv", 1, arw("▶", "▼"), "Move later") +
+      (noW ? "" : bt("w", -1, "W−", "Narrower", "wbt") + bt("w", 1, "W+", "Wider", "wbt")) +
       bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text") +
       (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : "") +
       (id === "menu" ? "" : '<button data-a="boxoff" data-k="' + id + '" title="Hide this whole box. Bring it back in Settings, Layout.">Hide</button>') + "</div>";
@@ -779,7 +781,7 @@ function render() {
     // the day chart takes its color from today's change (the number next to it); a week or month chart from its own direction
     var rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
     var spk = sparkOn() ? sparkSvg(pts, SPARKR === "d" && c != null && !PREVIEW ? up : rise) : "";
-    return row(x.key, ico(x.id, x.logo) + "<b>" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), spk + (c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>"), 1);
+    return row(x.key, ico(x.id, x.logo) + "<b" + (x.name ? ' title="' + esc(x.name) + '"' : "") + ">" + esc(x.id) + "</b>", (x.p != null ? x.p.toFixed(2) : x.name), spk + (c == null ? '<span class="mut" title="No free price data for this one. Click it for the chart.">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "▲ +" : "▼ ") + c.toFixed(1) + "%</span>"), 1);
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
   var pp = pairPct();
@@ -1104,14 +1106,192 @@ function sparkFake(id, c) {
   return out;
 }
 var SAMPLE_IDS = DATA.stocks.map(function (x) { return x.id; });
-function importSymbols(list) {
-  P.stocks = (P.stocks || []).filter(function (x) { return SAMPLE_IDS.indexOf(x.id) < 0 || list.indexOf(x.id) >= 0; });
+function importSymbols(list, names) {
+  // the sample stocks make way for your own, but only while the list is still nothing but samples
+  var onlySamples = (P.stocks || []).every(function (x) { return SAMPLE_IDS.indexOf(x.id) >= 0; });
+  P.stocks = (P.stocks || []).filter(function (x) { return !onlySamples || list.indexOf(x.id) >= 0; });
   list.forEach(function (v) {
-    if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
+    if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: (names && names[v]) || "", p: null, c: null });
     delete P.hidden["s:" + v];
   });
   persist(); render(); fetchQuotes(true);
 }
+function hasStock(id) { return (P.stocks || []).some(function (x) { return x.id === id; }); }
+function stMsg(t) { if ($("stMsg")) $("stMsg").textContent = t || ""; }
+
+// ---- Finding a stock by company name (Settings > Stocks and the setup guide): type a name, pick from the list ----
+var STFOUND = [], STFOR = "";
+function stFoundHtml() {
+  return STFOUND.map(function (f, i) {
+    return '<div class="row"><span><b>' + esc(f.s) + "</b> " + esc(f.n) + ' <small class="mut">' + esc([f.x, f.t].filter(Boolean).join(" · ")) + "</small></span>" +
+      (hasStock(f.s) ? '<span class="mut sn">✓ added</span>' : '<button data-a="stpick" data-k="' + i + '">Add</button>') + "</div>";
+  }).join("") + stRawRow();
+}
+// What was typed can itself be a symbol that the search does not list (SAAB_B, RHM, XAUUSDG...): it can always be added as it is
+function stRaw() { var v = STFOR.trim().toUpperCase(); return /^[A-Z0-9^][A-Z0-9._:=^!&-]{0,39}$/.test(v) ? v : ""; }
+function stRawRow() {
+  var v = stRaw();
+  if (!v || hasStock(v) || STFOUND.some(function (x) { return x.s === v; })) return "";
+  return '<div class="row"><span class="mut sn">Not in the list? Add <b>' + esc(v) + '</b> exactly as typed</span><button data-a="stpick" data-k="raw">Add</button></div>';
+}
+function stFind(inId) {
+  var el = $(inId), box = $(inId === "stockIn" ? "stockRes" : "wzRes"), q = el ? el.value.trim() : "";
+  if (!box) return;
+  STFOR = q; STFOUND = [];
+  // a list of symbols (commas), or a full name like NASDAQ:NVDA, is not a search
+  if (q.length < 2 || /[,;:]/.test(q) || !sb || !USER) { box.innerHTML = ""; return; }
+  sb.functions.invoke("quotes", { body: { find: q } }).then(function (r) {
+    if (STFOR !== q || !box.isConnected) return;
+    var f = r.data && Array.isArray(r.data.found) ? r.data.found : null;
+    if (!f) { box.innerHTML = ""; return; }   // an older "quotes" function does not know this request: then there is simply no list
+    STFOUND = f.filter(function (x) { return x && typeof x.s === "string" && /^[A-Z0-9._=^-]{1,24}$/.test(x.s); }).slice(0, 8)
+      .map(function (x) { return { s: x.s, n: String(x.n || "").slice(0, 80), x: String(x.x || "").slice(0, 30), t: String(x.t || "").slice(0, 12) }; });
+    box.dataset.f = inId;
+    box.innerHTML = STFOUND.length ? stFoundHtml() : '<p class="mut sn">No company found with that name.</p>' + stRawRow();
+  }).catch(function () {});
+}
+function stPick(i) {
+  var f = i === "raw" ? (stRaw() ? { s: stRaw(), n: "" } : null) : STFOUND[+i];
+  if (!f) return;
+  if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
+  if (!hasStock(f.s)) P.stocks.push({ id: f.s, name: f.n, p: null, c: null });
+  delete P.hidden["s:" + f.s];
+  persist(); render(); fetchQuotes(true);
+  if (WIZ && $("wzPage")) { WIZMSG = "Added " + f.s + (f.n ? " (" + f.n + ")" : "") + "."; wizRender(); return; }
+  if ($("stockRes")) $("stockRes").innerHTML = stFoundHtml();
+}
+
+// ---- Importing stocks from a file or a Google Sheet ----
+// Reads rows of text separated by commas, semicolons or tabs (whichever the file uses), with "quoted" cells.
+function csvRows(text) {
+  text = String(text).replace(/^﻿/, "").slice(0, 2000000);
+  var head = text.slice(0, 6000), d = [",", ";", "\t", "|"].map(function (c) { return [c, head.split(c).length]; }).sort(function (a, b) { return b[1] - a[1]; })[0][0];
+  var rows = [], row = [], cell = "", q = false, i, ch;
+  for (i = 0; i < text.length && rows.length < 20000; i++) {
+    ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"' && !cell) q = true;
+    else if (ch === d) { row.push(cell); cell = ""; }
+    else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (ch !== "\r") cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+var ST_SYM = /^(symbols?|tickers?|ticker symbol|tickersymbol|stock symbol|instrument symbol|underlying symbol|kortnamn|code)$/,
+  ST_ISIN = /^(isin([ -]?(code|kod|kode|koodi))?|security id)$/,
+  ST_NAME = /^(name|namn|navn|nimi|company|company name|security|security name|description|instrument|holding|stock|värdepapper|värdepapper\/beskrivning|verdipapir|værdipapir|arvopaperi)$/;
+function stOkSym(v) { return /^[A-Z0-9^][A-Z0-9._:=^!&-]{0,23}$/.test(v) && !/^[\d.,-]+$/.test(v); }
+function stOkIsin(v) { return /^[A-Z]{2}[A-Z0-9]{9}\d$/.test(v); }
+// Finds the Symbol / Ticker / ISIN column (wherever its heading row is; some exports have several tables in one file)
+// and returns one entry per instrument: { s: symbol, i: ISIN, n: name }. Returns null when the file has no such column.
+function stParse(text) {
+  var rows = csvRows(text), si = -1, ii = -1, ni = -1, head = false, out = [], seen = {};
+  rows.forEach(function (r) {
+    var c = r.map(function (x) { return String(x).trim(); }), low = c.map(function (x) { return x.toLowerCase(); });
+    var s2 = -1, i2 = -1;
+    low.forEach(function (x, n) { if (s2 < 0 && ST_SYM.test(x)) s2 = n; if (i2 < 0 && ST_ISIN.test(x)) i2 = n; });
+    if (s2 >= 0 || i2 >= 0) {
+      head = true; si = s2; ii = i2; ni = -1;
+      low.forEach(function (x, n) { if (ni < 0 && ST_NAME.test(x)) ni = n; });
+      return;
+    }
+    if (low[1] === "header") { si = ii = ni = -1; return; }   // the next table of a multi-table export, without such a column
+    if (!head || (si < 0 && ii < 0)) return;
+    var s = si >= 0 ? (c[si] || "").toUpperCase() : "", isin = ii >= 0 ? (c[ii] || "").toUpperCase() : "";
+    if (!stOkSym(s)) s = "";
+    if (!stOkIsin(isin)) isin = "";
+    if (!s && !isin) return;
+    var key = isin || s;
+    if (seen[key]) return;
+    seen[key] = 1;
+    out.push({ s: s, i: isin, n: ni >= 0 ? (c[ni] || "").slice(0, 80) : "" });
+  });
+  if (head) return out;
+  // no heading at all: accept the file only if it is nothing but symbols (a plain list, or a TradingView export)
+  var cells = [];
+  rows.forEach(function (r) { r.forEach(function (y) { String(y).replace(/###[^,;|]*/g, "").split(/[\s,;|]+/).forEach(function (x) { x = x.trim().toUpperCase(); if (x) cells.push(x); }); }); });
+  if (!cells.length || cells.length > 500 || !cells.every(stOkSym)) return null;
+  cells.forEach(function (x) { if (!seen[x]) { seen[x] = 1; out.push({ s: x, i: "", n: "" }); } });
+  return out;
+}
+var STIMP = null;
+function stImpDraw() {
+  var el = $("stImp");
+  if (!el) return;
+  if (!STIMP) { el.innerHTML = ""; return; }
+  el.innerHTML = '<div class="stimp"><b>Found ' + STIMP.ok.length + " in " + esc(STIMP.from) + "</b>" +
+    (STIMP.ok.length ? '<span class="mut sn"> Untick what you do not want.</span><div class="stimpl">' + STIMP.ok.map(function (x, i) {
+      return '<label><input type="checkbox" data-sti="' + i + '" checked> <b>' + esc(x.s) + "</b> <small class=\"mut\">" + esc(x.n) + "</small></label>";
+    }).join("") + "</div>" : "") +
+    (STIMP.miss.length ? '<p class="mut sn">Not found (' + STIMP.miss.length + "): " + esc(STIMP.miss.slice(0, 30).join(", ")) + (STIMP.miss.length > 30 ? "…" : "") + ". Add these by name in the search field above.</p>" : "") +
+    (STIMP.cut ? '<p class="mut sn">The file has more than 100; only the first 100 are listed.</p>' : "") +
+    '<div class="tools">' + (STIMP.ok.length ? '<button class="pri" data-a="stimpgo">Add to my stocks</button>' : "") + '<button data-a="stimpno">Cancel</button></div></div>';
+}
+function stImport(text, from) {
+  var items = stParse(text);
+  STIMP = null; stImpDraw();
+  if (!items) { stMsg("Could not find a column called Symbol, Ticker or ISIN in " + from + ". Check that the first row has the column names."); return; }
+  if (!items.length) { stMsg("No symbols found in " + from + "."); return; }
+  var cut = items.length > 100;
+  items = items.slice(0, 100);
+  // A US ISIN next to a symbol: the symbol is right as it is. Otherwise the ISIN says more exactly which listing is meant.
+  var need = items.filter(function (x) { return x.i && !(x.s && /^US/.test(x.i)); }).map(function (x) { return x.i; });
+  var finish = function (map) {
+    var ok = [], miss = [], seen = {};
+    items.forEach(function (x) {
+      var hit = x.i && map[x.i], s = hit && typeof hit.s === "string" && stOkSym(hit.s) ? hit.s : x.s;
+      if (!s) { miss.push(x.n || x.i); return; }
+      if (seen[s]) return;
+      seen[s] = 1;
+      ok.push({ s: s, n: x.n || (hit && String(hit.n || "").slice(0, 80)) || "" });
+    });
+    STIMP = { ok: ok, miss: miss, from: from, cut: cut };
+    stMsg(""); stImpDraw();
+  };
+  if (!need.length) { finish({}); return; }
+  if (!sb || !USER) { stMsg("Sign in first (Settings, then Account)."); return; }
+  stMsg("Looking up " + need.length + " ISIN code" + (need.length === 1 ? "" : "s") + "…");
+  Promise.all([need.slice(0, 50), need.slice(50)].filter(function (a) { return a.length; }).map(function (a) {
+    return sb.functions.invoke("quotes", { body: { isins: a } }).then(function (r) { return (r.data && r.data.isin) || {}; }).catch(function () { return {}; });
+  })).then(function (parts) { finish(Object.assign.apply(null, [{}].concat(parts))); });
+}
+function stImpGo() {
+  if (!STIMP) return;
+  var list = [], names = {};
+  Array.prototype.forEach.call(document.querySelectorAll("#stImp [data-sti]"), function (b) {
+    var x = STIMP.ok[+b.dataset.sti];
+    if (b.checked && x) { list.push(x.s); names[x.s] = x.n; }
+  });
+  STIMP = null; stImpDraw();
+  if (!list.length) return;
+  importSymbols(list, names);
+  stMsg("Added " + list.length + " stock" + (list.length === 1 ? "" : "s") + ".");
+}
+// A file can be UTF-8, UTF-16 (some Nordic brokers) or an older Western encoding; an Excel file has to be saved as CSV first
+function stFileText(buf) {
+  var b = new Uint8Array(buf), dec = function (enc) { return new TextDecoder(enc).decode(b); };
+  if (b[0] === 0x50 && b[1] === 0x4B) return null;
+  if (b[0] === 0xFF && b[1] === 0xFE) return dec("utf-16le");
+  if (b[0] === 0xFE && b[1] === 0xFF) return dec("utf-16be");
+  if (b.length > 3 && b[1] === 0 && b[3] === 0) return dec("utf-16le");
+  var t = dec("utf-8");
+  return t.indexOf("�") >= 0 ? dec("windows-1252") : t;
+}
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "stFile" || !e.target.files[0]) return;
+  var f = e.target.files[0], fr = new FileReader();
+  e.target.value = "";
+  if (f.size > 5000000) { stMsg("That file is too large (5 MB at most)."); return; }
+  fr.onload = function () {
+    var t = null;
+    try { t = stFileText(fr.result); } catch (err) { t = ""; }
+    if (t === null) { stMsg("That is an Excel file. Open it, choose Save as and pick CSV, then import the CSV file."); return; }
+    stImport(t, "the file");
+  };
+  fr.onerror = function () { stMsg("Could not read that file."); };
+  fr.readAsArrayBuffer(f);
+});
 document.addEventListener("submit", function (e) {
   if (e.target.id === "impStock") {
     e.preventDefault();
@@ -1122,7 +1302,16 @@ document.addEventListener("submit", function (e) {
   if (e.target.id === "linkStock") {
     e.preventDefault();
     if (!sb || !USER) { alert("Sign in first (Settings, then Account)."); return; }
-    sb.functions.invoke("quotes", { body: { url: $("linkIn").value.trim() } }).then(function (r) {
+    var lk = $("linkIn").value.trim();
+    if (/^https:\/\/docs\.google\.com\/spreadsheets\//.test(lk)) {
+      stMsg("Reading the sheet…");
+      sb.functions.invoke("quotes", { body: { sheet: lk } }).then(function (r) {
+        if (r.data && typeof r.data.csv === "string") stImport(r.data.csv, "the sheet");
+        else stMsg((r.data && r.data._err) || "Could not read that sheet.");
+      }).catch(function () { stMsg("Could not read that sheet."); });
+      return;
+    }
+    sb.functions.invoke("quotes", { body: { url: lk } }).then(function (r) {
       if (r.error || !r.data || r.data._err || !r.data.symbols) { alert("Could not read that watchlist: " + ((r.data && r.data._err) || (r.error && r.error.message) || "no data")); return; }
       importSymbols(r.data.symbols.map(function (x) { return x.toUpperCase(); }));
     });
@@ -2802,12 +2991,40 @@ var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
 function wxText(c) { return WC[c] || "Unknown"; }
 var WXM = null, CITYRES = [];
-function homeCity() { return P.home || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
-var LOCNAME = "Tallinn", TZ = "Europe/Tallinn";
-function clockCity() { return P.loc || { name: "Tallinn", lat: 59.437, lon: 24.7536 }; }
+// Until you choose a city yourself, the page guesses one from the time zone your device is set to (for example
+// Europe/Stockholm gives Stockholm). The browser hands that over without asking, and no position or IP lookup is involved.
+var BTZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
+var TZ_NAMES = { Kiev: "Kyiv", Calcutta: "Kolkata", Saigon: "Ho Chi Minh City", Rangoon: "Yangon", Katmandu: "Kathmandu", Godthab: "Nuuk", Faeroe: "Torshavn" };
+function tzCityName() {
+  if (!/^(Europe|America|Asia|Africa|Australia|Pacific|Atlantic|Indian)\/./.test(BTZ)) return "";
+  var n = BTZ.split("/").pop().replace(/_/g, " ");
+  return TZ_NAMES[n] || n;
+}
+var FALLCITY = { name: "Tallinn", lat: 59.437, lon: 24.7536 };
+var AUTOCITY = (function () { var c = load("sp_tzcity", null); return c && c.tz === BTZ && c.name && isFinite(c.lat) && isFinite(c.lon) ? c : null; })();
+// AUTOWAIT: the guessed city's position is still being looked up (first visit only), so the weather waits a moment for it
+var AUTOWAIT = !AUTOCITY && !!tzCityName();
+function guessCity() { return AUTOCITY || (AUTOWAIT ? { name: tzCityName(), lat: FALLCITY.lat, lon: FALLCITY.lon } : FALLCITY); }
+function findAutoCity() {
+  if (!AUTOWAIT) return;
+  var done = function () { AUTOWAIT = false; if (!P.home) fetchWeather(); if (!P.loc) fetchClockTz(); render(); if (WIZ && $("wzPage") && $("wzPage").dataset.p === "city") wizRender(); };
+  fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(tzCityName()) + "&count=10&language=en&format=json").then(function (r) { return r.json(); }).then(function (j) {
+    var all = (j && j.results) || [], x = all.filter(function (y) { return y.timezone === BTZ; })[0] || all[0];
+    if (x && isFinite(x.latitude) && isFinite(x.longitude)) {
+      AUTOCITY = { tz: BTZ, name: String(x.name).slice(0, 60), lat: x.latitude, lon: x.longitude };
+      save("sp_tzcity", AUTOCITY);
+    }
+    done();
+  }).catch(done);
+}
+function homeCity() { return P.home || guessCity(); }
+var LOCNAME = tzCityName() || "Tallinn", TZ = tzCityName() ? BTZ : "Europe/Tallinn";
+function clockCity() { return P.loc || guessCity(); }
 function fetchClockTz() {
   var c = clockCity();
   LOCNAME = c.name;
+  // no city chosen: the clock simply follows the device, and the name is the guessed city
+  if (!P.loc && tzCityName()) { LOCNAME = (AUTOCITY && AUTOCITY.name) || tzCityName(); TZ = BTZ; tick(); return; }
   fetch("https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m&timezone=auto&forecast_days=1")
     .then(function (r) { return r.json(); })
     .then(function (j) { if (j && j.timezone) { TZ = j.timezone; tick(); } })
@@ -2815,7 +3032,7 @@ function fetchClockTz() {
 }
 var LOCRES = [];
 function openLocationPicker() {
-  openModal("Location", '<p class="mut">Sets the place shown next to the date and time, and the clock\'s timezone. The weather tile has its own location, set separately by clicking it.</p><div class="add"><input type="text" id="locIn" placeholder="Search a city, e.g. Stockholm"><button data-a="locgo">Search</button></div><div id="locRes"></div>');
+  openModal("Location", '<p class="mut">Sets the place shown next to the date and time, and the clock\'s timezone. The weather tile has its own location, set separately by clicking it.' + (P.loc ? "" : " Until you choose one, the place is a guess from the time zone of your device.") + '</p><div class="add"><input type="text" id="locIn" placeholder="Search a city, e.g. Stockholm"><button data-a="locgo">Search</button></div><div id="locRes"></div>');
 }
 function locGo() {
   var q = $("locIn").value.trim();
@@ -2839,6 +3056,7 @@ function wxUrl(c) {
 }
 function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
 function fetchWeather() {
+  if (!P.home && AUTOWAIT) return;
   loadWx(homeCity()).then(function (j) {
     if (j && j.current) { WX = j; render(); }
   }).catch(function () {});
@@ -2903,7 +3121,7 @@ function showCity(c, j) {
   }).catch(function () { if ($("cityBody")) $("cityBody").innerHTML = '<p class="mut">Could not load the weather.</p>'; });
 }
 function openWeather() {
-  openModal("Weather", '<div class="add"><input type="text" id="cityIn" placeholder="Search a city, e.g. Stockholm"><button data-a="citygo">Search</button></div><div id="cityRes"></div><div id="cityChips" class="tools"></div><div id="cityBody"></div>');
+  openModal("Weather", '<div class="add"><input type="text" id="cityIn" placeholder="Search a city, e.g. Stockholm"><button data-a="citygo">Search</button></div><div id="cityRes"></div>' + (P.home ? "" : '<p class="mut sn">' + esc(homeCity().name) + " is a guess from the time zone of your device. Not your city? Search for it above, open it, and press <b>Use for the tile</b>.</p>") + '<div id="cityChips" class="tools"></div><div id="cityBody"></div>');
   CITYRES = [];
   if (WX) showCity(homeCity(), WX); else showCity(homeCity());
 }
@@ -2923,11 +3141,14 @@ function debounced(id, fn) { clearTimeout(searchTimers[id]); searchTimers[id] = 
 document.addEventListener("input", function (e) {
   if (e.target.id === "cityIn" && e.target.value.trim().length >= 2) debounced("cityIn", cityGo);
   else if (e.target.id === "locIn" && e.target.value.trim().length >= 2) debounced("locIn", locGo);
+  else if (e.target.id === "wzCity" && e.target.value.trim().length >= 2) debounced("wzCity", wizCityGo);
+  else if (e.target.id === "stockIn" || (e.target.id === "wzIn" && $("wzPage") && $("wzPage").dataset.p === "stocks")) debounced("stFind", function () { stFind(e.target.id); });
 });
 document.addEventListener("keydown", function (e) {
   if (e.key === "Enter") {
     if (e.target.id === "cityIn") cityGo();
     else if (e.target.id === "locIn") locGo();
+    else if (e.target.id === "wzCity") wizCityGo();
     else if (e.target.id === "wzIn") { var wb = document.querySelector('[data-a="wizadd"]'); if (wb) wb.click(); }
     else if (/^acct(Email|Pass|Pass2)$/.test(e.target.id)) auth(AUTHTAB === "up" ? "signUp" : "signInWithPassword");
     return;
@@ -2947,28 +3168,36 @@ function cityAct(a, k) {
   else if (a === "citysave" && cur) { P.cities = P.cities || []; if (P.cities.length < 8) P.cities.push({ name: cur.name, lat: cur.lat, lon: cur.lon }); persist(); showCity(cur, WXM.j); }
   else if (a === "cityrm" && cur) { P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); }); persist(); showCity(homeCity(), WX); }
   else if (a === "cityhome" && cur) {
-    var oldHome = homeCity();
+    var oldHome = homeCity(), wasMine = !!P.home;   // a guessed city that turned out wrong is not kept in your list
     P.home = { name: cur.name, lat: cur.lat, lon: cur.lon };
     P.cities = (P.cities || []).filter(function (x) { return !sameCity(x, cur); });
-    if (!sameCity(oldHome, cur) && !P.cities.some(function (x) { return sameCity(x, oldHome); }) && P.cities.length < 8) P.cities.unshift({ name: oldHome.name, lat: oldHome.lat, lon: oldHome.lon });
+    if (wasMine && !sameCity(oldHome, cur) &&!P.cities.some(function (x) { return sameCity(x, oldHome); }) && P.cities.length < 8) P.cities.unshift({ name: oldHome.name, lat: oldHome.lat, lon: oldHome.lon });
     persist(); WX = null; render(); fetchWeather(); showCity(cur, WXM.j);
   }
 }
 
 // ---- Stocks: details window with TradingView chart, and adding symbols ----
+// A symbol picked from the search has the exchange as an ending (SAAB-B.ST); the chart wants it in front (OMXSTO:SAAB_B)
+var TV_EX = { ST: "OMXSTO", HE: "OMXHEX", CO: "OMXCOP", IC: "OMXICE", TL: "OMXTSE", RG: "OMXRSE", VS: "OMXVSE", OL: "OSL", DE: "XETR", F: "FWB", L: "LSE", PA: "EURONEXT", AS: "EURONEXT", BR: "EURONEXT", LS: "EURONEXT", IR: "EURONEXT", MI: "MIL", MC: "BME", SW: "SIX", VI: "VIE", WA: "GPW", TO: "TSX", V: "TSXV", AX: "ASX", HK: "HKEX", T: "TSE", KS: "KRX", NS: "NSE", BO: "BSE", SS: "SSE", SZ: "SZSE", SA: "BMFBOVESPA", MX: "BMV" };
+function tvSym(id) {
+  if (id.indexOf(":") >= 0) return id;
+  var m = /^([A-Z0-9-]+)\.([A-Z]{1,2})$/.exec(id), c = /^([A-Z0-9]{2,10})-USD$/.exec(id);
+  if (m && TV_EX[m[2]]) return TV_EX[m[2]] + ":" + (m[2] === "HK" ? m[1].replace(/^0+/, "") : m[1].replace(/-/g, "_"));
+  return c ? c[1] + "USD" : id.replace(/-/g, ".");
+}
 function openStock(id) {
   var s = tk(id), q = QUOTES[s], se = encodeURIComponent(s.replace(/_/g, "-"));
   var lk = function (u, l) { return '<a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + u + '">' + l + "</a>"; };
   openModal(id, (q ? '<div class="mrow sthead"><b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") + "</div>" : "") +
     '<div id="tv" class="tv"></div><div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
-    '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(id), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + "</p>");
+    '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + "</p>");
   loadStockNews(id);
   var box = document.createElement("div"); box.className = "tradingview-widget-container"; box.style.height = "100%";
   var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget"; inner.style.height = "100%";
   box.appendChild(inner);
   var sc = document.createElement("script"); sc.async = true;
   sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-  sc.text = JSON.stringify({ autosize: true, symbol: id, interval: "D", timezone: "Europe/Tallinn", theme: P.theme, style: "1", locale: "en", allow_symbol_change: false, hide_side_toolbar: true });
+  sc.text = JSON.stringify({ autosize: true, symbol: tvSym(id), interval: "D", timezone: "Europe/Tallinn", theme: P.theme, style: "1", locale: "en", allow_symbol_change: false, hide_side_toolbar: true });
   box.appendChild(sc);
   $("tv").appendChild(box);
 }
@@ -2978,9 +3207,24 @@ document.addEventListener("submit", function (e) {
   var v = $("stockIn").value.trim().toUpperCase();
   if (!v) return;
   if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
-  if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: "", p: null, c: null });
-  delete P.hidden["s:" + v];
-  persist(); render(); fetchQuotes(true);
+  // a name with spaces (or anything else that cannot be a symbol) is a search, not a symbol: point at the list instead
+  var okSym = /^[A-Z0-9^][A-Z0-9._:=^!&-]{0,39}$/.test(v), pick = "Pick the company from the list under the field, or type its exact symbol (like NVDA).";
+  var add = function (nm) {
+    if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: nm || "", p: null, c: null });
+    delete P.hidden["s:" + v];
+    $("stockIn").value = ""; STFOR = ""; if ($("stockRes")) $("stockRes").innerHTML = ""; stMsg("Added " + v + ".");
+    persist(); render(); fetchQuotes(true);
+  };
+  // A full name (NASDAQ:NVDA) or a currency pair (BTCUSD) is added as it is. Anything else is checked against the search first,
+  // so that typing "Tesla" and pressing Enter shows the list instead of adding a symbol called TESLA.
+  if (okSym && (v.indexOf(":") >= 0 || /^[A-Z0-9]{2,10}USDT?$/.test(v) || !sb || !USER)) { add(); return; }
+  if (!sb || !USER) { stMsg(pick); return; }
+  sb.functions.invoke("quotes", { body: { find: v } }).then(function (r) {
+    var f = r.data && Array.isArray(r.data.found) ? r.data.found : [], same = f.filter(function (x) { return x && x.s === v; })[0];
+    if (same || (okSym && !f.length)) { add(same && String(same.n || "").slice(0, 80)); return; }
+    stMsg(f.length ? pick : "No company or symbol found for that.");
+    if (f.length && $("stockIn").value.trim().toUpperCase() === v) stFind("stockIn");
+  }).catch(function () { if (okSym) add(); else stMsg(pick); });
 });
 
 document.addEventListener("pointerdown", function (e) {
@@ -3020,6 +3264,9 @@ document.addEventListener("click", function (e) {
   if (a === "opennotes") { openNotes(); return; }
   if (a === "acctmenu2") { e.stopPropagation(); if (!USER) { MENU_OPEN = ""; ACCTMSG = ""; render(); openAuth(); return; } MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
+  if (a === "stpick") { stPick(k); return; }
+  if (a === "stimpgo") { stImpGo(); return; }
+  if (a === "stimpno") { STIMP = null; stImpDraw(); stMsg(""); return; }
   if (/^wiz/.test(a)) { wizAct(a, k); return; }
   if (a === "signin") { auth("signInWithPassword"); return; }
   if (a === "signup") { auth("signUp"); return; }
@@ -3504,7 +3751,7 @@ function openHelp() {
 
   html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide walks you through the boxes you want; you can run it again from <b>Settings &rarr; Layout &amp; boxes</b>. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
 
-  html += '<h3 id="help-weather">Weather &amp; Location</h3><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
+  html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
   html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
     '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google\'s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it at any time, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
@@ -3531,16 +3778,18 @@ function openHelp() {
     '<p><b>Using it:</b> hover the mail tile for the latest unread subjects, click it for the list, and press <b>Mark read</b> to count only mail that arrives from now on.</p>' +
     '<p><b>Emails from this page</b> (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by this same script to its own address. If you set the script up a while ago, replace its code with the code above and deploy it again (<b>Deploy &rarr; Manage deployments &rarr; pencil &rarr; Version: New version &rarr; Deploy</b>); the address and the token stay the same.</p>';
 
-  html += '<h3 id="help-stocks">Stocks</h3><p>Open <b>Settings</b> &rarr; <b>Stocks</b>. There are three ways to add stocks or crypto:</p><ol>' +
-    '<li><b>Add one at a time:</b> type a symbol like <code>NASDAQ:NVDA</code> and press Add.</li>' +
-    '<li><b>Import a list:</b> paste a comma-separated list of symbols and press Import.</li>' +
+  html += '<h3 id="help-stocks">Stocks</h3><p>Open <b>Settings</b> &rarr; <b>Stocks</b>. There are five ways to add stocks, funds, indexes or crypto:</p><ol>' +
+    '<li><b>Search by name:</b> type a company name such as <code>Tesla</code> in the first field. A list appears under it with the symbol, the full name and the exchange; press <b>Add</b> on the right one. The same company is often listed on several exchanges, so pick the one you actually hold. If you know the symbol (<code>NVDA</code>, or <code>NASDAQ:NVDA</code>), type it and press Add.</li>' +
+    '<li><b>Paste a list:</b> paste a comma-separated list of symbols and press Import.</li>' +
+    '<li><b>Import a file:</b> press <b>Import a file</b> and choose the CSV file you exported from your broker or portfolio site. The page looks for a column called <b>Symbol</b>, <b>Ticker</b> or <b>ISIN</b>, wherever it is in the file, and shows what it found so you can untick what you do not want before anything is added. Files that only have ISIN codes (common with Nordic brokers) work too: the codes are looked up and turned into symbols, and any that could not be found are listed so you can add them by name. Only the symbols are taken; amounts, prices and account numbers in the file are not read into the page and the file is not uploaded anywhere. An Excel file has to be saved as CSV first (File &rarr; Save as &rarr; CSV).</li>' +
+    '<li><b>Import a Google Sheet:</b> in Google Sheets press <b>Share</b>, set it to <b>Anyone with the link</b> (Viewer), copy the link and paste it in the link field. The sheet needs the same kind of column as a file: Symbol, Ticker or ISIN, with the column names in the first row. To import another tab of the sheet, open that tab before you copy the link. This reads the sheet once; it does not keep following it.</li>' +
     '<li><b>Import your TradingView watchlist:</b><ol type="a">' +
     '<li>Go to <a href="https://www.tradingview.com" target="_blank" rel="noopener">tradingview.com</a> and open any chart while signed in.</li>' +
     '<li>Your watchlist is the panel on the right side of the screen.</li>' +
     '<li>Click the <b>•••</b> (three dots) at the top of that watchlist panel.</li>' +
     '<li>Choose <b>Advanced view</b> (or <b>Share</b>), then turn on link sharing if it is not already on.</li>' +
     '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
-    '<li>Paste that link into the "shared TradingView watchlist link" box on this site and press Import.</li>' +
+    '<li>Paste that link into the link field (the same one as for a Google Sheet) and press Import.</li>' +
     '</ol></li></ol>' +
     '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. Star or hide a stock in Edit mode.</p>' +
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
@@ -3600,7 +3849,7 @@ function openHelp() {
 
   html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
 
-  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish.</p>';
+  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish. On a phone the boxes sit in one column, so the arrows point up and down (▲ / ▼) and the width buttons are left out.</p>';
 
   html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
 
@@ -5194,7 +5443,20 @@ var WIZ_BOXES = [
   ["live", "Radio", "Internet radio: pick a station and press play."]
 ];
 var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "twitch", "youtube", "mail"];
-function wizPages() { return ["pick"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
+var WIZCITY = [];
+function wizCityGo() {
+  var q = $("wzCity") ? $("wzCity").value.trim() : "";
+  if (!q) return;
+  $("wzCityRes").innerHTML = '<p class="mut">Searching...</p>';
+  fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=6&language=en&format=json").then(function (r) { return r.json(); }).then(function (j) {
+    if (!$("wzCityRes")) return;
+    WIZCITY = (j.results || []).map(function (x) { return { name: x.name, lat: x.latitude, lon: x.longitude, label: [x.admin1, x.country].filter(Boolean).join(", ") }; });
+    $("wzCityRes").innerHTML = WIZCITY.length ? WIZCITY.map(function (c, i) {
+      return '<div class="row"><span>' + esc(c.name) + ' <small class="mut">' + esc(c.label) + '</small></span><button data-a="wizcity" data-k="' + i + '">Use</button></div>';
+    }).join("") : '<p class="mut">No city found.</p>';
+  }).catch(function () { if ($("wzCityRes")) $("wzCityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
+}
+function wizPages() { return ["pick", "city"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
 function openWizard(resume) {
   WIZMSG = "";
   if (resume && resume.sel) WIZ = { step: resume.step || 0, sel: resume.sel };
@@ -5211,13 +5473,22 @@ function wizPage(id) {
   if (id === "pick") return '<p>Choose what you want on your page. Nothing is final: you can switch boxes on and off later in <b>Settings → Layout &amp; boxes</b>.</p><div class="wizgrid">' + WIZ_BOXES.map(function (b) {
     return '<button class="wizbox' + (WIZ.sel[b[0]] ? " on" : "") + '" data-a="wizpick" data-k="' + b[0] + '" role="checkbox" aria-checked="' + !!WIZ.sel[b[0]] + '"><span class="chk' + (WIZ.sel[b[0]] ? " on" : "") + '"></span><span><b>' + b[1] + "</b><small>" + b[2] + "</small></span></button>";
   }).join("") + "</div>";
+  if (id === "city") {
+    var hc = homeCity(), lc = clockCity(), both = sameCity(hc, lc);
+    return "<p>The weather box and the date and time at the top of the page use your city.</p>" +
+      '<p class="wizcity"><b>' + esc(hc.name) + "</b>" + (both ? "" : " <small>weather</small> · <b>" + esc(lc.name) + "</b> <small>clock</small>") + "</p>" +
+      '<p class="mut sn">' + (P.home ? "This is the city you chose." : "This is a guess from the time zone your device is set to. No permission was asked for and your position was not looked up, so it can be the wrong city in the right country.") + "</p>" +
+      "<p>Is that right? Press <b>Next</b>. If not, search for your city and press <b>Use</b>:</p>" +
+      '<div class="add"><input type="text" id="wzCity" placeholder="Search a city, e.g. Stockholm" autocomplete="off"><button data-a="wizcitygo">Search</button></div><div id="wzCityRes"></div><div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + "</div>" +
+      '<p class="mut sn">You can change it later: click the weather box for the weather city, and Settings → Clock &amp; alarms for the clock.</p>';
+  }
   if (id === "news") return "<p>News starts with these sources. Add any news site by its address (for example <code>bbc.com</code>) or a feed address.</p>" + wizChips(newsSrc().map(function (x) { return x.name; })) + wizAddRow("news", "A website or feed, e.g. bbc.com") +
     '<p class="mut sn">Later, in Settings → News, Telegram &amp; Reddit, you can remove sources, mute words you do not want to see, and highlight words you care about.</p>';
   if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
     mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport");
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
-  if (id === "stocks") return "<p>Type the symbols you want to follow, separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. NVDA, AAPL, TSLA, BTCUSD, ETHUSD") +
-    '<p class="mut sn">Use TradingView? In Settings → Stocks you can paste a shared watchlist link and import the whole list at once.</p>';
+  if (id === "stocks") return "<p>Type a company name and pick it from the list, or type symbols separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. Tesla, or NVDA, AAPL, BTCUSD") + '<div id="wzRes"></div>' +
+    '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go.</p>';
   if (id === "twitch") return "<p>Connect your Twitch account so the box can show which of the channels you follow are live. The page only asks to <b>see who you follow</b>; it cannot chat, follow or change anything.</p>" +
     mock("id.twitch.tv", "<b>OmniTree wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
@@ -5253,11 +5524,11 @@ function wizPage(id) {
   return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its title; W / T / H change width, text size and list length.</li>" +
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
-    "<li><b>Weather:</b> click the weather box to pick your city.</li>" +
+    "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Type <code>help</code> in it to see everything.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio.</li><li><b>Help:</b> press <code>?</code>, or use the link at the bottom of the page, for the full guide.</li></ul>";
 }
-var WIZ_TITLES = { pick: "Welcome to OmniTree", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
+var WIZ_TITLES = { pick: "Welcome to OmniTree", city: "Your city", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
 function wizRender() {
   var pages = wizPages();
   WIZ.step = Math.max(0, Math.min(pages.length - 1, WIZ.step));
@@ -5280,7 +5551,21 @@ function wizAct(a, k) {
       WIZ_BOXES.forEach(function (b) { if (WIZ.sel[b[0]]) delete L.off[b[0]]; else L.off[b[0]] = 1; });
       persist(); render();
     }
+    // pressing Next on the city page confirms the guessed city, so it stays even if the device's time zone changes later
+    if (id === "city" && AUTOCITY && (!P.home || !P.loc)) {
+      if (!P.home) P.home = { name: AUTOCITY.name, lat: AUTOCITY.lat, lon: AUTOCITY.lon };
+      if (!P.loc) P.loc = { name: AUTOCITY.name, lat: AUTOCITY.lat, lon: AUTOCITY.lon };
+      persist();
+    }
     WIZ.step++; WIZMSG = "";
+  }
+  else if (a === "wizcitygo") { wizCityGo(); return; }
+  else if (a === "wizcity") {
+    var wc = WIZCITY[+k];
+    if (!wc) return;
+    P.home = { name: wc.name, lat: wc.lat, lon: wc.lon }; P.loc = { name: wc.name, lat: wc.lat, lon: wc.lon };
+    persist(); WX = null; render(); fetchWeather(); fetchClockTz();
+    WIZMSG = "Your city is now " + wc.name + ".";
   }
   else if (a === "wiznext" || a === "wizskip") { P.onboarded = true; persist(); WIZ = null; closeModal(); refreshAll(true); return; }
   else if (a === "wiztw") { try { sessionStorage.setItem("sp_wiz", JSON.stringify(WIZ)); } catch (e) {} twConnect(); return; }
@@ -5291,6 +5576,11 @@ function wizAct(a, k) {
     else if (k === "reddit") { ok = addRdSrc(v); if (ok) rdChanged(); }
     else if (k === "stocks") {
       var list = v.split(/[,\s;]+/).map(function (x) { return x.trim().toUpperCase(); }).filter(function (x) { return /^[A-Z0-9._:=^!&-]{1,24}$/.test(x); });
+      // a company name was typed and the list under the field has matches: pick there, instead of adding a symbol called TESLA
+      if (!/[,;:]/.test(v) && STFOR === v && STFOUND.length && !(list.length === 1 && STFOUND.some(function (x) { return x.s === list[0]; }))) {
+        if ($("wzMsg")) $("wzMsg").textContent = "Pick the company from the list below, or type its exact symbol (like NVDA).";
+        return;
+      }
       ok = list.length > 0;
       if (ok) { importSymbols(list); WIZMSG = "Added " + list.join(", ") + "."; } else WIZMSG = "Type one or more symbols, like NVDA, AAPL.";
     }
@@ -5873,7 +6163,7 @@ document.addEventListener("visibilitychange", function () {
 });
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); fetchRates();
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);
