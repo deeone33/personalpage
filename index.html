@@ -139,6 +139,27 @@
     <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>
   </section>
 
+  <section class="setgrp" data-cat="Content" data-sec="Calendar">
+    <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
+    <div class="sub">
+      <b>Mark these days</b>
+      <div id="sdGroups"></div>
+      <label>Mother's and Father's Day as in <select id="sdMf"></select></label>
+      <label>Payday on day of the month (empty = off) <input type="number" id="sdPay" min="1" max="31" step="1" placeholder="–"></label>
+      <div class="mut sn">A payday that falls on a weekend is shown on the Friday before.</div>
+    </div>
+    <div class="sub">
+      <b>Public holidays (days most people are off work)</b>
+      <div id="sdHol" class="chipwrap"></div>
+    </div>
+    <div class="sub">
+      <b>Remind me</b>
+      <label>When <select id="sdRemDays"><option value="0">On the day</option><option value="1">The day before</option><option value="3">3 days before</option><option value="7">A week before</option></select></label>
+      <div id="sdRem" class="chipwrap"></div>
+      <div class="mut sn">Tick the days you want a notification for. It appears from 08:00 while this page is open, and needs Calendar reminders switched on under Notifications. A day only reminds you if it is also marked above.</div>
+    </div>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Radio">
     <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak. The box has the list, play, stop and a volume button. The radio keeps playing while you use the rest of the page.</div>
     <div id="radList"></div>

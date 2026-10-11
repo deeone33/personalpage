@@ -829,6 +829,20 @@ body.noshadow #srchAns{box-shadow:none}
 .fpkh span{font-weight:600;line-height:1.25}
 .fpkh small{font-weight:400}
 
+/* ---- Special days in the calendar ---- */
+.calg.wk{grid-template-columns:1.5em repeat(7,1fr)}
+.calg .wkn{font-style:normal;font-size:9.5px;color:var(--mut);align-self:center;opacity:.8}
+.calg button.hol{color:var(--down);font-weight:700}
+.calg button.on.hol{color:var(--acfg);box-shadow:inset 0 -3px 0 var(--down)}
+.calg s{position:absolute;right:3px;top:3px;width:4px;height:4px;border-radius:50%;border:1px solid var(--mut);text-decoration:none}
+.calg .on s{border-color:var(--acfg)}
+.sdrow .ctm{display:inline-block;width:1.2em;text-align:center}
+.sdrow.sd-hol .ctm{color:var(--down)}
+.sdrow.sd-big .ctm,.sdrow.sd-small .ctm{color:var(--ac)}
+.setgrp input[type=number]{width:64px;font:inherit;font-size:14px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:5px 8px}
+.chipwrap{display:flex;flex-wrap:wrap;gap:4px 6px}
+.setgrp .chipwrap label.chip{display:inline-flex;justify-content:flex-start;gap:6px;font-size:12.5px;padding:2px 9px 2px 6px;border:1px solid var(--line);border-radius:99px;cursor:pointer}
+
 /* ---- Language choice (Settings > News) ---- */
 #langList{display:flex;flex-wrap:wrap;gap:4px 6px}
 .setgrp #langList label.chip{display:inline-flex;justify-content:flex-start;gap:6px;font-size:12.5px;padding:2px 9px 2px 6px;border:1px solid var(--line);border-radius:99px;cursor:pointer}

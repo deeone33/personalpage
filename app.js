@@ -1,4 +1,4 @@
-var VERSION = 77;
+var VERSION = 79;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2464,7 +2464,7 @@ document.addEventListener("click", function (e) {
   if (/^cl(play|reset|rm|stop)$/.test(a)) { clockAct(a, k); return; }
   if (/^note(add|del|tab|cleardone|done|donetoggle|pin)$/.test(a)) { noteAct(a, k); return; }
   if (a === "opencal") { CALV = null; openCal(); return; }
-  if (/^cal(day|nav|del|jump)$/.test(a)) { calAct(a, k); return; }
+  if (/^cal(day|nav|del|jump|rep)$/.test(a)) { calAct(a, k); return; }
   if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
@@ -2477,6 +2477,7 @@ document.addEventListener("click", function (e) {
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
   if (a === "setfind") { setFind(+k); return; }
+  if (a === "sdset") { sdSet(k, b.checked); return; }
   if (a === "langtoggle") { setLang(k, b.checked); return; }
   if (a === "bcreset") { delete P.bc; persist(); if (document.activeElement) document.activeElement.blur(); applyBoxCols(); return; }
   if (a === "pastesave") { pasteSave(k); return; }
@@ -2928,31 +2929,184 @@ function evOn(e, ds) {
   if (ds === e.d || e.rep === "d") return true;
   if (!e.rep) return false;
   var a = new Date(e.d + "T12:00:00"), b = new Date(ds + "T12:00:00");
-  return e.rep === "w" ? a.getDay() === b.getDay() : e.rep === "m" ? a.getDate() === b.getDate() : e.rep === "y" ? a.getDate() === b.getDate() && a.getMonth() === b.getMonth() : false;
+  return e.rep === "w" ? a.getDay() === b.getDay() : e.rep === "m" ? a.getDate() === b.getDate() : e.rep === "y" || e.rep === "b" ? a.getDate() === b.getDate() && a.getMonth() === b.getMonth() : false;   // b = a birthday: every year, like y
 }
 function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(spCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
-var CALV = null, REPS = { "": "Once", d: "Daily", w: "Weekly", m: "Monthly", y: "Yearly" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
+var CALV = null, REPS = { "": "Once", b: "Birthday (every year)", y: "Yearly", m: "Monthly", w: "Weekly", d: "Daily" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
 function openCal() {
   var draft = $("calT") ? $("calT").value : "";
   putWidget("cal");
   if ($("calT")) $("calT").value = draft;
 }
+// ---- Special days in the calendar (Settings > Calendar): big days, smaller days, public holidays per country, the
+// seasons and clock changes, full moons, payday. All worked out here from the rules for each day (nothing is fetched).
+// They mark the day in the calendar and show when you click it; they are not listed under "Coming up".
+function SD() { return P.sd && typeof P.sd === "object" ? P.sd : {}; }
+function sdDate(y, m, d) { return new Date(y, m, d); }                                   // m: 0 = January
+function easter(y) {                                                                    // Easter Sunday (Western churches)
+  var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30,
+    i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), da = (h + l - 7 * m + 114) % 31 + 1;
+  return sdDate(y, mo - 1, da);
+}
+function plus(d, n) { return sdDate(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function nthDow(y, m, dow, n) { var d = sdDate(y, m, 1); return sdDate(y, m, 1 + (dow - d.getDay() + 7) % 7 + (n - 1) * 7); }   // n-th Monday (dow 1) of a month
+function lastDow(y, m, dow) { var d = sdDate(y, m + 1, 0); return sdDate(y, m, d.getDate() - (d.getDay() - dow + 7) % 7); }
+function dowOnAfter(y, m, day, dow) { var d = sdDate(y, m, day); return plus(d, (dow - d.getDay() + 7) % 7); }                   // first Saturday (6) on or after 20 June
+// Mother's and Father's Day fall on different days in different countries
+var SD_MF = [["EE", "Estonia"], ["SE", "Sweden"], ["UK", "United Kingdom"], ["US", "United States"]];
+function sdMF() { var c = SD().mf; return SD_MF.some(function (x) { return x[0] === c; }) ? c : "EE"; }
+// [id, name, group, date for a year]
+var SD_DAYS = [
+  ["newyear", "New Year's Day", "big", function (y) { return sdDate(y, 0, 1); }],
+  ["goodfri", "Good Friday", "big", function (y) { return plus(easter(y), -2); }],
+  ["easter", "Easter Sunday", "big", function (y) { return easter(y); }],
+  ["midsummer", "Midsummer Eve", "big", function (y) { return sdMF() === "SE" ? plus(dowOnAfter(y, 5, 20, 6), -1) : sdDate(y, 5, 23); }],
+  ["xmaseve", "Christmas Eve", "big", function (y) { return sdDate(y, 11, 24); }],
+  ["xmas", "Christmas Day", "big", function (y) { return sdDate(y, 11, 25); }],
+  ["nye", "New Year's Eve", "big", function (y) { return sdDate(y, 11, 31); }],
+  ["valentine", "Valentine's Day", "small", function (y) { return sdDate(y, 1, 14); }],
+  ["shrove", "Shrove Tuesday", "small", function (y) { return plus(easter(y), -47); }],
+  ["women", "International Women's Day", "small", function (y) { return sdDate(y, 2, 8); }],
+  ["stpat", "St Patrick's Day", "small", function (y) { return sdDate(y, 2, 17); }],
+  ["aprilfool", "April Fools' Day", "small", function (y) { return sdDate(y, 3, 1); }],
+  ["walpurgis", "Walpurgis Night", "small", function (y) { return sdDate(y, 3, 30); }],
+  ["mother", "Mother's Day", "small", function (y) { var c = sdMF(); return c === "SE" ? lastDow(y, 4, 0) : c === "UK" ? plus(easter(y), -21) : nthDow(y, 4, 0, 2); }],
+  ["father", "Father's Day", "small", function (y) { var c = sdMF(); return c === "UK" || c === "US" ? nthDow(y, 5, 0, 3) : nthDow(y, 10, 0, 2); }],
+  ["halloween", "Halloween", "small", function (y) { return sdDate(y, 9, 31); }],
+  ["blackfri", "Black Friday", "small", function (y) { return plus(nthDow(y, 10, 4, 4), 1); }],
+  ["advent", "First Sunday of Advent", "small", function (y) { return dowOnAfter(y, 10, 27, 0); }],
+  ["lucia", "St Lucia's Day", "small", function (y) { return sdDate(y, 11, 13); }]
+];
+var SD_GROUPS = [["big", "Big days", "New Year, Easter, Midsummer, Christmas"], ["small", "Smaller days", "Valentine's, Mother's and Father's Day, Halloween and more"],
+  ["season", "Seasons and clock changes", "equinoxes, solstices, summer and winter time"], ["moon", "Full moons", "about one a month"]];
+// Public holidays: [country code, name, list for a year]. Fixed dates are [month, day, name]; the rest are worked out.
+function fx(y, list) { return list.map(function (x) { return [sdDate(y, x[0] - 1, x[1]), x[2]]; }); }
+function eas(y, list) { var e = easter(y); return list.map(function (x) { return [plus(e, x[0]), x[1]]; }); }
+var XMAS3 = [[12, 24, "Christmas Eve"], [12, 25, "Christmas Day"], [12, 26, "Boxing Day"]], XMAS2 = XMAS3.slice(1), NY = [1, 1, "New Year's Day"], MAY1 = [5, 1, "May Day"];
+var GF = [-2, "Good Friday"], ES = [0, "Easter Sunday"], EM = [1, "Easter Monday"], ASC = [39, "Ascension Day"], WS = [49, "Whit Sunday"], WM = [50, "Whit Monday"], MT = [-3, "Maundy Thursday"];
+// a holiday on a Saturday or Sunday that is moved to a weekday (US: Friday / Monday; UK: the next free weekday)
+function usObs(d, n) { var w = d.getDay(); return [w === 6 ? plus(d, -1) : w === 0 ? plus(d, 1) : d, n + (w === 6 || w === 0 ? " (observed)" : "")]; }
+var SD_HOL = [
+  ["EE", "Estonia", function (y) { return fx(y, [NY, [2, 24, "Independence Day"], MAY1, [6, 23, "Victory Day"], [6, 24, "Midsummer Day"], [8, 20, "Day of Restoration of Independence"]].concat(XMAS3)).concat(eas(y, [GF, ES, WS])); }],
+  ["SE", "Sweden", function (y) { var ms = dowOnAfter(y, 5, 20, 6); return fx(y, [NY, [1, 6, "Epiphany"], MAY1, [6, 6, "National Day"], [12, 31, "New Year's Eve"]].concat(XMAS3)).concat(eas(y, [GF, ES, EM, ASC, WS]), [[plus(ms, -1), "Midsummer Eve"], [ms, "Midsummer Day"], [dowOnAfter(y, 9, 31, 6), "All Saints' Day"]]); }],
+  ["FI", "Finland", function (y) { var ms = dowOnAfter(y, 5, 20, 6); return fx(y, [NY, [1, 6, "Epiphany"], MAY1, [12, 6, "Independence Day"]].concat(XMAS3)).concat(eas(y, [GF, ES, EM, ASC, WS]), [[plus(ms, -1), "Midsummer Eve"], [ms, "Midsummer Day"], [dowOnAfter(y, 9, 31, 6), "All Saints' Day"]]); }],
+  ["NO", "Norway", function (y) { return fx(y, [NY, MAY1, [5, 17, "Constitution Day"]].concat(XMAS2)).concat(eas(y, [MT, GF, ES, EM, ASC, WS, WM])); }],
+  ["DK", "Denmark", function (y) { return fx(y, [NY].concat(XMAS2)).concat(eas(y, [MT, GF, ES, EM, ASC, WS, WM])); }],
+  ["LV", "Latvia", function (y) { return fx(y, [NY, MAY1, [5, 4, "Restoration of Independence"], [6, 23, "Midsummer Eve (Līgo)"], [6, 24, "Midsummer Day (Jāņi)"], [11, 18, "Proclamation Day"], [12, 31, "New Year's Eve"]].concat(XMAS3)).concat(eas(y, [GF, ES, EM])); }],
+  ["LT", "Lithuania", function (y) { return fx(y, [NY, [2, 16, "State Restoration Day"], [3, 11, "Independence Restoration Day"], MAY1, [6, 24, "St John's Day"], [7, 6, "Statehood Day"], [8, 15, "Assumption Day"], [11, 1, "All Saints' Day"], [11, 2, "All Souls' Day"]].concat(XMAS3)).concat(eas(y, [ES, EM]), [[nthDow(y, 4, 0, 1), "Mother's Day"], [nthDow(y, 5, 0, 1), "Father's Day"]]); }],
+  ["PL", "Poland", function (y) { return fx(y, [NY, [1, 6, "Epiphany"], MAY1, [5, 3, "Constitution Day"], [8, 15, "Assumption Day"], [11, 1, "All Saints' Day"], [11, 11, "Independence Day"]].concat(XMAS3)).concat(eas(y, [ES, EM, WS, [60, "Corpus Christi"]])); }],
+  ["DE", "Germany", function (y) { return fx(y, [NY, MAY1, [10, 3, "German Unity Day"]].concat(XMAS2)).concat(eas(y, [GF, EM, ASC, WM])); }],
+  ["NL", "Netherlands", function (y) { var k = sdDate(y, 3, 27); return fx(y, [NY].concat(XMAS2)).concat(eas(y, [ES, EM, ASC, WS, WM]), [[k.getDay() === 0 ? plus(k, -1) : k, "King's Day"]]); }],
+  ["FR", "France", function (y) { return fx(y, [NY, MAY1, [5, 8, "Victory in Europe Day"], [7, 14, "Bastille Day"], [8, 15, "Assumption Day"], [11, 1, "All Saints' Day"], [11, 11, "Armistice Day"], [12, 25, "Christmas Day"]]).concat(eas(y, [EM, ASC, WM])); }],
+  ["ES", "Spain", function (y) { return fx(y, [NY, [1, 6, "Epiphany"], MAY1, [8, 15, "Assumption Day"], [10, 12, "National Day"], [11, 1, "All Saints' Day"], [12, 6, "Constitution Day"], [12, 8, "Immaculate Conception"], [12, 25, "Christmas Day"]]).concat(eas(y, [GF])); }],
+  ["IT", "Italy", function (y) { return fx(y, [NY, [1, 6, "Epiphany"], [4, 25, "Liberation Day"], MAY1, [6, 2, "Republic Day"], [8, 15, "Ferragosto"], [11, 1, "All Saints' Day"], [12, 8, "Immaculate Conception"]].concat(XMAS2)).concat(eas(y, [ES, EM])); }],
+  ["UK", "United Kingdom (England)", function (y) {
+    var ny = sdDate(y, 0, 1), x = sdDate(y, 11, 25).getDay();   // the weekday of Christmas Day decides where the two days off land
+    return eas(y, [GF, EM]).concat([[ny.getDay() === 6 ? plus(ny, 2) : ny.getDay() === 0 ? plus(ny, 1) : ny, "New Year's Day" + (ny.getDay() % 6 ? "" : " (substitute)")],
+      [nthDow(y, 4, 1, 1), "Early May bank holiday"], [lastDow(y, 4, 1), "Spring bank holiday"], [lastDow(y, 7, 1), "Summer bank holiday"],
+      [sdDate(y, 11, x === 6 ? 27 : x === 0 ? 27 : 25), "Christmas Day" + (x === 6 || x === 0 ? " (substitute)" : "")], [sdDate(y, 11, x === 5 ? 28 : x === 6 ? 28 : 26), "Boxing Day" + (x === 5 || x === 6 ? " (substitute)" : "")]]);
+  }],
+  ["US", "United States", function (y) {
+    return [usObs(sdDate(y, 0, 1), "New Year's Day"), [nthDow(y, 0, 1, 3), "Martin Luther King Jr. Day"], [nthDow(y, 1, 1, 3), "Presidents' Day"], [lastDow(y, 4, 1), "Memorial Day"], usObs(sdDate(y, 5, 19), "Juneteenth"),
+      usObs(sdDate(y, 6, 4), "Independence Day"), [nthDow(y, 8, 1, 1), "Labor Day"], [nthDow(y, 9, 1, 2), "Columbus Day"], usObs(sdDate(y, 10, 11), "Veterans Day"), [nthDow(y, 10, 4, 4), "Thanksgiving"], usObs(sdDate(y, 11, 25), "Christmas Day")];
+  }]
+];
+function sdHolOn() { var h = SD().hol; return Array.isArray(h) ? h.filter(function (c) { return SD_HOL.some(function (x) { return x[0] === c; }); }) : []; }
+// every marked day of one year, as { "2026-12-24": [{ id, n: name, g: group, c: country }] }
+function sdYear(y) {
+  var s = SD(), map = {}, add = function (d, o) { if (!d || isNaN(d)) return; var ds = ymd(d); (map[ds] = map[ds] || []).push(o); };
+  SD_DAYS.forEach(function (x) { if (s[x[2]]) add(x[3](y), { id: x[0], n: x[1], g: x[2] }); });
+  sdHolOn().forEach(function (cc) { var c = SD_HOL.filter(function (x) { return x[0] === cc; })[0]; c[2](y).forEach(function (h) {
+    // the same holiday in two of your countries is one line naming both
+    var same = (map[ymd(h[0])] || []).filter(function (x) { return x.g === "hol" && x.n === h[1]; })[0];
+    if (same) same.c += ", " + c[1]; else add(h[0], { id: "hol", n: h[1], g: "hol", c: c[1] });
+  }); });
+  if (s.season) {
+    // the equinoxes and solstices move by a day between years; these are the usual dates
+    [[2, 20, "Spring equinox"], [5, 21, "Summer solstice (longest day)"], [8, 22, "Autumn equinox"], [11, 21, "Winter solstice (shortest day)"]].forEach(function (x) { add(sdDate(y, x[0], x[1]), { id: "season", n: x[2], g: "season" }); });
+    add(lastDow(y, 2, 0), { id: "season", n: "Clocks go forward one hour (summer time)", g: "season" });
+    add(lastDow(y, 9, 0), { id: "season", n: "Clocks go back one hour (winter time)", g: "season" });
+  }
+  if (s.moon) {
+    // one full moon every 29.53 days, counted from a known one (21 January 2000, 04:40 UTC); right to within a few hours
+    var syn = 29.530588853 * 86400000, t = Date.UTC(2000, 0, 21, 4, 40), from = Date.UTC(y, 0, 1), to = Date.UTC(y + 1, 0, 1);
+    for (t += Math.ceil((from - t) / syn) * syn; t < to; t += syn) add(new Date(t), { id: "moon", n: "Full moon", g: "moon" });
+  }
+  if (+s.pay >= 1 && +s.pay <= 31) {
+    for (var m = 0; m < 12; m++) { var d = sdDate(y, m, Math.min(+s.pay, sdDate(y, m + 1, 0).getDate())); if (d.getDay() === 6) d = plus(d, -1); else if (d.getDay() === 0) d = plus(d, -2); add(d, { id: "pay", n: "Payday", g: "pay" }); }
+  }
+  return map;
+}
+var SDY = {};   // a year's map is rebuilt only when the settings change; two years (around New Year) are kept
+function specialsOn(ds) {
+  var y = +ds.slice(0, 4), key = JSON.stringify(SD());
+  if (!SDY[y] || SDY[y].key !== key) {
+    SDY[y] = { key: key, map: sdYear(y) };
+    // a New Year's Day that is observed on 31 December belongs to the next year's list: bring it over
+    var next = sdYear(y + 1), last = y + "-12-31";
+    if (next[last]) SDY[y].map[last] = (SDY[y].map[last] || []).concat(next[last]);
+  }
+  return SDY[y].map[ds] || [];
+}
+var SD_GLYPH = { big: "★", small: "♥", hol: "●", season: "☼", moon: "○", pay: "€" };
+function sdRow(x) { return '<div class="row sdrow sd-' + x.g + '"><span><b class="ctm">' + SD_GLYPH[x.g] + "</b> " + esc(x.n) + (x.g === "hol" ? " <small>public holiday · " + esc(x.c) + "</small>" : "") + "</span></div>"; }
+// Reminders for the days you ticked in Settings > Calendar: on the day or a chosen number of days before, from 08:00
+function sdCheck() {
+  var s = SD(), rem = s.rem && typeof s.rem === "object" ? s.rem : {}, off = [0, 1, 3, 7].indexOf(+s.remDays) >= 0 ? +s.remDays : 1, now = new Date();
+  if (NTF().cal === false || now.getHours() < 8 || !Object.keys(rem).some(function (k) { return rem[k]; })) return;
+  var target = plus(sdDate(now.getFullYear(), now.getMonth(), now.getDate()), off), ds = ymd(target);
+  specialsOn(ds).forEach(function (x) {
+    if (!rem[x.id] || !once("sd:" + x.id + ":" + x.n + ":" + ds)) return;
+    toast("cal", x.n + (off === 0 ? " is today" : off === 1 ? " is tomorrow" : " is in " + off + " days"), dayLabel(ds) + (x.g === "hol" ? " · public holiday in " + x.c : ""), { a: "cal", k: ds }, true);
+  });
+}
+setInterval(sdCheck, 60000);
+// Settings > Calendar
+function renderSdForm() {
+  var s = SD(), hol = sdHolOn(), rem = s.rem || {};
+  $("sdGroups").innerHTML = SD_GROUPS.map(function (g) { return "<label><span>" + g[1] + ' <small class="rlang">' + g[2] + '</small></span> <input type="checkbox" data-a="sdset" data-k="g:' + g[0] + '"' + (s[g[0]] ? " checked" : "") + "></label>"; }).join("") +
+    "<label>Week numbers in the calendar <input type=\"checkbox\" data-a=\"sdset\" data-k=\"g:weeks\"" + (s.weeks ? " checked" : "") + "></label>";
+  $("sdHol").innerHTML = SD_HOL.map(function (c) { return '<label class="chip"><input type="checkbox" data-a="sdset" data-k="h:' + c[0] + '"' + (hol.indexOf(c[0]) >= 0 ? " checked" : "") + "> " + esc(c[1]) + "</label>"; }).join("");
+  $("sdMf").innerHTML = SD_MF.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === sdMF() ? " selected" : "") + ">" + c[1] + "</option>"; }).join("");
+  $("sdPay").value = +s.pay >= 1 && +s.pay <= 31 ? s.pay : "";
+  $("sdRemDays").value = String([0, 1, 3, 7].indexOf(+s.remDays) >= 0 ? +s.remDays : 1);
+  $("sdRem").innerHTML = SD_DAYS.map(function (d) { return [d[0], d[1]]; }).concat([["hol", "Public holidays"], ["pay", "Payday"], ["season", "Clock changes and seasons"], ["moon", "Full moons"]]).map(function (d) {
+    return '<label class="chip"><input type="checkbox" data-a="sdset" data-k="r:' + d[0] + '"' + (rem[d[0]] ? " checked" : "") + "> " + esc(d[1]) + "</label>";
+  }).join("");
+}
+function sdSet(k, on) {
+  var s = P.sd = Object.assign({}, SD()), p = k.split(":");
+  if (p[0] === "g") s[p[1]] = on;
+  else if (p[0] === "h") { var h = sdHolOn().filter(function (c) { return c !== p[1]; }); if (on) h.push(p[1]); s.hol = h; }
+  else if (p[0] === "r") { s.rem = Object.assign({}, s.rem || {}); if (on) s.rem[p[1]] = 1; else delete s.rem[p[1]]; if (on && NTF().desktop) askNotify(); }
+  persist(); render(); refreshSdCal();
+}
+function refreshSdCal() { if (sideOf("cal") || (!$("modal").hidden && $("mTitle").textContent === WIDGETS.cal.t)) openCal(); }
+
 function calHtml() {
   var now = new Date(), today = ymd(now);
   if (!CALV) CALV = { y: now.getFullYear(), m: now.getMonth(), sel: today };
   if (!SPCALWANT && spCalOn()) { SPCALWANT = true; setTimeout(fetchSports, 0); }
   var start = (new Date(CALV.y, CALV.m, 1).getDay() + 6) % 7, days = new Date(CALV.y, CALV.m + 1, 0).getDate(), cells = "";
+  // With week numbers on, every row starts with its week. A public holiday is a red date; any other marked day has a
+  // small ring under the number (your own events keep their dot).
+  var wk = !!SD().weeks, wkCell = function (day) { return wk ? '<em class="wkn">' + isoWeek(new Date(CALV.y, CALV.m, day)) + "</em>" : ""; };
+  cells += wk ? "<i></i>" : "";
   ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].forEach(function (d) { cells += "<i>" + d + "</i>"; });
+  cells += wkCell(1);
   for (var i = 0; i < start; i++) cells += "<span></span>";
   for (var d = 1; d <= days; d++) {
-    var ds = CALV.y + "-" + pad2(CALV.m + 1) + "-" + pad2(d);
-    cells += '<button data-a="calday" data-k="' + ds + '" class="' + (ds === today ? "td " : "") + (ds === CALV.sel ? "on" : "") + '">' + d + (evsOn(ds).length ? "<u></u>" : "") + "</button>";
+    var ds = CALV.y + "-" + pad2(CALV.m + 1) + "-" + pad2(d), sp = specialsOn(ds), hol = sp.some(function (x) { return x.g === "hol"; });
+    if (d > 1 && (start + d - 1) % 7 === 0) cells += wkCell(d);
+    cells += '<button data-a="calday" data-k="' + ds + '" class="' + (ds === today ? "td " : "") + (ds === CALV.sel ? "on " : "") + (hol ? "hol" : "") + '"' + (sp.length ? ' title="' + esc(sp.map(function (x) { return x.n; }).join(" · ")) + '"' : "") + ">" + d +
+      (evsOn(ds).length ? "<u></u>" : "") + (sp.some(function (x) { return x.g !== "hol"; }) ? "<s></s>" : "") + "</button>";
   }
   var evRow = function (e, ds, withDay) {
     return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + (e.sp ? '<button class="lnk calsp" data-a="open" data-k="' + esc("p:" + e.sp) + '" title="A favorite\'s game. Click for the details.">' + spIcon(e.spo) + esc(e.t) + "</button>" : esc(e.t)) +
-      (e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
-      "</span>" + (withDay || e.sp ? "" : '<button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button>') + "</div>";
+      // a birthday with the birth year in its name ("Anna 1990") also says which birthday it is
+      (e.rep === "b" ? " <small>🎂" + (function () { var by = /\b(19|20)\d\d\b/.exec(e.t), n = by ? +ds.slice(0, 4) - +by[0] : 0; return n > 0 && n < 130 ? " turns " + n : ""; })() + "</small>" : e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
+      "</span>" + (withDay || e.sp ? "" : '<span class="r"><button data-a="calrep" data-k="' + e.id + '" title="Repeat: ' + esc(REPS[e.rep || ""]) + '. Press to change (Once, Birthday, Yearly, Monthly, Weekly, Daily)." aria-label="Change how this event repeats">↻</button><button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button></span>') + "</div>";
   };
   var up = [];
   for (var k = 1; k <= 90 && up.length < 5; k++) {
@@ -2960,8 +3114,8 @@ function calHtml() {
     evsOn(uds).forEach(function (e) { if (up.length < 5) up.push(evRow(e, uds, true)); });
   }
   return '<div class="calwrap"><div><div class="calh"><button data-a="calnav" data-k="-1" aria-label="Previous month">◀</button><b>' +
-    new Date(CALV.y, CALV.m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + '</b><button data-a="calnav" data-k="1" aria-label="Next month">▶</button><button data-a="calnav" data-k="0">Today</button></div><div class="calg">' + cells + "</div></div>" +
-    '<div class="calr"><h3>' + (CALV.sel === today ? "Today · " : "") + dayLabel(CALV.sel) + "</h3>" + (evsOn(CALV.sel).map(function (e) { return evRow(e, CALV.sel); }).join("") || '<p class="mut sn">Nothing planned.</p>') +
+    new Date(CALV.y, CALV.m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + '</b><button data-a="calnav" data-k="1" aria-label="Next month">▶</button><button data-a="calnav" data-k="0">Today</button></div><div class="calg' + (wk ? " wk" : "") + '">' + cells + "</div></div>" +
+    '<div class="calr"><h3>' + (CALV.sel === today ? "Today · " : "") + dayLabel(CALV.sel) + "</h3>" + specialsOn(CALV.sel).map(sdRow).join("") + (evsOn(CALV.sel).map(function (e) { return evRow(e, CALV.sel); }).join("") || (specialsOn(CALV.sel).length ? "" : '<p class="mut sn">Nothing planned.</p>')) +
     '<form id="calAdd" class="cadd"><input type="text" id="calT" placeholder="Add an event…" maxlength="120"><input type="time" id="calTm" aria-label="Time (empty = all day)" title="Time (leave empty for all day)">' +
     '<select id="calRem" aria-label="Reminder">' + opts(REMS, "") + '</select><select id="calRep" aria-label="Repeat">' + opts(Object.keys(REPS).map(function (r) { return [r, REPS[r]]; }), "") + '</select><button class="pri">Add</button></form>' +
     (up.length ? "<h3>Coming up</h3>" + up.join("") : "") + "</div></div>";
@@ -2973,6 +3127,11 @@ function calAct(a, k) {
     else { var d = new Date(CALV.y, CALV.m + (+k), 1); CALV.y = d.getFullYear(); CALV.m = d.getMonth(); }
   }
   else if (a === "caldel") { P.cal = (P.cal || []).filter(function (e) { return e.id !== k; }); persist(); render(); }
+  else if (a === "calrep") {
+    // the ↻ button on an event: steps through Once, Birthday, Yearly, Monthly, Weekly, Daily
+    var ev = (P.cal || []).filter(function (e) { return e.id === k; })[0], order = Object.keys(REPS);
+    if (ev) { var nx = order[(order.indexOf(ev.rep || "") + 1) % order.length]; if (nx) ev.rep = nx; else delete ev.rep; persist(); render(); }
+  }
   openCal();
 }
 document.addEventListener("submit", function (e) {
@@ -4254,7 +4413,7 @@ function loadExtraForm() {
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   $("briefOn").checked = P.brief !== false;
-  renderLangs(); renderRadioList();
+  renderLangs(); renderRadioList(); renderSdForm();
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
@@ -4282,6 +4441,10 @@ $("cntNews").onchange = function () { P.cnt = P.cnt || {}; P.cnt.news = +this.va
 $("cntTg").onchange = function () { P.cnt = P.cnt || {}; P.cnt.tg = +this.value; MORE.tg = 0; persist(); render(); tgTopUp(); };
 $("rdComSel").onchange = function () { P.rdCom = +this.value; persist(); };
 $("devMailOn").onchange = function () { P.devMail = this.checked; persist(); };
+// Settings > Calendar: the three settings that are not tick boxes
+$("sdMf").onchange = function () { P.sd = Object.assign({}, SD(), { mf: this.value }); persist(); render(); refreshSdCal(); };
+$("sdPay").onchange = function () { var v = Math.round(+this.value); P.sd = Object.assign({}, SD(), { pay: v >= 1 && v <= 31 ? v : 0 }); persist(); renderSdForm(); render(); refreshSdCal(); };
+$("sdRemDays").onchange = function () { P.sd = Object.assign({}, SD(), { remDays: +this.value }); persist(); };
 $("pasteOn").onchange = function () { P.pasteNote = this.checked; persist(); };
 $("twOffOn").onchange = function () { P.twOff = this.checked; persist(); render(); if (this.checked && twToken()) fetchTwOffline(twToken()); };
 // a click anywhere else cancels "Press a key…"
