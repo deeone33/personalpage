@@ -1,4 +1,4 @@
-var VERSION = 80;
+var VERSION = 81;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -568,6 +568,7 @@ function render() {
   Object.keys(typed).forEach(function (id) { var n = $(id); if (n && n.value !== typed[id]) n.value = typed[id]; });
   if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   renderHidden();
+  renderNextUp();
   refreshBrief();
   $("pv").hidden = !PREVIEW;
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
@@ -2478,6 +2479,7 @@ document.addEventListener("click", function (e) {
   if (a === "setsec") { setSec(+k); return; }
   if (a === "setfind") { setFind(+k); return; }
   if (a === "sdset") { sdSet(k, b.checked); return; }
+  if (a === "nextday") { if (/^\d{4}-\d\d-\d\d$/.test(k || "")) { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); } return; }
   if (a === "langtoggle") { setLang(k, b.checked); return; }
   if (a === "bcreset") { delete P.bc; persist(); if (document.activeElement) document.activeElement.blur(); applyBoxCols(); return; }
   if (a === "pastesave") { pasteSave(k); return; }
@@ -3094,6 +3096,26 @@ function sdSet(k, on) {
 }
 function refreshSdCal() { if (sideOf("cal") || (!$("modal").hidden && $("mTitle").textContent === WIDGETS.cal.t)) openCal(); }
 
+// ---- One small line under the date: the nearest thing in your calendar within a week (an event, a birthday, a
+// favorite's game, a marked day, a public holiday, payday). Only the closest day, and only its first entry.
+function nextUp() {
+  var now = new Date(), hm = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+  for (var k = 0; k <= 7; k++) {
+    var ds = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + k));
+    var list = evsOn(ds).filter(function (e) { return k > 0 || !e.tm || e.tm >= hm; }).map(function (e) { return { t: e.t, tm: e.tm || "", b: e.rep === "b" }; })   // what is already over today is skipped
+      .concat(specialsOn(ds).map(function (x) { return { t: x.n, tm: "" }; }));
+    if (list.length) return { ds: ds, k: k, first: list[0], more: list.length - 1 };
+  }
+  return null;
+}
+function renderNextUp() {
+  var el = $("nextUp"), n = nextUp();
+  el.hidden = !n;
+  document.querySelector("header").classList.toggle("hasnext", !!n);
+  if (!n) return;
+  el.dataset.k = n.ds;
+  el.textContent = (n.k === 0 ? "Today" : n.k === 1 ? "Tomorrow" : dayLabel(n.ds)) + (n.first.tm ? " " + n.first.tm : "") + " · " + (n.first.b ? "🎂 " : "") + n.first.t + (n.more ? "  +" + n.more : "");
+}
 function calHtml() {
   var now = new Date(), today = ymd(now);
   if (!CALV) CALV = { y: now.getFullYear(), m: now.getMonth(), sel: today };
