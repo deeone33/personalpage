@@ -1,4 +1,4 @@
-var VERSION = 87;
+var VERSION = 88;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1686,7 +1686,9 @@ function positionClocks() {
   var shift = clear > mailL && (liveL || menuL) >= clear, startL = shift ? (liveL || menuL) : Math.max(mailL, clear);
   box.style.left = startL + "px";
   if (first) first.style.marginRight = shift && liveL && menuL > liveL ? Math.max(0, menuL - liveL - first.offsetWidth - 6) + "px" : "";   // the gap that puts the second one above the menu box
-  box.style.top = (dateEl ? Math.round(dateEl.getBoundingClientRect().top) : 14) + "px";
+  // just above the row of small boxes (about level with the "next in your calendar" line), not up by the date
+  var rowEl = mail || document.querySelector('#grid [data-id="live"]') || document.querySelector('#grid [data-id="weather"]'), one = box.querySelector(".clk");
+  box.style.top = Math.max(8, rowEl && one ? Math.round(rowEl.getBoundingClientRect().top - one.offsetHeight - 5) : dateEl ? Math.round(dateEl.getBoundingClientRect().top) : 14) + "px";   // scrolled down: they stay at the top of the window
 }
 function startStopwatch() {
   if (alarms().length >= 8) { alert("You can have at most 8 timers, countdowns and stopwatches. Remove one first."); return; }
