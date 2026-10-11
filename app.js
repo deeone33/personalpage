@@ -1,4 +1,4 @@
-var VERSION = 76;
+var VERSION = 77;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2028,10 +2028,8 @@ function radioHtml() {
   if (!list.length) return '<div class="mrow radio"><span class="mut">No stations chosen. Pick some in Settings, Radio.</span></div>';
   var st = RAD.state, tip = st === "play" ? "Playing " + cur[1] : st === "load" ? "Connecting…" : st === "err" ? "Could not play this station right now" : "Play";
   return '<div class="mrow radio">' +
-    // the list is grouped by genre, like the settings
-    '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2] + " · " + cur[4]) + '">' + list.map(function (r, i) {
-      return (i && list[i - 1][2] === r[2] ? "" : (i ? "</optgroup>" : "") + '<optgroup label="' + esc(r[2]) + '">') + '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>";
-    }).join("") + "</optgroup></select>" +
+    // a plain list, in the same genre order as the settings (the browser draws group headings too heavily to use them here)
+    '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2] + " · " + cur[4]) + '">' + list.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>"; }).join("") + "</select>" +
     '<button data-a="radplay" class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" aria-label="Play" title="' + tip + '"><svg ' + RI + '><path d="M8 5.500v13l10.500-6.500z"/></svg></button>' +
     '<button data-a="radstop" class="ib" aria-label="Stop" title="Stop"><svg ' + RI + '><rect x="6.500" y="6.500" width="11" height="11" rx="1.500"/></svg></button>' +
     '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
