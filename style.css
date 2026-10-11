@@ -855,6 +855,22 @@ body.noshadow #srchAns{box-shadow:none}
 .spsc>div:first-child{border-top:0}
 .spsc span:first-child,.spsc b:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
 .spmaps>div{grid-template-columns:4em 6em 1fr auto}
+.spwin h3.sph .chips .chsep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+.spteam .lnk b{font-size:inherit}
+/* esports team and player windows */
+.eswin .esbk{margin:0 0 6px}
+.eshead{display:flex;align-items:center;gap:12px}
+.eshead img{width:46px;height:46px;object-fit:contain;border-radius:8px;flex:none}
+.eshead>div{flex:1;min-width:0}
+.eshead .mh{margin:0}
+.esnums{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px;margin:10px 0 2px}
+.esnums>div{border:1px solid var(--line);border-radius:10px;padding:5px 8px;background:var(--bg)}
+.esnums b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.esnums span{display:block;font-size:10.5px;color:var(--mut);line-height:1.25}
+.eswin .sptab td.tn{max-width:none;white-space:normal}
+.eswin .sptab td.tn small{margin-left:4px}
+.eswin .sptabw{max-height:none}
+.eswin .row .fm{margin-right:5px}
 .spod{margin:0;font-size:13px}
 .spod b{font-variant-numeric:tabular-nums}
 .fm{display:inline-block;width:1.55em;line-height:1.55em;margin:0 1px;border-radius:5px;text-align:center;font-style:normal;font-size:11px;font-weight:700;background:var(--line);color:var(--fg);cursor:default}

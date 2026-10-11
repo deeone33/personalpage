@@ -1,4 +1,4 @@
-var VERSION = 96;
+var VERSION = 97;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2548,10 +2548,13 @@ document.addEventListener("click", function (e) {
   if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
   if (a === "boxoff") { setBoxOff(k, true); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
-  if (a === "spfav") { spToggleFav(k, SP_OPEN); return; }
+  if (a === "spfav") { if (ES_CUR && !$("modal").hidden) { spToggleFav(k); esOpen(ES_CUR); } else spToggleFav(k, SP_OPEN); return; }
   if (a === "fighter") { openFighter(k); return; }
   if (a === "spside") { SP_SIDE = k === "a" ? "a" : "h"; var se = spFind(SP_OPEN), sd = se && SP_SUM[se.id]; if (sd) spSumDraw(se, sd.d); return; }
   if (a === "spses") { SP_SES = k; openSport(SP_OPEN); return; }
+  if (a === "spgame") { var ge = spFind(SP_OPEN), gd = ge && SP_SUM[ge.id]; if (gd) { SP_GAME[ge.id] = +k; spSumDraw(ge, gd.d); } return; }
+  if (a === "esteam" || a === "esplayer") { if (ES_CUR) ES_BACK.push(ES_CUR); else ES_BACK = SP_OPEN ? [SP_OPEN] : []; esOpen((a === "esteam" ? "team|" : "player|") + k); return; }
+  if (a === "esback") { var eb = ES_BACK.pop(); ES_CUR = ""; if (!eb) closeModal(); else if (/^(team|player)\|/.test(eb)) esOpen(eb); else openSport(eb); return; }
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
@@ -2942,7 +2945,7 @@ function openHelp() {
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
   html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
   html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups, NBA, NHL, NFL, MLB, tennis, Formula 1, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
-    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and for Counter-Strike 2 also every map with its score and the kills, deaths, assists and rating of the players. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
   html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
@@ -3708,7 +3711,7 @@ function spGetX(list) {
       if (!Array.isArray(d[lg.x])) return;
       var pri = SP_CATALOG.indexOf(lg), side = function (s) {
         s = s || {};
-        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: String(s.ab || "").slice(0, 4).toUpperCase(), lines: [], st: {}, lead: [] };
+        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: String(s.ab || "").slice(0, 4).toUpperCase(), lines: [], st: {}, lead: [], slug: /^[\w-]{2,80}$/.test(String(s.slug || "")) ? String(s.slug) : "" };
       };
       SP_NOW[lg.id].ev = d[lg.x].map(function (g) {
         var o = { id: lg.id + ":" + g.id, lg: lg.n, sp: lg.sp, kind: "team", pri: pri, ts: +g.ts, state: g.state === "in" || g.state === "post" ? g.state : "pre", detail: String(g.detail || ""), link: safeUrl(g.link),
@@ -3968,7 +3971,7 @@ function spTabLoad(e) {
 }
 // ---- More about a game, from ESPN's game summary (loaded when the window opens, again every minute while it is live):
 // who scored, the full team stats, the best player lines, line-ups, recent form, odds and who is unavailable. ----
-var SP_SUM = {}, SP_SIDE = "h", SP_SES = "", spSumT = 0;
+var SP_SUM = {}, SP_SIDE = "h", SP_SES = "", SP_GAME = {}, spSumT = 0;
 // team stats per sport, in the order shown: [ESPN's name, label, 1 = a share (0.9) to show as a percentage]
 var SP_STATX = {
   football: [["possessionPct", "Possession %"], ["totalShots", "Shots"], ["shotsOnTarget", "Shots on target"], ["wonCorners", "Corners"], ["foulsCommitted", "Fouls"], ["offsides", "Offsides"], ["saves", "Saves"], ["totalPasses", "Passes"], ["passPct", "Pass accuracy %", 1], ["totalTackles", "Tackles"], ["yellowCards", "Yellow cards"], ["redCards", "Red cards"]],
@@ -4032,7 +4035,8 @@ function spSumParse(e, j) {
     if (!s || !Array.isArray(t.roster)) return;
     var st = t.roster.filter(function (r) { return r.starter; });
     if (st.length) d.lu[s] = { f: String(t.formation || ""), st: st.map(function (r) { return { j: String(r.jersey || ""), n: (r.athlete || {}).displayName || "?", out: yes(r.subbedOut) }; }),
-      on: t.roster.filter(function (r) { return !r.starter && yes(r.subbedIn); }).map(function (r) { return (r.athlete || {}).displayName || "?"; }) };
+      on: t.roster.filter(function (r) { return !r.starter && yes(r.subbedIn); }).map(function (r) { return (r.athlete || {}).displayName || "?"; }),
+      bench: t.roster.filter(function (r) { return !r.starter && !yes(r.subbedIn); }).map(function (r) { return lastName((r.athlete || {}).displayName || "?"); }) };
   });
   (j.lastFiveGames || []).forEach(function (t) {
     var s = side((t.team || {}).id);
@@ -4066,7 +4070,10 @@ function spSumGet(e) {
         pl: two(g.pl, function (l) { return arr(l).slice(0, 4).map(function (t) { return { t: str(t.t), cols: arr(t.cols).map(str), rows: arr(t.rows).slice(0, 8).map(function (r) { return { n: str(r.n), v: arr(r.v).map(str) }; }) }; }); }),
         form: two(g.form, function (l) { return arr(l).slice(0, 5).map(function (x) { return { r: /^[WDL]$/.test(x.r) ? x.r : "", t: str(x.t) }; }).filter(function (x) { return x.r; }); }),
         lines: two(g.lines, function (l) { return arr(l).slice(0, 8).map(function (n) { return n == null ? 0 : +n || 0; }); }),
-        maps: arr(g.maps).slice(0, 7).map(function (m) { return { n: str(m.n), h: +m.h || 0, a: +m.a || 0, w: m.w === "h" || m.w === "a" ? m.w : "", live: !!m.live }; }),
+        maps: arr(g.maps).slice(0, 7).map(function (m) { return { n: str(m.n), h: +m.h || 0, a: +m.a || 0, w: m.w === "h" || m.w === "a" ? m.w : "", live: !!m.live, dur: str(m.dur), kills: !!m.kills }; }),
+        // Dota 2: one scoreboard per game of the match
+        pg: arr(g.pg).slice(0, 7).map(function (b) { return two(b, function (l) { return arr(l).slice(0, 2).map(function (t) { return { t: str(t.t), cols: arr(t.cols).map(str), rows: arr(t.rows).slice(0, 6).map(function (r) { return { n: str(r.n), v: arr(r.v).map(str) }; }) }; }); }); }),
+        slug: two(g.slug, function (s) { return /^[\w-]{2,80}$/.test(str(s)) ? str(s) : ""; }),
         rank: two(g.rank, function (n) { return +n || 0; }), tour: str(g.tour), series: str(g.series), seriesT: str(g.seriesT), att: +g.att || 0,
         lu: {}, inj: {}, odds: null, prob: null, refs: ""
       };
@@ -4100,8 +4107,8 @@ function spSumDraw(e, d) {
     return '<div><span class="mut">' + esc(p.per) + (p.clk ? " " + esc(p.clk) : "") + "</span><b>" + esc(p.s === "h" ? e.home.ab : p.s === "a" ? e.away.ab : "") + "</b><span>" + esc(p.txt) + "</span>" + (p.hs != null && p.as != null ? "<b>" + esc(p.hs) + "–" + esc(p.as) + "</b>" : "<b></b>") + "</div>";
   }).join("") + "</div>" : "";
   // esports: the maps of the match, each with its score
-  if ($("spSc") && d.maps && d.maps.length) $("spSc").innerHTML = "<h3>Maps</h3>" + '<div class="spsc spmaps">' + d.maps.map(function (m, i) {
-    return '<div><span class="mut">Map ' + (i + 1) + "</span><b>" + esc(m.n.charAt(0).toUpperCase() + m.n.slice(1)) + "</b><span>" + (m.live ? '<span class="pill live">LIVE</span>' : m.w ? esc((m.w === "h" ? e.home : e.away).n) + " won" : "") + "</span><b>" + (m.w || m.live ? m.h + "–" + m.a : "") + "</b></div>";
+  if ($("spSc") && d.maps && d.maps.length) $("spSc").innerHTML = "<h3>" + (d.maps[0].kills ? "Games · kills" : "Maps") + "</h3>" + '<div class="spsc spmaps">' + d.maps.map(function (m, i) {
+    return "<div>" + (m.kills ? "<b>" + esc(m.n) + '</b><span class="mut">' + esc(m.dur) + "</span>" : '<span class="mut">Map ' + (i + 1) + "</span><b>" + esc(m.n.charAt(0).toUpperCase() + m.n.slice(1)) + "</b>") + "<span>" + (m.live ? '<span class="pill live">LIVE</span>' : m.w ? esc((m.w === "h" ? e.home : e.away).n) + " won" : "") + "</span><b>" + (m.w || m.live ? m.h + "–" + m.a : "") + "</b></div>";
   }).join("") + "</div>";
   // SHL: the score of each period comes with the details
   if ($("spLn") && d.lines && d.lines.h.length > 1) { e.home.lines = d.lines.h; e.away.lines = d.lines.a; $("spLn").innerHTML = spLinesHtml(e); }
@@ -4123,16 +4130,19 @@ function spSumDraw(e, d) {
   if (d.series && (d.seriesT || !(chips("h") || chips("a")))) h += "<h3>" + esc(d.seriesT || "This season") + '</h3><p class="spod">' + esc(d.series) + "</p>";
   if (d.tour) h += '<p class="mut sn">' + esc(d.tour) + "</p>";
   // player lines, one team at a time
+  // Dota 2 has a scoreboard per game: small buttons pick the game (the last one first)
+  var pgs = d.pg && d.pg.length ? d.pg : null, gi = pgs ? (SP_GAME[e.id] != null && pgs[SP_GAME[e.id]] ? SP_GAME[e.id] : pgs.length - 1) : 0;
+  if (pgs) d.pl = pgs[gi];
   var s = d.pl[SP_SIDE] && d.pl[SP_SIDE].length ? SP_SIDE : d.pl.h.length ? "h" : "a";
   if (d.pl[s].length) {
     if ($("spLead")) $("spLead").innerHTML = "";   // the player lines say more than the three "top performers" from the scoreboard
-    h +='<h3 class="sph">Players <span class="chips">' + [["h", e.home], ["a", e.away]].filter(function (x) { return d.pl[x[0]].length; }).map(function (x) { return '<button data-a="spside" data-k="' + x[0] + '"' + (s === x[0] ? ' class="on"' : "") + ">" + esc(x[1].ab) + "</button>"; }).join("") + "</span></h3>" +
+    h += '<h3 class="sph">Players <span class="chips">' + (pgs && pgs.length > 1 ? pgs.map(function (b, i) { return '<button data-a="spgame" data-k="' + i + '"' + (i === gi ? ' class="on"' : "") + ' title="Game ' + (i + 1) + '">G' + (i + 1) + "</button>"; }).join("") + '<i class="chsep"></i>' : "") +[["h", e.home], ["a", e.away]].filter(function (x) { return d.pl[x[0]].length; }).map(function (x) { return '<button data-a="spside" data-k="' + x[0] + '"' + (s === x[0] ? ' class="on"' : "") + ">" + esc(x[1].ab) + "</button>"; }).join("") + "</span></h3>" +
       '<div class="sptabw sppl"><table class="sptab">' + d.pl[s].map(function (g) {
         return "<tr><th></th>" + g.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>" + g.rows.map(function (r) { return '<tr><td class="tn">' + esc(r.n) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" + r.v.map(function (v) { return "<td>" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("");
       }).join("") + "</table></div>";
   }
   // football line-ups
-  var lu = function (s) { var x = d.lu[s]; return x ? (x.f ? '<small class="mut">' + esc(x.f) + "</small>" : "") + x.st.map(function (p) { return "<div><small>" + esc(p.j) + "</small> " + esc(p.n) + (p.out ? ' <span class="mut" title="Taken off">↓</span>' : "") + "</div>"; }).join("") + (x.on.length ? '<div class="mut sn">On: ' + esc(x.on.join(", ")) + "</div>" : "") : ""; };
+  var lu = function (s) { var x = d.lu[s]; return x ? (x.f ? '<small class="mut">' + esc(x.f) + "</small>" : "") + x.st.map(function (p) { return "<div><small>" + esc(p.j) + "</small> " + esc(p.n) + (p.out ? ' <span class="mut" title="Taken off">↓</span>' : "") + "</div>"; }).join("") + (x.on.length ? '<div class="mut sn" title="Substitutes who came on during the game">↑ Came on: ' + esc(x.on.join(", ")) + "</div>" : "") + (x.bench && x.bench.length ? '<div class="mut sn" title="Substitutes who stayed on the bench">Bench: ' + esc(x.bench.join(", ")) + "</div>" : "") : ""; };
   if (lu("h") || lu("a")) h += "<h3>Line-ups</h3>" + '<div class="splu">' + two(lu("h"), lu("a")) + "</div>";
   // who is unavailable (only worth showing before the end)
   var inj = function (s) { var l = d.inj[s] || []; return l.slice(0, 6).map(function (i) { return "<div>" + esc(i.n) + (i.st ? ' <small class="mut">' + esc(i.st) + "</small>" : "") + "</div>"; }).join("") + (l.length > 6 ? '<div class="mut sn">+' + (l.length - 6) + " more</div>" : ""); };
@@ -4184,6 +4194,56 @@ function spRankLoad(e) {
     }).join("") + "</div>";
   }).catch(function () {});
 }
+// ---- An esports team or player (bo3.gg, through the feeds function). Opens from a match: click a team's name, then a
+// player in its roster. "Back" walks the same way back. what = "team|cs2|mouz-cs2" or "player|cs2|spinx". ----
+var ES_C = {}, ES_BACK = [], ES_CUR = "";
+function esMoney(n) { n = +n || 0; return n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1000 ? "$" + Math.round(n / 1000) + "k" : n ? "$" + n : ""; }
+function esGet(what) {
+  var p = what.split("|"), c = ES_C[what];
+  if (c && Date.now() - c.t < 600000) return Promise.resolve(c.d);
+  if (!sb || !USER) return Promise.reject(new Error("Sign in to see this."));
+  var body = {}; body[p[0] === "team" ? "teamx" : "playerx"] = { src: p[1], slug: p[2] };
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: body }).then(function (r) {
+    var d = r.data && r.data[p[0] === "team" ? "teamx" : "playerx"];
+    if (!d || typeof d !== "object") throw new Error(r.data && !("teamx" in r.data) && !("playerx" in r.data) ? "This needs the newest feeds function (redeploy super-function)." : "No details for this one right now.");
+    if (Object.keys(ES_C).length > 60) ES_C = {};
+    ES_C[what] = { t: Date.now(), d: d };
+    return d;
+  });
+}
+function esNums(list) { list = list.filter(function (x) { return x[0] !== "" && x[0] != null; }); return list.length ? '<div class="esnums">' + list.map(function (x) { return "<div><b>" + esc(x[0]) + "</b><span>" + x[1] + "</span></div>"; }).join("") + "</div>" : ""; }
+function esOpen(what) {
+  var p = what.split("|"), isTeam = p[0] === "team", game = { cs2: "Counter-Strike 2", lol: "League of Legends", dota2: "Dota 2" }[p[1]] || "Esports";
+  var back = '<p class="tools esbk"><button class="lnk" data-a="esback">‹ Back</button></p>';
+  ES_CUR = what;
+  openModal(game, '<div class="spwin eswin">' + back + '<p class="mut sn">Loading…</p></div>');
+  esGet(what).then(function (d) {
+    if (ES_CUR !== what || $("modal").hidden) return;
+    var str = function (x) { return x == null ? "" : String(x); }, arr = function (x) { return Array.isArray(x) ? x : []; }, st = d.stats || null, img = safeUrl(isTeam ? d.logo : d.img);
+    var head = function (sub, fav) { return '<div class="eshead">' + (img ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '">' : "") + '<div><h2 class="mh">' + esc(str(d.n)) + '</h2><div class="mut sn">' + sub.filter(Boolean).join(" · ") + "</div></div>" + (fav || "") + "</div>"; };
+    var titles = arr(d.ach).length ? "<h3>Titles</h3>" + arr(d.ach).map(function (a) { return '<div class="row"><span><span class="mut">' + esc(str(a.y)) + "</span> " + esc(str(a.t)) + "</span></div>"; }).join("") : "";
+    var pct = function (w, l) { return w + l ? Math.round(w / (w + l) * 100) + "%" : ""; }, h;
+    if (isTeam) {
+      var fav = '<button class="ib sm' + (spIsFav(d.n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(str(d.n)) + '" title="' + (spIsFav(d.n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(d.n) ? "★" : "☆") + "</button>";
+      h = head([d.rank ? "World no. " + (+d.rank) : "", esc([d.cc, d.region].filter(Boolean).join(", ")), d.est ? "since " + esc(str(d.est)) : ""], fav) +
+        esNums([[st && st.mw + st.ml ? st.mw + "–" + st.ml : "", "matches won–lost"], [st ? pct(st.gw, st.gl) : "", "maps won"], [st && st.ev ? st.ew + " / " + st.ev : "", "titles / events"], [st ? st.kd : "", "kills per death"], [esMoney(d.earned), "won, last 6 months"]]) +
+        (arr(d.roster).length ? "<h3>Roster</h3>" + '<div class="sptabw sppl"><table class="sptab"><tr><th></th><th>From</th><th>Age</th><th>Rating</th><th>Won</th></tr>' + arr(d.roster).map(function (r) {
+          var nm = esc(str(r.n)) + (r.coach ? ' <small class="mut">coach</small>' : "") + (r.name ? ' <small class="mut">' + esc(str(r.name)) + "</small>" : "");
+          return '<tr><td class="tn">' + (r.slug ? '<button class="lnk" data-a="esplayer" data-k="' + esc(p[1] + "|" + r.slug) + '">' + nm + "</button>" : nm) + "</td><td>" + esc(str(r.cc)) + "</td><td>" + (+r.age || "") + "</td><td>" + esc(str(r.rating)) + "</td><td>" + esMoney(r.prize) + "</td></tr>";
+        }).join("") + "</table></div>" : "") +
+        (arr(d.next).length ? "<h3>Next</h3>" + arr(d.next).map(function (m) { return '<div class="row"><span>vs <b>' + esc(str(m.opp)) + '</b> <small class="mut">' + esc(str(m.tour)) + '</small></span><span class="r mut">' + (m.live ? '<span class="pill live">LIVE</span>' : new Date(+m.ts).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + "</span></div>"; }).join("") : "") +
+        (arr(d.recent).length ? "<h3>Last results</h3>" + arr(d.recent).map(function (m) { return '<div class="row"><span><i class="fm fm' + (m.r === "W" ? "W" : "L") + '">' + (m.r === "W" ? "W" : "L") + "</i> " + esc(str(m.t)) + ' <small class="mut">' + esc(str(m.tour)) + '</small></span><span class="r mut">' + new Date(+m.ts).toLocaleDateString("en-GB", { timeZone: TZ, day: "numeric", month: "short" }) + "</span></div>"; }).join("") : "") + titles;
+    } else {
+      var tm = d.team ? (d.teamSlug ? '<button class="lnk" data-a="esteam" data-k="' + esc(p[1] + "|" + d.teamSlug) + '">' + esc(str(d.team)) + " ›</button>" : esc(str(d.team))) + (d.joined ? " since " + esc(str(d.joined)) : "") : "";
+      h = head([esc(str(d.name)), esc(str(d.cc)), d.age ? +d.age + " years" : "", d.coach ? "coach" : esc(str(d.role)), tm]) +
+        esNums([[st && st.gw + st.gl ? st.gw + "–" + st.gl : "", "maps won–lost"], [st ? pct(st.mw, st.ml) : "", "matches won"], [st ? st.kd : "", "kills per death"], [st ? st.adr : "", "damage per round"], [st ? st.kpr : "", "kills per round"], [str(d.rating), "rating, 6 months"], [st && st.ev ? st.ew + " / " + st.ev : "", "titles / events"], [esMoney(d.prize), "prize money"]]) + titles;
+    }
+    var site = "https://bo3.gg/" + ({ lol: "lol/", dota2: "dota2/" }[p[1]] || "") + (isTeam ? "teams/" : "players/") + p[2];
+    $("mBody").innerHTML = '<div class="spwin eswin">' + back + h + '<p class="tools">' + linkBtn(site, "More on bo3.gg") + "</p></div>";
+  }).catch(function (err) {
+    if (ES_CUR === what && !$("modal").hidden) $("mBody").innerHTML = '<div class="spwin eswin">' + back + '<p class="mut sn">' + esc(String((err && err.message) || "Could not load this.")) + "</p></div>";
+  });
+}
 // Hover card for a game: the score line, then the short story of it
 function showSportPeek(el, id) {
   if (EDIT) return;
@@ -4220,8 +4280,8 @@ function openSport(id) {
   var e = spEvents().filter(function (x) { return x.id === id; })[0];
   if (!e) { Object.keys(SP_NOW).concat(Object.keys(SP_UP)).forEach(function (k) { ((SP_NOW[k] || SP_UP[k]).ev || []).forEach(function (x) { if (x.id === id) e = x; }); }); }
   if (!e) return;
-  SP_OPEN = id;
-  var favBtn = function (n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; };
+  SP_OPEN = id; ES_CUR = "";
+  var favBtn =function (n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; };
   var body, head = '<h2 class="mh">' + esc(e.title || "") + '</h2><div class="mut">' + spWhen(e) + "</div>";
   if (e.fights) {
     body = head + "<h3>" + e.cardTitle + "</h3>" + (e.fights.map(function (f) {
@@ -4248,7 +4308,9 @@ function openSport(id) {
         }).join("") + "</table></div>"
         : e.top.length ? "<h3>" + (e.state === "pre" ? "Field" : "Leaders") + "</h3>" + e.top.map(function (t, i) { return '<div class="row"><span>' + (i + 1) + ". <b>" + esc(t.n) + '</b></span><span class="r mut">' + esc(t.s) + "</span></div>"; }).join("") : "") + '<div id="spTab"></div>';
   } else {
-    var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
+    // an esports team's name opens the team: roster, results, what is next, titles
+    var esKey = e.sp === "esports" ? e.id.slice(2, e.id.lastIndexOf(":")) : "";
+    var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + (esKey && t.slug ? '<button class="lnk" data-a="esteam" data-k="' + esc(esKey + "|" + t.slug) + '" title="About this team"><b' + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + " ›</b></button>" : "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>") + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
       // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
