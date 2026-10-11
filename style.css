@@ -365,10 +365,12 @@ body.docked{padding-left:var(--dock-w)}
 .dkchat.fixedh{flex:none;min-height:0}
 /* drag the bottom edge for height, the right edge for width */
 .cgrip{position:absolute;z-index:2;touch-action:none}
-.cgh{left:0;right:0;bottom:0;height:9px;cursor:ns-resize}
-.cgw{top:0;bottom:9px;right:0;width:9px;cursor:ew-resize}
+.cgh{left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
+.cgw{top:0;bottom:7px;right:0;width:7px;cursor:ew-resize}
 .cgrip:hover,.cgrip:active{background:var(--ac);opacity:.7}
-.dkchat iframe{display:block;width:100%;height:100%;border:0}
+/* The chat stops short of the two drag edges: nothing may lie on top of Twitch's chat, or Twitch switches off writing
+   for moderators and the channel owner ("the Twitch Chat window is obscured by another element"). */
+.dkchat iframe{display:block;width:calc(100% - 7px);height:calc(100% - 7px);border:0;border-radius:12px}
 .dkc{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .15s}
 .dk:hover .dkc,.dkc:focus-within{opacity:1}
 .dkc button{background:rgba(0,0,0,.72);color:#fff;border:0;border-radius:7px;padding:3px 9px;font-size:12px}
@@ -900,6 +902,16 @@ body.noshadow #srchAns{box-shadow:none}
 .sp2c i:first-child{display:inline-block;width:1.9em;font-style:normal;color:var(--mut);font-variant-numeric:tabular-nums}
 .spwin .row.sel b{color:var(--ac)}
 @media(max-width:520px){.sprk.two{grid-template-columns:1fr}}
+
+/* ---- Phones only: the notifications list is as wide as the menu box (it used to hang off the left edge of the
+   screen), and the four kinds of feedback sit two by two so that all of them can be pressed ---- */
+@media(max-width:520px){
+  .menurow .dd:has(>.menu.bell){position:static}
+  .menurow .menu.bell{left:8px;right:8px;width:auto;min-width:0;max-width:none}
+  .menurow .dd:nth-last-child(2) .menu:not(.bell){left:auto;right:0}   /* the cogwheel menu opened 5px past the right edge of the screen */
+  .auth.fb .seg{flex-wrap:wrap}
+  .auth.fb .seg button{flex:1 1 45%;white-space:normal}
+}
 
 /* ---- Feedback window ---- */
 .mbox:has(.fb){width:min(460px,100%)}

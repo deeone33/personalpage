@@ -1,4 +1,4 @@
-var VERSION = 100;
+var VERSION = 105;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -500,7 +500,8 @@ function render() {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
     }).join(""), 6) + '<div class="empty">' + (NERR ? "The news could not be loaded. Press ! above for the details." : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
-  var newBtn = function (n, box) { return n ? '<button class="pill ac newp" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + " new</button>" : ""; };
+  // the button pops in only when it appears or its number goes up, not on every redraw of the page
+  var newBtn = function (n, box) { var pop = n > (NEWPN[box] || 0); NEWPN[box] = n; return n ? '<button class="pill ac' + (pop ? " newp" : "") + '" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + " new</button>" : ""; };
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Filter headlines" aria-label="Filter headlines">⌕</button>' : "";
@@ -613,6 +614,20 @@ function render() {
 
   // A background refresh must not wipe what you are typing (sign-in form, converter, filter) or steal focus
   var scrolls = {}, typed = {}, act = document.activeElement, actId = act && act.id && $("grid").contains(act) ? act.id : "", sel = null;
+  // Redrawing must never move the page (it matters on a phone, where the page is long): remember the box at the top of
+  // the screen and exactly where it sits, keep the grid's height while its content is swapped (otherwise the page is
+  // for a moment too short to stay scrolled, and jumps to the top), and afterwards put that box back where it was.
+  var grid0 = $("grid"), sy0 = window.scrollY || 0, anchor = null;
+  if (sy0 > 0) Array.prototype.some.call(grid0.children, function (k, i) {
+    var r = k.getBoundingClientRect();
+    if (r.bottom <= 0) return false;
+    anchor = { id: k.dataset.id || "", i: i, top: r.top };
+    return true;
+  });
+  grid0.style.minHeight = grid0.offsetHeight + "px";
+  // an open Sources list stays open (and scrolled where it was) through a redraw, so several sources can be ticked in one go
+  var openFilt = {};
+  ["filtNews", "filtRd", "filttg"].forEach(function (id) { var m = $(id); if (m && !m.hidden) openFilt[id] = m.scrollTop; });
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { scrolls[n.dataset.list] = n.scrollTop; });
   $("grid").querySelectorAll("input[id]").forEach(function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
   if (actId) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
@@ -626,6 +641,13 @@ function render() {
   $("pv").hidden = !PREVIEW;
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   packGrid();
+  Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
+  grid0.style.minHeight = "";
+  if (sy0 > 0) {
+    var ael = anchor ? (anchor.id ? grid0.querySelector('[data-id="' + anchor.id + '"]') : null) || grid0.children[anchor.i] : null;
+    var dy = ael ? ael.getBoundingClientRect().top - anchor.top : sy0 - (window.scrollY || 0);
+    if (Math.abs(dy) >= 1) window.scrollBy({ top: dy, left: 0, behavior: "instant" });
+  }
 }
 // Each box covers as many of the grid's 1px rows as its own height needs, plus the 14px gap under it.
 // That lets boxes of different heights pack together (a short Reddit box with Sports under it, beside a tall one).
@@ -1057,7 +1079,7 @@ function fetchNews() {
     nBusy = false;
     if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
-      NEWSALL = unentAll(r.data.news, ["t", "d"]); NEWS = langFilter(NEWSALL.slice()); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
+      NEWSALL = cleanLinks(unentAll(r.data.news, ["t", "d"])); NEWS = langFilter(NEWSALL.slice()); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
       stampFirst(NEWS, "news"); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
       setTimeout(tgTopUp, 0);
       var ne = r.data.news_err || {};
@@ -1078,15 +1100,38 @@ if (!NSEEN || typeof NSEEN !== "object") { var ns0 = +NSEEN || Date.now(); NSEEN
 function isNewTs(ts, box) { return ts > (NSEEN[box] || 0); }
 // "New" goes by when this page first SAW an item, not when it was published: a story that shows up late
 // (published before you last looked, but only now in the feed) still counts as new.
-var FIRST = load("sp_first", { _i: {} });
+var FIRST = load("sp_first", { _i: {} }), NEWPN = {};
 if (!FIRST._i) FIRST._i = {};
+// A post is recognised by its link. Tracking tags that some sites add to a link (and change between fetches) are
+// taken off, so the same post is not seen as a different one. Real parts of an address are left alone.
+var TRACK_Q = /^(utm_\w+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|igshid|at_medium|at_campaign|at_custom\d|at_format|at_link\w*|ns_mchannel|ns_source|ns_campaign|ns_linkname|ns_fee|ocid|cmpid|cmp|xtor|ito|smid|ncid)$/i;
+function cleanLink(u) {
+  u = String(u || "");
+  if (u.indexOf("?") < 0 && u.indexOf("#") < 0) return u;
+  var hash = "", hi = u.indexOf("#");
+  if (hi >= 0) { hash = u.slice(hi); u = u.slice(0, hi); if (/^#(xtor|echobox|utm_|ref=|at_|cmp|ocid)/i.test(hash)) hash = ""; }
+  var qi = u.indexOf("?");
+  if (qi >= 0) {
+    var keep = u.slice(qi + 1).split("&").filter(function (p) { return p && !TRACK_Q.test(p.split("=")[0]); });
+    u = u.slice(0, qi) + (keep.length ? "?" + keep.join("&") : "");
+  }
+  return u + hash;
+}
+function cleanLinks(list) { (list || []).forEach(function (x) { if (x && x.u) x.u = cleanLink(x.u); }); return list || []; }
 function stampFirst(list, box) {
   var now = Date.now(), init = !FIRST._i[box], changed = init;
   FIRST._i[box] = 1;
   (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init ? x.ts : now; changed = true; } });
   if (!changed) return;
   var k = Object.keys(FIRST);
-  if (k.length > 2500) k.filter(function (u) { return u !== "_i"; }).sort(function (a, b) { return FIRST[a] - FIRST[b]; }).slice(0, k.length - 2000).forEach(function (u) { delete FIRST[u]; });
+  if (k.length > 3000) {
+    // Too many remembered: forget the oldest, but never a post that is still in one of the boxes. Forgetting one of
+    // those would make it count as never seen, and it would be marked new again at the next refresh.
+    var live = {};
+    [list, NEWSALL, NEWS, TGP, TGX, RD].forEach(function (l) { (l || []).forEach(function (x) { if (x && x.u) live[x.u] = 1; }); });
+    var old = k.filter(function (u) { return u !== "_i" && !live[u]; }).sort(function (a, b) { return FIRST[a] - FIRST[b]; });
+    old.slice(0, Math.max(0, k.length - 2400)).forEach(function (u) { delete FIRST[u]; });
+  }
   save("sp_first", FIRST);
 }
 function isNewItem(x, box) { return PREVIEW ? !!x.nw : isNewTs(FIRST[x.u] || x.ts, box); }
@@ -1471,7 +1516,7 @@ function fetchReddit() {
     var v = r.data && r.data.reddit;
     if (r.error) RDERR = r.error.message;
     else if (!v) RDERR = "it needs the updated feeds function (redeploy super-function in Supabase)";
-    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { RD = unentAll(v.items, ["t", "d"]); stampFirst(RD, "rd"); } }
+    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { RD = cleanLinks(unentAll(v.items, ["t", "d"])); stampFirst(RD, "rd"); } }
     render();
   }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
 }
@@ -2684,15 +2729,101 @@ function openAuth(tab) {
   $("acctEmail").value = keep;
   (keep ? $("acctPass") : $("acctEmail")).focus();
 }
+// ---- Saving to your account, and keeping several devices in step ----
+// Everything you set up is one object (P) saved as a whole. So that a page left open on one device does not overwrite
+// what you did on another: (1) before saving, the page looks whether the account's copy changed since it last saw it, and
+// if so merges the two instead of overwriting; (2) when you come back to the page, and once a minute, it fetches a newer copy.
+// BASE is the account's copy as this page last saw it; SYNC_AT is when that copy was saved.
+var BASE = null, SYNC_AT = 0, PREFS_READY = false, SAVE_WANTED = false, syncBusy = false;
+function cloneP(o) { return JSON.parse(JSON.stringify(o)); }
+function sameP(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function isPlain(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+function isIdList(x) { return Array.isArray(x) && x.every(function (i) { return isPlain(i) && i.id != null; }); }
+// Three-way merge: what changed here since BASE, and what changed on the other device since BASE, are both kept.
+// Lists of things with an id (notes, to-dos, events, timers, stocks...) are merged item by item, so an item added on
+// one device and an item deleted on the other both come out right. If the very same thing was changed on both, this device wins.
+function merge3(base, mine, theirs) {
+  if (sameP(mine, theirs) || sameP(theirs, base)) return mine;
+  if (sameP(mine, base)) return theirs;
+  if (isIdList(mine) && isIdList(theirs)) {
+    var b = {}, t = {}, m = {}, out = [];
+    (Array.isArray(base) ? base : []).forEach(function (i) { if (isPlain(i) && i.id != null) b[i.id] = i; });
+    theirs.forEach(function (i) { t[i.id] = i; });
+    mine.forEach(function (i) { m[i.id] = i; });
+    mine.forEach(function (i) {
+      if (i.id in t) out.push(merge3(b[i.id], i, t[i.id]));
+      else if (!(i.id in b) || !sameP(i, b[i.id])) out.push(i);   // added or changed here; otherwise it was deleted there
+    });
+    theirs.forEach(function (i) { if (!(i.id in m) && !(i.id in b)) out.push(i); });   // added there
+    return out;
+  }
+  if (isPlain(mine) && isPlain(theirs)) {
+    var o = {}, bb = isPlain(base) ? base : {};
+    Object.keys(mine).concat(Object.keys(theirs)).forEach(function (k) {
+      if (k in o) return;
+      var v = merge3(bb[k], mine[k], theirs[k]);
+      if (v !== undefined) o[k] = v;
+    });
+    return o;
+  }
+  return mine;
+}
+function syncApply(prefs) {
+  P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, prefs);
+  save("sp_prefs", P); applyTheme(); render(); renderClocks();
+}
+function syncRow(uid, cols) { return sb.from("user_prefs").select(cols).eq("user_id", uid).maybeSingle(); }
 function persist() {
   save("sp_prefs", P);
   if (!sb || !USER) return;
+  if (!PREFS_READY) { SAVE_WANTED = true; return; }   // the account's copy has not arrived yet: never overwrite it unseen
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(function () {
-    sb.from("user_prefs").upsert({ user_id: USER.id, prefs: P, updated_at: new Date().toISOString() })
-      .then(function (r) { if (r.error) setMsg("Could not save to your account: " + r.error.message); });
-  }, 600);
+  SAVE_WANTED = true;
+  saveTimer = setTimeout(syncSave, 600);
 }
+function syncSave() {
+  if (!sb || !USER) return;
+  if (syncBusy) { clearTimeout(saveTimer); saveTimer = setTimeout(syncSave, 400); return; }
+  var uid = USER.id, end = function () { syncBusy = false; };
+  syncBusy = true; SAVE_WANTED = false;
+  syncRow(uid, "updated_at").then(function (r) {
+    var at = r.data && r.data.updated_at ? Date.parse(r.data.updated_at) : 0;
+    if (r.error || !at || !BASE || at === SYNC_AT) return;
+    // another device saved in the meantime: take its changes in before saving
+    return syncRow(uid, "prefs,updated_at").then(function (q) {
+      if (!USER || USER.id !== uid || q.error || !q.data || !q.data.prefs || !q.data.prefs.theme) return;
+      var merged = merge3(BASE, P, q.data.prefs);
+      BASE = cloneP(q.data.prefs); SYNC_AT = Date.parse(q.data.updated_at) || 0;
+      if (!sameP(merged, P)) syncApply(merged);
+    });
+  }).then(function () {
+    if (!USER || USER.id !== uid) return;
+    var snap = cloneP(P), at = new Date().toISOString();
+    return sb.from("user_prefs").upsert({ user_id: uid, prefs: snap, updated_at: at }).select("updated_at").maybeSingle().then(function (r) {
+      if (r.error) { setMsg("Could not save to your account: " + r.error.message); SAVE_WANTED = true; return; }
+      BASE = snap; SYNC_AT = Date.parse((r.data && r.data.updated_at) || at) || 0;
+    });
+  }).then(end, end);
+}
+// A newer copy on the account (saved by another device or tab)? Fetch it. Anything changed here and not saved yet is merged in.
+function syncPull() {
+  if (!sb || !USER || !PREFS_READY || syncBusy || SAVE_WANTED || document.hidden) return;
+  var uid = USER.id, end = function () { syncBusy = false; };
+  syncBusy = true;
+  syncRow(uid, "updated_at").then(function (r) {
+    var at = r.data && r.data.updated_at ? Date.parse(r.data.updated_at) : 0;
+    if (r.error || !at || at === SYNC_AT) return;
+    return syncRow(uid, "prefs,updated_at").then(function (q) {
+      if (!USER || USER.id !== uid || q.error || !q.data || !q.data.prefs || !q.data.prefs.theme) return;
+      var merged = BASE ? merge3(BASE, P, q.data.prefs) : q.data.prefs, mineToo = !sameP(merged, q.data.prefs);
+      BASE = cloneP(q.data.prefs); SYNC_AT = Date.parse(q.data.updated_at) || 0;
+      if (!sameP(merged, P)) syncApply(merged);
+      if (mineToo) persist();
+    });
+  }).then(end, end);
+}
+window.addEventListener("focus", function () { setTimeout(syncPull, 200); });
+setInterval(syncPull, 60000);
 var TITLE0 = document.title;
 // a saved sign-in in this browser: hide the visitor parts at once, so they do not flash by before the account has loaded
 try { for (var ti = 0; ti < localStorage.length; ti++) if (/^sb-.+-auth-token$/.test(localStorage.key(ti) || "")) { $("intro").hidden = true; $("ftLinks").hidden = true; document.title = "OmniTree"; break; } } catch (e) {}
@@ -2712,11 +2843,14 @@ function onUser(u) {
   renderAccount(); render();
   if (!u) return;
   loadWall(u);
-  sb.from("user_prefs").select("prefs").eq("user_id", u.id).maybeSingle().then(function (r) {
+  PREFS_READY = false; BASE = null; SYNC_AT = 0; SAVE_WANTED = false;
+  sb.from("user_prefs").select("prefs,updated_at").eq("user_id", u.id).maybeSingle().then(function (r) {
     var isNew = false;
     if (r.error) { setMsg("Could not load your settings: " + r.error.message); return; }
+    PREFS_READY = true; SAVE_WANTED = false;
     if (r.data && r.data.prefs && r.data.prefs.theme) {
       P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, r.data.prefs);
+      BASE = cloneP(r.data.prefs); SYNC_AT = Date.parse(r.data.updated_at) || 0;
       save("sp_prefs", P); applyTheme(); render();
     } else { persist(); isNew = true; }   // no saved settings yet: a brand-new account
     if (!$("modal").hidden && $("mTitle").textContent === "Account") closeModal();
@@ -5222,7 +5356,7 @@ var HIDDEN_AT = 0;
 function every(ms, fn, inBackground) { setInterval(function () { if (!document.hidden || (inBackground && inBackground())) fn(); }, ms); }
 document.addEventListener("visibilitychange", function () {
   if (document.hidden) { HIDDEN_AT = Date.now(); return; }
-  tick(); tickClocks();
+  tick(); tickClocks(); syncPull();
   // Away for more than 2 minutes: what was on screen when you left counts as seen, so only newer items are marked new
   if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000) { markSeen("", HIDDEN_AT); refreshAll(); }
   else render();
