@@ -33,6 +33,7 @@
 <aside id="dockR" hidden aria-label="Docked panels"><div id="sideR"></div></aside>
 <div id="dockGrip" title="Drag to resize the players"></div>
 <main id="app">
+  <nav id="bm" aria-label="Bookmarks" hidden></nav>
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div><button id="nextUp" data-a="nextday" title="Open the calendar on this day" hidden></button></div>
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search… (type help for info)" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
@@ -93,6 +94,24 @@
     <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
     <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
     <button data-a="wizopen">Run the setup guide again</button>
+  </section>
+
+  <section class="setgrp wide" data-cat="Look" data-sec="Bookmarks">
+    <div class="mut sn">A slim row of your own links at the very top of the page. Switched off, it takes no room at all.</div>
+    <label>Show the bookmarks bar <input type="checkbox" id="bmOn"></label>
+    <label>Open links in a new tab <input type="checkbox" id="bmNw"></label>
+    <div class="sub"><b>Add a bookmark</b>
+      <div class="add bmadd"><input type="text" id="bmNewU" placeholder="Address, e.g. youtube.com" aria-label="Address" maxlength="500" autocomplete="off"><input type="text" id="bmNewT" placeholder="Name (optional)" aria-label="Name" maxlength="40" autocomplete="off"><select id="bmNewF" aria-label="Where to put it"></select><button class="pri" data-a="bmadd">Add</button></div>
+      <div id="bmMsg" class="mut sn" role="status"></div>
+      <span><button data-a="bmaddf">+ New folder</button></span>
+      <div class="mut sn">A folder shows as one button on the bar and opens a small list. Put a link into it with the “On the bar / In: …” choice on the link’s row.</div>
+    </div>
+    <div class="sub"><b>Your bookmarks</b>
+      <div class="mut sn">Click the icon to change it. ◀ ▶ move a bookmark left and right on the bar. The small color square colors one bookmark.</div>
+      <div id="bmSet"></div>
+    </div>
+    <label>Color for all bookmarks <span><input type="color" id="bmColAll" aria-label="Color for all bookmarks"> <button data-a="bmcolreset">Reset all colors</button></span></label>
+    <div class="mut sn">“The site’s own icon” is fetched from that site each time the page opens. Pick one of the built-in icons if you would rather not contact the site.</div>
   </section>
 
   <section class="setgrp" data-cat="Look" data-sec="Search bar">

@@ -1,4 +1,4 @@
-var VERSION = 107;
+var VERSION = 108;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -129,8 +129,10 @@ Object.keys(BADIMG).forEach(function (u) { if (Date.now() - BADIMG[u] > 60480000
 document.addEventListener("error", function (e) {
   var t = e.target;
   if (!t || t.tagName !== "IMG" || t.getAttribute("data-rm") !== "1") return;
-  if (t.closest(".ic") || t.classList.contains("tl")) { BADIMG[t.getAttribute("src")] = Date.now(); save("sp_badimg", BADIMG); }
+  var fav = t.classList.contains("bmfav");
+  if (t.closest(".ic") || t.classList.contains("tl") || fav) { BADIMG[t.getAttribute("src")] = Date.now(); save("sp_badimg", BADIMG); }
   t.remove();
+  if (fav) { renderBm(); renderBmSet(); }   // a site without an icon of its own gets the globe instead
 }, true);
 
 // ---- Theme, accent, wallpaper ----
@@ -415,7 +417,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog();
+  renderNfLog(); renderBmSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -637,6 +639,7 @@ function render() {
   Object.keys(typed).forEach(function (id) { var n = $(id); if (n && n.value !== typed[id]) n.value = typed[id]; });
   if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   renderHidden();
+  renderBm();
   renderNextUp();
   refreshBrief();
   $("pv").hidden = !PREVIEW;
@@ -1721,6 +1724,162 @@ $("mailSave").onclick = function () {
   persist(); MAIL = []; render(); fetchMail(); $("mailMsg").textContent = "Saved.";
 };
 
+// ---- Bookmarks bar: your own links in one slim row at the very top of the page (Settings > Bookmarks) ----
+// P.bm = { on, nw (open in a new tab), col (color for all), items: [ { id, t, u, ic, c } or a folder { id, t, ic, c, kids: [..] } ] }
+// ic: "" = no icon, "site" = the site's own icon, otherwise one of BM_ICONS. c: the item's own color ("" = the color for all).
+var BM_SVG = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+var BM_ICONS = {
+  home: ["Home", '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'], globe: ["Web", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>'],
+  star: ["Star", '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'], heart: ["Heart", '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'],
+  mail: ["Mail", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'], chat: ["Chat", '<path d="M4 5h16v11H9l-5 4z"/>'],
+  video: ["Video", '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/>'], music: ["Music", '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>'],
+  news: ["News", '<rect x="3" y="4" width="15" height="16" rx="1.5"/><path d="M18 8h3v10a2 2 0 0 1-2 2M7 8h7M7 12h7M7 16h4"/>'], book: ["Book", '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M9 7h6"/>'],
+  code: ["Code", '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>'], terminal: ["Terminal", '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>'],
+  cart: ["Shopping cart", '<path d="M3 4h2l2.5 11h10L20 7H6.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>'], bag: ["Shop", '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'],
+  card: ["Payment card", '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/>'], bank: ["Bank", '<path d="M3 9l9-5 9 5M5 9v8M9.5 9v8M14.5 9v8M19 9v8M3 20h18"/>'],
+  money: ["Money", '<path d="M12 3v18M16.5 7.5C16 6 14.5 5 12 5S7.5 6 7.5 8.500 10 11.500 12 12s4.5 1 4.5 3.500S14.5 19 12 19s-4-1-4.500-2.500"/>'], chart: ["Chart", '<path d="M4 4v16h16"/><path d="M7 15l4-4 3 3 5-6"/>'],
+  work: ["Work", '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 13h18"/>'], calendar: ["Calendar", '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'],
+  clock: ["Clock", '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'], cloud: ["Cloud", '<path d="M7 18a4 4 0 0 1 0-8 5.500 5.500 0 0 1 10.600 1.500A3.500 3.500 0 0 1 17 18z"/>'],
+  folder: ["Folder", '<path d="M3 6h6l2 2h10v11H3z"/>'], file: ["Document", '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>'],
+  image: ["Pictures", '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/>'], camera: ["Camera", '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>'],
+  game: ["Games", '<rect x="2.5" y="7" width="19" height="10" rx="5"/><path d="M7 10.500v3M5.500 12h3M15.500 11h.01M18 13h.01"/>'], tv: ["TV", '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>'],
+  phone: ["Phone", '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/>'], pin: ["Map", '<path d="M12 21s-6-5.600-6-10.500a6 6 0 0 1 12 0C18 15.400 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/>'],
+  plane: ["Travel", '<path d="M3 13l18-8-6 16-3.500-6.500z"/><path d="M11.500 14.500L21 5"/>'], car: ["Car", '<path d="M4 16v-4l2-5h12l2 5v4z"/><path d="M4 12h16"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/>'],
+  food: ["Food", '<path d="M6 3v8M4 3v5a2 2 0 0 0 4 0V3M6 11v10M17 3c-2 1-3 4-3 7h3M17 3v18"/>'], coffee: ["Coffee", '<path d="M5 9h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 10h1.500a2.500 2.500 0 0 1 0 5H17M8 3v3M12 3v3"/>'],
+  tool: ["Tools", '<path d="M15 4a4.500 4.500 0 0 0-4.300 5.900L4 16.600V20h3.400l6.700-6.700A4.500 4.500 0 0 0 20 9l-3 3-3-1-1-3z"/>'], lock: ["Lock", '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'],
+  user: ["Person", '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'], users: ["People", '<circle cx="9" cy="8" r="3.5"/><path d="M2.500 20a6.500 6.500 0 0 1 13 0M16 4.800a3.500 3.500 0 0 1 0 6.400M17.500 14a6.500 6.500 0 0 1 4 6"/>'],
+  school: ["School", '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.500V16c2 2 10 2 12 0v-4.500M22 9v6"/>'], search: ["Search", '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>'],
+  link: ["Link", '<path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3A4 4 0 0 0 11 18.700l1-1"/>'], bolt: ["Lightning", '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>'],
+  bell: ["Bell", '<path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4z"/><path d="M10 21h4"/>'], flag: ["Flag", '<path d="M5 21V4M5 4h12l-2 4 2 4H5"/>'],
+  gift: ["Gift", '<rect x="3" y="9" width="18" height="4"/><path d="M5 13v8h14v-8M12 9v12M12 9c-2-4-7-3-5 0M12 9c2-4 7-3 5 0"/>'], trophy: ["Trophy", '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 14v4M8 21h8M9 18h6"/>'],
+  sun: ["Sun", '<circle cx="12" cy="12" r="3.5"/><path d="M12 3v2.500M12 18.500V21M3 12h2.500M18.500 12H21M5.600 5.600l1.800 1.800M16.600 16.600l1.800 1.800M5.600 18.400l1.800-1.800M16.600 7.400l1.800-1.800"/>'], moon: ["Moon", '<path d="M20 14.500A8 8 0 0 1 9.500 4a8 8 0 1 0 10.500 10.500z"/>']
+};
+var BM_OPEN = "", BM_PICK = "";
+function bm() {
+  if (!P.bm || typeof P.bm !== "object") P.bm = {};
+  if (!Array.isArray(P.bm.items)) P.bm.items = [];
+  if (P.bm.nw == null) P.bm.nw = true;
+  return P.bm;
+}
+function bmId() { return "b" + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); }
+function bmUrl(u) { u = String(u || "").trim(); if (!u) return ""; if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u; return safeUrl(u); }
+function bmHost(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; } }
+function bmCol(c) { return /^#[0-9a-f]{6}$/i.test(String(c || "")) ? c : ""; }
+// where an item lives: { list, i, it, parent } (parent = its folder, or null on the bar itself)
+function bmFind(id) {
+  var out = null, B = bm();
+  B.items.forEach(function (x, i) {
+    if (x.id === id) out = { list: B.items, i: i, it: x, parent: null };
+    (x.kids || []).forEach(function (k, j) { if (k.id === id) out = { list: x.kids, i: j, it: k, parent: x }; });
+  });
+  return out;
+}
+function bmIcon(x) {
+  var ic = x.ic == null ? (x.kids ? "folder" : "site") : x.ic;
+  if (!ic) return "";
+  if (ic === "site") {
+    var src = x.u ? "https://" + bmHost(x.u) + "/favicon.ico" : "";
+    if (src && bmHost(x.u) && !BADIMG[src]) return '<img class="bmfav" alt="" referrerpolicy="no-referrer" data-rm="1" loading="lazy" src="' + esc(src) + '">';
+    ic = "globe";
+  }
+  return BM_ICONS[ic] ? '<svg class="bmsvg" ' + BM_SVG + ">" + BM_ICONS[ic][1] + "</svg>" : "";
+}
+function bmStyle(x) { var c = bmCol(x.c) || bmCol(bm().col); return c ? ' style="--bmc:' + c + '"' : ""; }
+function bmLink(x, cls) {
+  var u = safeUrl(x.u);
+  return '<a class="' + cls + (bmCol(x.c) || bmCol(bm().col) ? " col" : "") + '"' + bmStyle(x) + ' href="' + esc(u || "#") + '"' + (bm().nw ? ' target="_blank"' : "") + ' rel="noopener noreferrer" title="' + esc(bmHost(u) || u) + '">' + bmIcon(x) + "<span>" + esc(x.t || bmHost(u) || "Link") + "</span></a>";
+}
+function renderBm() {
+  var el = $("bm"), B = bm();
+  if (!el) return;
+  el.hidden = !B.on;
+  if (!B.on) { el.innerHTML = ""; return; }
+  el.innerHTML = B.items.map(function (x) {
+    if (!x.kids) return bmLink(x, "bmi");
+    var open = BM_OPEN === x.id;
+    return '<div class="bmf">' + '<button class="bmi' + (bmCol(x.c) || bmCol(B.col) ? " col" : "") + (open ? " on" : "") + '"' + bmStyle(x) + ' data-a="bmfolder" data-k="' + esc(x.id) + '" aria-expanded="' + open + '">' + bmIcon(x) + "<span>" + esc(x.t || "Folder") + '</span><i class="bmcar">▾</i></button>' +
+      (open ? '<div class="menu bmmenu" role="menu">' + (x.kids.length ? x.kids.map(function (k) { return bmLink(k, "bmk"); }).join("") : '<div class="mut sn">Empty. Add links to it in Settings → Bookmarks.</div>') + "</div>" : "") + "</div>";
+  }).join("") || '<button class="bmi" data-a="setgo" data-k="Bookmarks">+ Add your first bookmark</button>';
+}
+// a click anywhere else closes an open folder; a click on a link inside it closes it too
+document.addEventListener("click", function (e) {
+  if (!BM_OPEN) return;
+  var t = e.target.closest ? e.target.closest(".bmf") : null;
+  if (!t || e.target.closest(".bmk")) { BM_OPEN = ""; setTimeout(renderBm, 0); }
+});
+// ---- Settings > Bookmarks ----
+function bmRow(x, inFolder) {
+  var B = bm(), folders = B.items.filter(function (f) { return f.kids; }), pick = BM_PICK === x.id, cur = x.ic == null ? (x.kids ? "folder" : "site") : x.ic, own = bmCol(x.c);
+  var place = x.kids ? "" : '<select data-bm="to" data-id="' + esc(x.id) + '" title="Where this link sits" aria-label="Where this link sits"><option value="">On the bar</option>' + folders.map(function (f) { return '<option value="' + esc(f.id) + '"' + (inFolder && inFolder.id === f.id ? " selected" : "") + ">In: " + esc(f.t || "Folder") + "</option>"; }).join("") + "</select>";
+  return '<div class="bmrow' + (inFolder ? " in" : "") + (x.kids ? " isf" : "") + '">' +
+    '<button class="bmicb" data-a="bmpick" data-k="' + esc(x.id) + '" title="Choose an icon" aria-label="Choose an icon">' + (bmIcon(x) || '<span class="mut">–</span>') + "</button>" +
+    '<input type="text" data-bm="t" data-id="' + esc(x.id) + '" value="' + esc(x.t || "") + '" placeholder="' + (x.kids ? "Folder name" : "Name") + '" aria-label="Name" maxlength="40">' +
+    (x.kids ? '<span class="mut sn bmfn">Folder · ' + x.kids.length + (x.kids.length === 1 ? " link" : " links") + "</span>" : '<input type="text" data-bm="u" data-id="' + esc(x.id) + '" value="' + esc(x.u || "") + '" placeholder="Address" aria-label="Address" maxlength="500">') +
+    '<span class="bmcw"><input type="color" data-bm="c" data-id="' + esc(x.id) + '" value="' + (own || bmCol(B.col) || "#8c93a3") + '" title="Color of this one' + (own ? "" : " (now: the color for all)") + '" aria-label="Color">' + (own ? '<button class="bmx" data-a="bmcolclr" data-k="' + esc(x.id) + '" title="Back to the color for all" aria-label="Remove this color">×</button>' : "") + "</span>" +
+    '<button data-a="bmmv" data-k="' + esc(x.id) + '|-1" title="Move left" aria-label="Move left">◀</button><button data-a="bmmv" data-k="' + esc(x.id) + '|1" title="Move right" aria-label="Move right">▶</button>' +
+    place + '<button data-a="bmdel" data-k="' + esc(x.id) + '" title="Remove" aria-label="Remove">✕</button>' +
+    (pick ? '<div class="bmpick">' + [["", "No icon", '<span class="mut">–</span>']].concat(x.kids ? [] : [["site", "The site's own icon", bmIcon({ u: x.u, ic: "site" })]]).concat(Object.keys(BM_ICONS).map(function (k) { return [k, BM_ICONS[k][0], '<svg class="bmsvg" ' + BM_SVG + ">" + BM_ICONS[k][1] + "</svg>"]; })).map(function (o) {
+      return '<button data-a="bmicon" data-k="' + esc(x.id + "|" + o[0]) + '" title="' + esc(o[1]) + '" aria-label="' + esc(o[1]) + '"' + (cur === o[0] ? ' class="on"' : "") + ">" + o[2] + "</button>";
+    }).join("") + "</div>" : "") + "</div>";
+}
+function renderBmSet() {
+  var el = $("bmSet"), B = bm();
+  if (!el) return;
+  $("bmOn").checked = !!B.on; $("bmNw").checked = !!B.nw;
+  $("bmColAll").value = bmCol(B.col) || "#8c93a3";
+  var act = document.activeElement, keep = act && act.dataset && act.dataset.bm && el.contains(act) ? [act.dataset.bm, act.dataset.id] : null;
+  el.innerHTML = B.items.length ? B.items.map(function (x) { return bmRow(x, null) + (x.kids || []).map(function (k) { return bmRow(k, x); }).join(""); }).join("") : '<div class="mut sn">No bookmarks yet. Add one above.</div>';
+  var fs = B.items.filter(function (f) { return f.kids; });
+  $("bmNewF").innerHTML = '<option value="">On the bar</option>' + fs.map(function (f) { return '<option value="' + esc(f.id) + '">In: ' + esc(f.t || "Folder") + "</option>"; }).join("");
+  if (keep) { var again = el.querySelector('[data-bm="' + keep[0] + '"][data-id="' + keep[1] + '"]'); if (again) again.focus(); }
+}
+function bmChanged() { persist(); renderBm(); renderBmSet(); positionClocks(); }
+function bmAct(a, k) {
+  var B = bm(), p = String(k || "").split("|"), f = bmFind(p[0]);
+  if (a === "bmfolder") { BM_OPEN = BM_OPEN === k ? "" : k; renderBm(); return; }
+  if (a === "bmadd") {
+    var u = bmUrl($("bmNewU").value), t = $("bmNewT").value.trim().slice(0, 40), to = $("bmNewF").value, msg = $("bmMsg");
+    if (!u) { msg.textContent = "Type the address of the site, for example youtube.com."; $("bmNewU").focus(); return; }
+    var item = { id: bmId(), t: t || bmHost(u), u: u }, folder = to ? bmFind(to) : null;
+    (folder && folder.it.kids ? folder.it.kids : B.items).push(item);
+    if (!B.on) B.on = true;   // adding the first one switches the bar on
+    $("bmNewU").value = ""; $("bmNewT").value = ""; msg.textContent = "Added.";
+    bmChanged(); $("bmNewU").focus(); return;
+  }
+  if (a === "bmaddf") { B.items.push({ id: bmId(), t: "Folder", kids: [] }); if (!B.on) B.on = true; bmChanged(); return; }
+  if (a === "bmcolreset") { B.col = ""; B.items.forEach(function (x) { delete x.c; (x.kids || []).forEach(function (y) { delete y.c; }); }); bmChanged(); return; }
+  if (!f) return;
+  if (a === "bmmv") { var j = f.i + (+p[1] || 0); if (j < 0 || j >= f.list.length) return; f.list.splice(f.i, 1); f.list.splice(j, 0, f.it); bmChanged(); return; }
+  if (a === "bmdel") {
+    if (f.it.kids && f.it.kids.length && !confirm('Remove the folder "' + (f.it.t || "Folder") + '" and the ' + f.it.kids.length + " link" + (f.it.kids.length === 1 ? "" : "s") + " in it?")) return;
+    f.list.splice(f.i, 1); bmChanged(); return;
+  }
+  if (a === "bmpick") { BM_PICK = BM_PICK === p[0] ? "" : p[0]; renderBmSet(); return; }
+  if (a === "bmicon") { f.it.ic = p[1] || ""; BM_PICK = ""; bmChanged(); return; }
+  if (a === "bmcolclr") { delete f.it.c; bmChanged(); return; }
+}
+// typing a name or address, picking a color, moving a link into or out of a folder
+document.addEventListener("change", function (e) {
+  var t = e.target, B = bm();
+  if (!t || !t.id && !(t.dataset && t.dataset.bm)) return;
+  if (t.id === "bmOn") { B.on = t.checked; bmChanged(); return; }
+  if (t.id === "bmNw") { B.nw = t.checked; bmChanged(); return; }
+  if (t.id === "bmColAll") { B.col = bmCol(t.value); bmChanged(); return; }
+  if (!t.dataset || !t.dataset.bm) return;
+  var f = bmFind(t.dataset.id);
+  if (!f) return;
+  if (t.dataset.bm === "t") f.it.t = t.value.trim().slice(0, 40);
+  else if (t.dataset.bm === "u") { var u = bmUrl(t.value); if (!u) { t.value = f.it.u || ""; return; } f.it.u = u; }
+  else if (t.dataset.bm === "c") f.it.c = bmCol(t.value);
+  else if (t.dataset.bm === "to") {
+    var dest = t.value ? bmFind(t.value) : null, list = dest && dest.it.kids ? dest.it.kids : B.items;
+    if (list === f.list) return;
+    f.list.splice(f.i, 1); list.push(f.it);
+  }
+  bmChanged();
+});
+document.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target && (e.target.id === "bmNewU" || e.target.id === "bmNewT")) { e.preventDefault(); bmAct("bmadd"); } });
+
 // ---- Timer, countdown and notes ----
 var AC = null;
 function audio() {
@@ -2636,7 +2795,8 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); return; }
+  if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
   if (a === "openfb") { MENU_OPEN = ""; render(); $("panel").hidden = true; FBMSG = ""; openFeedback(); return; }
   if (a === "fbkind") { fbKeep(); FB.kind = k; FBMSG = ""; openFeedback(); return; }
@@ -3179,7 +3339,7 @@ function openHelp() {
     '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +

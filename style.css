@@ -913,6 +913,45 @@ body.noshadow #srchAns{box-shadow:none}
   .auth.fb .seg button{flex:1 1 45%;white-space:normal}
 }
 
+/* ---- Bookmarks bar: one slim row at the very top of the page (scrolls away with it) ---- */
+#bm{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;align-items:center}
+#bm[hidden]{display:none}
+.bmi{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;font:inherit;font-size:11.5px;line-height:1;color:var(--fg);text-decoration:none;white-space:nowrap;background:var(--card);border:1px solid var(--line);border-radius:99px;cursor:pointer;max-width:200px}
+.bmi span{overflow:hidden;text-overflow:ellipsis}
+.bmi:hover,.bmi.on{border-color:var(--ac)}
+.bmi.col{border-color:var(--bmc)}
+.bmi.col .bmsvg,.bmk.col .bmsvg{color:var(--bmc)}
+.bmi.col:hover,.bmi.col.on{background:color-mix(in srgb,var(--bmc) 18%,transparent)}
+.bmsvg{width:13px;height:13px;flex:none;color:var(--mut)}
+.bmfav{width:13px;height:13px;flex:none;border-radius:3px;object-fit:contain}
+.bmcar{font-style:normal;font-size:9px;color:var(--mut);margin-left:-1px}
+.bmf{position:relative;display:inline-flex}
+.bmmenu{left:0;right:auto;top:calc(100% + 5px);min-width:150px;max-width:260px;max-height:60vh;overflow-y:auto;z-index:33;padding:4px;gap:1px}
+.bmk{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:7px;font-size:12.5px;color:var(--fg);text-decoration:none;white-space:nowrap}
+.bmk span{overflow:hidden;text-overflow:ellipsis}
+.bmk:hover{background:var(--acsoft)}
+.bmk.col{box-shadow:inset 2px 0 0 var(--bmc)}
+/* Settings > Bookmarks */
+.setgrp.wide{max-width:720px}
+.bmadd select,.bmrow select{max-width:130px;font-size:12.5px;padding:5px 6px}
+.setgrp .bmadd input{flex:1 1 130px}
+.bmrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px 0;border-top:1px solid var(--line)}
+.bmrow:first-child{border-top:0}
+.bmrow.in{padding-left:22px;border-top-style:dashed}
+.setgrp .bmrow input[type=text]{flex:1 1 90px;width:auto;padding:5px 8px;font-size:13px}
+.setgrp .bmrow input[data-bm=u]{flex:2 1 130px}
+.bmrow .bmfn{flex:2 1 130px}
+.bmrow button{padding:3px 7px;font-size:12px;line-height:1.3}
+.bmrow .bmicb{width:30px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.bmrow .bmicb .bmsvg,.bmrow .bmicb .bmfav{width:15px;height:15px;color:var(--fg)}
+.bmcw{position:relative;display:inline-flex;flex:none}
+.bmrow input[type=color],#bmColAll{width:26px;height:26px;padding:0;border:1px solid var(--line);border-radius:7px;background:none;cursor:pointer}
+.bmrow .bmx{position:absolute;top:-6px;right:-6px;width:15px;height:15px;padding:0;border-radius:50%;font-size:11px;line-height:1;background:var(--solid)}
+.bmpick{flex:1 0 100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:4px;padding:6px;margin:2px 0 4px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+.bmpick button{height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.bmpick button.on{border-color:var(--ac);background:var(--acsoft)}
+.bmpick .bmsvg,.bmpick .bmfav{width:16px;height:16px;color:var(--fg)}
+
 /* Settings > Notifications: the last notifications and their reason */
 .nflog{display:flex;flex-direction:column;gap:1px;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px;line-height:1.35}
 .nflog:first-child{border-top:0}
