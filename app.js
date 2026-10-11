@@ -1,4 +1,4 @@
-var VERSION = 99;
+var VERSION = 100;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5179,7 +5179,8 @@ function renderKeys() {
     return "<label>" + x[2] + ' <button class="kbd' + (cap ? " cap" : "") + (k || cap ? "" : " none") + '" data-a="keyset" data-k="' + x[0] + '">' + (cap ? "Press a key…" : esc(keyLabel(k))) + "</button></label>";
   }).join("");
   var sk = keyOf("search");
-  $("srchIn").placeholder = "Search…" + (sk && keysOn() ? "  ( " + keyLabel(sk) + " )" : "");
+  $("srchIn").placeholder = "Search… (type help for info)";
+  $("srchIn").title = "Type help and press Enter to see everything the search bar can do" + (sk && keysOn() ? ". Shortcut to jump here: " + keyLabel(sk) : "");
 }
 function openKeys() {
   var i = -1;
