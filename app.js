@@ -1,4 +1,4 @@
-var VERSION = 119;
+var VERSION = 121;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -479,6 +479,13 @@ function row(key, main, sub, right, op, cls, attr) {
   // so starred and unstarred rows start at the same place.
   var starR = !!cls && cls.indexOf(" favr") >= 0, star = f ? '<i class="fv">★</i>' : "";
   if (starR) right = star + right;
+  // Read later: news, Telegram, Reddit and videos. A saved row keeps a small mark; with the mouse on the row a button
+  // takes the place of the time (it lies over it, so the row needs no extra room).
+  if (typeof op === "string" && /^[amrv]:/.test(op) && !EDIT) {
+    var sv = isLater(op);
+    right = (sv ? '<i class="rlm" title="Saved to read later">' + laterSvg(true) + "</i>" : "") + right +
+      '<button class="rl' + (sv ? " on" : "") + '" data-a="later" data-k="' + esc(op) + '" title="' + (sv ? "Saved. Click to remove it from Read later" : "Read later") + '" aria-label="' + (sv ? "Remove from Read later" : "Read later") + '">' + laterSvg(sv) + "</button>";
+  }
   return '<div class="row' + (cls || "") + '"' + (attr || "") + '><span>' + (starR ? "" : star) + (op ? '<button class="lnk" data-a="open" data-k="' + esc(typeof op === "string" ? op : key) + '">' + main + "</button>" : main) + (sub ? " <small>" + esc(sub) + "</small>" : "") +
     '</span><span class="r">' + right + ed + "</span></div>";
 }
@@ -1144,7 +1151,7 @@ function fetchYT() {
   }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
 function openYT(id) {
-  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock on the left</button></p>');
+  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock on the left</button> ' + laterBtn("v:" + id) + "</p>");
 }
 document.addEventListener("change", function (e) {
   var ds = e.target.dataset && e.target.dataset.s;
@@ -1747,7 +1754,7 @@ function openReddit(u) {
   var img = safeUrl(x.img);
   openModal("r/" + x.s, '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" +
     (img ? '<img class="mimg rdimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
-    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + "</p>" + (PREVIEW ? previewNote() : rdComN() ? '<div id="rdCom"><p class="mut sn">Loading comments…</p></div>' : ""));
+    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + laterBtn("r:" + x.u) + "</p>" + (PREVIEW ? previewNote() : rdComN() ? '<div id="rdCom"><p class="mut sn">Loading comments…</p></div>' : ""));
   render();
   if (!PREVIEW && rdComN()) loadRdComments(u);
 }
@@ -1813,7 +1820,7 @@ function openNews(u) {
   var img = safeUrl(n.img);
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
     (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
-    (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button></p>') + more);
+    (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") + more);
   render();
 }
 function openTG(u) {
@@ -1823,7 +1830,7 @@ function openTG(u) {
   var vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th;
   var media = vid ? '<video class="mvid" controls playsinline preload="metadata"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
     : img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
-  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + "</p><p>" + linkBtn(g.u, "Open on Telegram") + "</p>" + (PREVIEW ? previewNote() : ""));
+  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + '</p><p class="tools">' + linkBtn(g.u, "Open on Telegram") + laterBtn("m:" + g.u) + "</p>" + (PREVIEW ? previewNote() : ""));
   render();
 }
 var MAIL = [], mBusy = false;
@@ -2210,7 +2217,64 @@ function startClock(kind) {
 var DONE_OPEN = false;
 var CE = (function () { try { var d = document.createElement("div"); d.setAttribute("contenteditable", "plaintext-only"); return d.contentEditable === "plaintext-only" ? "plaintext-only" : "true"; } catch (e) { return "true"; } })();
 function openTodos() { return (P.notes || []).filter(function (n) { return n.todo && !n.done; }).length; }
-function noteTab() { return P.noteTab === "note" ? "note" : "todo"; }
+function noteTab() { return P.noteTab === "note" || P.noteTab === "later" ? P.noteTab : "todo"; }
+// ---- Read later: a headline, Telegram post, Reddit post or video put aside, kept in the third tab of Notes ----
+// P.later = [{ id (what opens it: "a:<link>" news, "m:<link>" Telegram, "r:<link>" Reddit, "v:<video id>"), t, s, u, ts }],
+// newest first when shown, at most 100. Saved with your account like notes, so it is the same list on every device.
+function laterList() { return Array.isArray(P.later) ? P.later : []; }
+function isLater(id) { return laterList().some(function (x) { return x.id === id; }); }
+function laterSvg(on) { return '<svg viewBox="0 0 24 24" fill="' + (on ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg>'; }
+function laterBtn(id) { var on = isLater(id); return '<button class="laterb' + (on ? " on" : "") + '" data-a="later" data-k="' + esc(id) + '">' + laterSvg(on) + (on ? "Saved for later" : "Read later") + "</button>"; }
+// what is known about an item right now, from the box it is in
+function laterInfo(id) {
+  var k = id.charAt(0), v = id.slice(2), x;
+  if (k === "a") { x = NEWS.concat(NEWSALL).filter(function (n) { return n.u === v; })[0]; return x ? { t: x.t, s: x.s, u: x.u } : null; }
+  if (k === "m") { x = TGP.filter(function (g) { return g.u === v; })[0]; return x ? { t: String(x.tx || x.t || ""), s: x.s, u: x.u } : null; }
+  if (k === "r") { x = RD.filter(function (p) { return p.u === v; })[0]; return x ? { t: x.t, s: "r/" + x.s, u: x.u } : null; }
+  if (k === "v") { x = (YTV || []).filter(function (y) { return y.id === v; })[0]; return { t: x ? x.t : "Video", s: x ? x.n || "YouTube" : "YouTube", u: "https://www.youtube.com/watch?v=" + encodeURIComponent(v) }; }
+  return null;
+}
+function laterAct(a, k) {
+  var L = laterList().slice(), i = -1;
+  L.forEach(function (x, j) { if (x.id === k) i = j; });
+  if (a === "lateropen") {
+    var it = L[i];
+    if (!it) return;
+    var kind = it.id.charAt(0), v = it.id.slice(2);
+    // still in its box: open it the usual way; otherwise go to where it lives
+    if (kind === "v") openYT(v);
+    else if (kind === "a" && NEWS.some(function (n) { return n.u === v; })) openNews(v);
+    else if (kind === "m" && TGP.some(function (g) { return g.u === v; })) openTG(v);
+    else if (kind === "r" && RD.some(function (p) { return p.u === v; })) openReddit(v);
+    else if (safeUrl(it.u)) window.open(safeUrl(it.u), "_blank", "noopener");
+    return;
+  }
+  if (a === "later" && i < 0) {
+    var info = laterInfo(k);
+    if (!info) return;
+    L.push({ id: k, t: String(info.t || "").replace(/\s+/g, " ").trim().slice(0, 200), s: String(info.s || "").slice(0, 60), u: safeUrl(info.u), ts: Date.now() });
+    if (L.length > 100) L = L.sort(function (x, y) { return x.ts - y.ts; }).slice(L.length - 100);
+  } else if (i >= 0) L.splice(i, 1);   // "later" on a saved one, or "laterdone": off the list for good
+  else return;
+  P.later = L;
+  persist(); render(); laterRefresh();
+}
+// after a change: the buttons in an open window, and the Notes window or side panel if it is showing
+function laterRefresh() {
+  Array.prototype.forEach.call(document.querySelectorAll("#mBody .laterb"), function (b) { var on = isLater(b.dataset.k); b.classList.toggle("on", on); b.innerHTML = laterSvg(on) + (on ? "Saved for later" : "Read later"); });
+  if (sideOf("notes")) putWidget("notes");
+  else if (!$("modal").hidden && $("mTitle").textContent === "Notes") openNotes(false);
+}
+function laterHtml() {
+  var ico = { a: "news", m: "plane", r: "chat", v: "video" }, kindName = { a: "News", m: "Telegram", r: "Reddit", v: "Video" };
+  var L = laterList().slice().sort(function (x, y) { return y.ts - x.ts; });
+  return L.length ? L.map(function (x) {
+    var k = x.id.charAt(0);
+    return '<div class="lrow"><i class="lic" title="' + (kindName[k] || "") + '"><svg ' + BM_SVG + ">" + (BM_ICONS[ico[k]] || BM_ICONS.link)[1] + "</svg></i>" +
+      '<button class="lnk ltx" data-a="lateropen" data-k="' + esc(x.id) + '"><span>' + esc(x.t || x.u) + "</span><small>" + esc(x.s) + " · saved " + ago(x.ts) + " ago</small></button>" +
+      '<button class="ldone" data-a="laterdone" data-k="' + esc(x.id) + '" title="Done: take it off the list" aria-label="Done: take it off the list">✓</button></div>';
+  }).join("") : '<p class="nempty">Nothing put aside yet. Point at a headline, post or video and press the small bookmark that appears, or press <b>Read later</b> in the window that opens when you click one.</p>';
+}
 function openNotes(focus) {
   var draft = $("noteIn") ? $("noteIn").value : "";
   putWidget("notes");
@@ -2229,7 +2293,8 @@ function notesHtml() {
   };
   var seg = function (k, label, n) { return '<button data-a="notetab" data-k="' + k + '"' + (tab === k ? ' class="on"' : "") + ">" + label + (n ? " <i>" + n + "</i>" : "") + "</button>"; };
   var body;
-  if (tab === "todo") {
+  if (tab === "later") body = laterHtml();
+  else if (tab === "todo") {
     body = '<div class="tadd"><i>+</i><input type="text" id="noteIn" placeholder="Add a task and press Enter" maxlength="300" autocomplete="off"></div>' +
       (open.map(trow).join("") || '<p class="nempty">' + (done.length ? "All done. Nice." : "Nothing to do yet. Add your first task above.") + "</p>") +
       (done.length ? '<div class="tdh"><button class="lnk2" data-a="notedonetoggle">' + (DONE_OPEN ? "▾" : "▸") + " Completed (" + done.length + ")</button>" + (DONE_OPEN ? '<button class="lnk2" data-a="notecleardone">Clear</button>' : "") + "</div>" + (DONE_OPEN ? done.map(trow).join("") : "") : "");
@@ -2239,7 +2304,7 @@ function notesHtml() {
         return '<div class="ncard' + (n.pin ? " pin" : "") + '">' + text(n) + '<div class="nfoot"><small>' + new Date(n.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + "</small>" + acts(n, true) + "</div></div>";
       }).join("") + "</div>";
   }
-  return '<div class="nt2"><div class="seg">' + seg("todo", "To-do", open.length) + seg("note", "Notes", notes.length) + "</div>" + body + "</div>";
+  return '<div class="nt2"><div class="seg">' + seg("todo", "To-do", open.length) + seg("note", "Notes", notes.length) + seg("later", "Read later", laterList().length) + "</div>" + body + "</div>";
 }
 
 // ---- Notes and the calendar can live in a window, or stay docked on the left or right side of the page ----
@@ -3062,6 +3127,7 @@ document.addEventListener("click", function (e) {
   if (a === "actload") { loadActivity(); return; }
   if (a === "actout") { if (sb && USER && confirm("Sign out every other device and browser that is signed in to this account? This one stays signed in.")) sb.auth.signOut({ scope: "others" }).then(loadActivity); return; }
   if (a === "nsearch") { window.open("https://news.google.com/search?q=" + encodeURIComponent(k), "_blank", "noopener"); return; }
+  if (a === "later" || a === "laterdone" || a === "lateropen") { e.stopPropagation(); laterAct(a, k); return; }
   if (a === "open") { var ch = k.charAt(0); if (ch === "t") watchTwitch(k.slice(2)); else if (ch === "v") openYT(k.slice(2)); else if (ch === "a") openNews(k.slice(2)); else if (ch === "m") openTG(k.slice(2)); else if (ch === "r") openReddit(k.slice(2)); else if (ch === "p") openSport(k.slice(2)); else openStock(k.slice(2)); return; }
   if (a === "fav") P.fav[k] = !P.fav[k];
   if (a === "hide") P.hidden[k] = true;
@@ -3520,7 +3586,7 @@ function openHelp() {
     '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +

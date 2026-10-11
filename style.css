@@ -59,8 +59,8 @@ header.hasnext{margin-bottom:6px}
 /* The logo: the tree, a thin divider, then the name in two pictures. "OMNI" is dark in the picture, so on the dark
    theme it is turned light; "TREE" keeps its own blue. */
 #logoImg{--lh:44px;height:var(--lh);display:flex;align-items:center;gap:calc(var(--lh)*.2);flex:none;filter:drop-shadow(0 4px 14px rgba(0,0,0,.25))}
-#logoImg .lgi{height:calc(var(--lh)*.8);width:auto;display:block}
-#logoImg .lgs{width:1px;height:calc(var(--lh)*.68);background:var(--mut);opacity:.5}
+#logoImg .lgi{height:calc(var(--lh)*.56);width:auto;display:block}   /* a little taller than the letters beside it, not towering over them */
+#logoImg .lgs{width:1px;height:calc(var(--lh)*.5);background:var(--mut);opacity:.5}
 #logoImg .lgo,#logoImg .lgt{height:calc(var(--lh)*.5);width:auto;display:block}
 html[data-theme=dark] #logoImg .lgo{filter:invert(1) brightness(1.15)}
 #logoImg .lgt{margin-left:calc(var(--lh)*-.2)}
@@ -971,6 +971,28 @@ body.noshadow #srchAns{box-shadow:none}
   #srch{width:100%;margin:2px 0 0}
   #logoImg{justify-self:end}
 }
+
+/* ---- Read later: the button on a row, the mark on a saved row, the button in a window, and the list in Notes ---- */
+.rl{display:none;position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:1;padding:2px 5px;background:var(--solid)}
+.rl svg{display:block;width:14px;height:14px}
+.rl.on{color:var(--ac);border-color:var(--ac)}
+@media(hover:hover){.row:hover>.r>.rl,.rl:focus-visible{display:inline-flex}}
+.rlm{display:inline-flex;color:var(--ac);font-style:normal}
+.rlm svg{width:11px;height:11px}
+.laterb{display:inline-flex;align-items:center;gap:6px}
+.laterb svg{width:14px;height:14px}
+.laterb.on{color:var(--ac);border-color:var(--ac)}
+.lrow{display:flex;align-items:center;gap:10px;padding:7px 4px;border-top:1px solid var(--line)}
+.lrow:first-child{border-top:0}
+.lic{flex:none;display:inline-flex;color:var(--mut)}
+.lic svg{width:16px;height:16px}
+.lrow .ltx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left;font-size:13.5px;line-height:1.35}
+.lrow .ltx span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+.lrow .ltx small{color:var(--mut);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow .ldone{flex:none;padding:3px 8px;font-size:13px}
+.lrow .ldone:hover{border-color:var(--up);color:var(--up)}
+.nt2 .seg button{white-space:nowrap}
+@media(max-width:420px){.nt2 .seg button{padding:6px 3px;font-size:12px}.nt2 .seg i{margin-left:3px;padding:1px 5px}}
 
 /* ---- Less empty room above a box's title: the title row starts closer to the top edge (12px saved per box) ---- */
 #grid .card:not(.compact){padding-top:8px}
