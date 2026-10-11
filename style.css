@@ -318,9 +318,9 @@ label.add{display:flex;justify-content:space-between;align-items:center;gap:8px;
 #clocks{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;z-index:9;display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;pointer-events:none}
 #clocks .clk{pointer-events:auto}
 #clocks[hidden]{display:none}
-.clk{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 6px 3px 12px;font-size:14px;box-shadow:var(--shadow)}
+.clk{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:1px 3px 1px 9px;font-size:11.5px;line-height:1.3;box-shadow:var(--shadow)}
 .clk b{font-variant-numeric:tabular-nums}
-.clk button{padding:0 8px;border-radius:99px}
+.clk button{padding:0 5px;border-radius:99px;font-size:10.5px;line-height:1.5;min-height:0}
 .clk.done{background:var(--ac);color:var(--acfg);border-color:var(--ac);animation:pulse 1s 4;box-shadow:0 0 24px var(--acglow)}
 .clk.done button[data-a=clstop]{background:var(--acfg);color:var(--ac);border-color:var(--acfg);font-weight:600}
 @keyframes pulse{50%{opacity:.55}}
@@ -833,6 +833,12 @@ body.noshadow #srchAns{box-shadow:none}
 #peek.fpk img{height:120px;object-position:top}
 .fpkh span{font-weight:600;line-height:1.25}
 .fpkh small{font-weight:400}
+
+/* ---- "!" for a problem in a box, and its window ---- */
+.errb{font-weight:800;min-width:1.9em;justify-content:center}
+.berr{padding:8px 0;border-bottom:1px solid var(--line)}
+.berr:last-of-type{border-bottom:0}
+.berr p{margin:3px 0 0;overflow-wrap:anywhere}
 
 /* ---- Special days in the calendar ---- */
 .calg.wk{grid-template-columns:1.5em repeat(7,1fr)}

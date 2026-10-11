@@ -1,4 +1,4 @@
-var VERSION = 85;
+var VERSION = 87;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -367,6 +367,56 @@ function refreshBox(id) {
   REFRESH[id](); render();
   setTimeout(render, 1300);
 }
+// ---- Problems in a box: a small "!" among the box's buttons, only while something is wrong. A click opens a window
+// that says what failed, why, since when, and what you can do. The box itself keeps showing what it has.
+var ERRSINCE = {};
+function boxErrs(id) {
+  var out = [], add = function (what, why, fix) { out.push({ what: what, why: why || "", fix: fix || "" }); };
+  var later = "This usually clears by itself at the next refresh. The ↻ button tries again now.";
+  if (PREVIEW) return out;
+  if (id === "news") {
+    NERRK.forEach(function (name) {
+      var why = String(NWHY[name] || "no reason given");
+      add("The source “" + name + "” delivered no headlines", errPlain(why),
+        "The other sources are not affected. If it stays like this for hours, the feed address may have changed: remove the source in Settings and add it again with its current feed address.");
+    });
+    if (NERR && !NERRK.length) add("The news could not be loaded", errPlain(NERR), later);
+  }
+  if (id === "telegram" && NERR && !NERRK.length && !TGP.length) add("The Telegram posts could not be loaded", errPlain(NERR), later);
+  if (id === "stocks" && QERR) add("The prices could not be loaded", errPlain(QERR), "The list shows the last prices it had. " + later);
+  if (id === "youtube") {
+    if (YTERR) add("The videos could not be loaded", errPlain(YTERR), later);
+    else if (YTDOWN) add("YouTube's upload feed is not answering", "YouTube's own feed service returned nothing for most of your channels. This is on YouTube's side.", "The box shows the last videos it loaded. It comes back by itself when YouTube's feed does.");
+  }
+  if (id === "reddit" && RDERR) add("Reddit could not be loaded", errPlain(RDERR), (RD.length ? "The box shows the last posts it had. " : "") + "Reddit limits how often it can be asked; it usually works again within a few minutes.");
+  if (id === "sports" && SPERR) add("The scores could not be loaded", errPlain(SPERR), later);
+  var now = Date.now(), seen = {};
+  out.forEach(function (e) { var k = id + "|" + e.what; seen[k] = 1; e.since = ERRSINCE[k] = ERRSINCE[k] || now; });
+  Object.keys(ERRSINCE).forEach(function (k) { if (k.indexOf(id + "|") === 0 && !seen[k]) delete ERRSINCE[k]; });   // gone again: forget when it started
+  return out;
+}
+// the short technical reason, with the usual ones put into plain words
+function errPlain(why) {
+  why = String(why || "").trim();
+  var hint = /\b40[136]\b/.test(why) ? "The site refused the request." : /\b429\b|rate limit/i.test(why) ? "The site says it is being asked too often." : /\b50\d\b/.test(why) ? "The site itself is having trouble." :
+    /timed out|timeout/i.test(why) ? "The site took too long to answer." : /unreachable|failed to fetch|network/i.test(why) ? "The site could not be reached." : /0 items/.test(why) ? "The site answered, but with no headlines in it." :
+    /non-2xx|edge function|functions?\b.*(error|fail)/i.test(why) ? "Your Supabase function did not answer properly." : "";
+  return (hint ? hint + " " : "") + "(Technical: " + why.slice(0, 400) + ")";
+}
+function openBoxErr(id) {
+  var list = boxErrs(id);
+  openModal("Problem in " + (BOX_NAMES[id] || id), list.length ? list.map(function (e) {
+    return '<div class="berr"><b>' + esc(e.what) + "</b><p>" + esc(e.why) + '</p><p class="mut sn">Since ' + esc(when(e.since)) + (Date.now() - e.since > 90000 ? " (" + ago(e.since) + " ago)" : "") + ". " + esc(e.fix) + "</p></div>";
+  }).join("") + '<p class="tools"><button data-a="refresh" data-k="' + id + '">↻ Try again now</button>' + (id === "news" || id === "telegram" || id === "reddit" ? '<button data-a="setgo" data-k="News">Open the sources in Settings</button>' : "") + "</p>"
+    : '<p class="mut">Everything in this box is working again.</p>');
+}
+// opens Settings on the section whose name starts with the given word
+function openSettingsAt(name) {
+  var ix = -1;
+  Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
+  closeModal(); $("panel").hidden = false;
+  if (ix >= 0) setSec(ix);
+}
 function tile(id, title, body, click, hx) {
   var c = LAY().c[id] || DEF_C[id] || 3, t = "", at = "", cp = COMPACT.indexOf(id) >= 0;
   if (click) {
@@ -384,7 +434,8 @@ function tile(id, title, body, click, hx) {
   }
   var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
-  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb ? '<div class="hc">' + (hx || "") + rb + "</div>" : "") + "</div>";
+  var errs = cp ? [] : boxErrs(id), eb = errs.length ? '<button class="ib sm errb" data-a="boxerr" data-k="' + id + '" title="' + esc(errs.length > 1 ? errs.length + " problems. Click for the details." : errs[0].what + ". Click for the details.") + '" aria-label="Problem in this box">!</button>' : "";
+  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
   return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
@@ -427,7 +478,6 @@ function render() {
   T.live = tile("live", "", radioHtml(), "radinfo");   // a click on the box itself (not on its controls) shows what is playing
   var allSrc = newsSrc().map(function (x) { return x.name; });
   var nb, nNew = 0;
-  var errNote = NERRK.length ? '<div class="empty sn">' + NERRK.length + " source" + (NERRK.length > 1 ? "s" : "") + ' unavailable right now (<button class="lnk2" data-a="setpanel" title="' + esc(NERR) + '">details</button>)</div>' : "";
   if (NEWS.length) {
     var nowN = Date.now();
     NG = newsGroups();
@@ -436,7 +486,7 @@ function render() {
     var gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !READ[x.u]; }); };
     nNew = NG.filter(gNew).length;
     var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
-    nb = errNote + (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
+    nb = (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
       // n = the story's latest headline; t0 = when it was first reported, which is where it stays in the list
       var n = g[0], srcs = g.src || g.map(function (x) { return x.s; }), t0 = g.t0 || n.ts, b = g.fav ? "★ Favorite sources" : bucket(t0);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
@@ -448,7 +498,7 @@ function render() {
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
-    }).join(""), 6) + '<div class="empty">' + (NERR ? "News unavailable: " + esc(NERR) : "Sample headlines. Sign in to load your sources.") + "</div>";
+    }).join(""), 6) + '<div class="empty">' + (NERR ? "The news could not be loaded. Press ! above for the details." : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
   var newBtn = function (n, box) { return n ? '<button class="pill ac newp" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + " new</button>" : ""; };
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
@@ -466,7 +516,7 @@ function render() {
     var cls = (isNewItem(g, "tg") && !READ[g.u] ? " new" : "") + (READ[g.u] ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join("") + (PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (NERR ? "Unavailable: " + esc(NERR) : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
+  }).join("") + (PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -497,8 +547,7 @@ function render() {
     var per = {};
     vids = vids.filter(function (v) { per[v.n] = (per[v.n] || 0) + 1; return per[v.n] <= 2; });
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
-    yb = (YTERR ? '<div class="empty">Videos unavailable: ' + esc(YTERR) + "</div>" : "") +
-      (YTDOWN && vids.length ? '<div class="empty sn" title="YouTube\'s upload feed is not answering. This is on YouTube\'s side and comes back by itself.">YouTube\'s feed is down right now · showing the last loaded videos</div>' : "") + (vids.length ? lst("youtube", vids.map(function (v) {
+    yb = (vids.length ? lst("youtube", vids.map(function (v) {
       return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), PREVIEW ? 0 : "v:" + v.id);
     }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : USER ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
   } else {
@@ -515,7 +564,7 @@ function render() {
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
-  T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit unavailable: ' + esc(RDERR) + "</div>" : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
+  T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !READ[x.u] ? " new" : "") + (READ[x.u] ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
@@ -545,7 +594,7 @@ function render() {
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
-  T.stocks = tile("stocks", "Stocks", (QERR ? '<div class="empty">Prices unavailable: ' + esc(QERR) + "</div>" : "") + (st.length ? lst("stocks", st.map(function (x) {
+  T.stocks = tile("stocks", "Stocks", (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[tk(x.id)];
     // the day chart takes its color from today's change (the number next to it); a week or month chart from its own direction
     var rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
@@ -2498,6 +2547,8 @@ document.addEventListener("click", function (e) {
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
   if (a === "setfind") { setFind(+k); return; }
+  if (a === "boxerr") { openBoxErr(k); return; }
+  if (a === "setgo") { openSettingsAt(k); return; }
   if (a === "sdset") { sdSet(k, b.checked); return; }
   if (a === "nextday") { if (/^\d{4}-\d\d-\d\d$/.test(k || "")) { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); } return; }
   if (a === "langtoggle") { setLang(k, b.checked); return; }
