@@ -1,4 +1,4 @@
-var VERSION = 82;
+var VERSION = 83;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -204,6 +204,10 @@ function applyTheme() {
   $("srcNamesOn").checked = !P.hideSrc;
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
   $("volSlider").value = P.vol == null ? 70 : P.vol;
+  // the "next in your calendar" line under the date: your own color, or the accent color
+  var nc = /^#[0-9a-f]{6}$/i.test(P.nextCol || "") ? P.nextCol : "";
+  if (nc) r.style.setProperty("--nextc", nc); else r.style.removeProperty("--nextc");
+  $("cNext").value = nc || P.accent;
   applyBoxCols();
 }
 function applyWall() {
@@ -1625,7 +1629,9 @@ function positionClocks() {
   var box = $("clocks");
   box.hidden = !alarms().length;
   var mail = document.querySelector('[data-id="mail"]'), dateEl = $("date");
-  box.style.left = (mail ? Math.round(mail.getBoundingClientRect().left) : 16) + "px";
+  // level with the mail box, but never on top of the "next in your calendar" line when that one is long
+  var nu = $("nextUp"), clear = nu && !nu.hidden ? Math.round(nu.getBoundingClientRect().right) + 14 : 0;
+  box.style.left = Math.max(mail ? Math.round(mail.getBoundingClientRect().left) : 16, clear) + "px";
   box.style.top = (dateEl ? Math.round(dateEl.getBoundingClientRect().top) : 14) + "px";
 }
 function startStopwatch() {
@@ -2556,6 +2562,8 @@ $("cMut").oninput = function (e) { setCol("mut", e.target.value); };
 $("cAlpha").oninput = function (e) { setCol("a", +e.target.value); };
 $("fsAll").oninput = function (e) { P.fs = e.target.value / 100; persist(); applyTheme(); render(); };
 $("cReset").onclick = function () { if (P.colors) delete P.colors[P.theme]; persist(); applyTheme(); };
+$("cNext").oninput = function (e) { P.nextCol = e.target.value; persist(); applyTheme(); };
+$("cNextReset").onclick = function () { delete P.nextCol; persist(); applyTheme(); };
 $("accentReset").onclick = function () { P.accent = DEFAULT_ACCENT; persist(); applyTheme(); };
 $("wallFile").onchange = function (e) { if (e.target.files[0]) setWall(e.target.files[0]); };
 $("wallClear").onclick = function () { try { localStorage.removeItem("sp_wall"); } catch (e) {} applyWall(); syncWall(true); };
@@ -3112,6 +3120,7 @@ function renderNextUp() {
   var el = $("nextUp"), n = nextUp();
   el.hidden = !n;
   document.querySelector("header").classList.toggle("hasnext", !!n);
+  setTimeout(positionClocks, 0);   // the timers make room for the line
   if (!n) return;
   el.dataset.k = n.ds;
   el.textContent = (n.k === 0 ? "Today" : n.k === 1 ? "Tomorrow" : dayLabel(n.ds) + (n.k > 7 ? ", in " + n.k + " days" : "")) + (n.first.tm ? " " + n.first.tm : "") + " · " + (n.first.b ? "🎂 " : "") + n.first.t + (n.more ? "  +" + n.more : "");
