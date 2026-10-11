@@ -1,11 +1,11 @@
 // OmniTree admin overview.
 // This page holds no data of its own. Everything comes from the feeds function, which first asks Supabase who is
 // signed in and only answers when that is the site owner's confirmed email. Anyone else who opens this page gets "Not allowed".
-// Three tabs: Visitors (everyone who opened the front page, by IP address), Accounts, and What is used.
+// Four tabs: Visitors (everyone who opened the front page, by IP address), Accounts, What is used, and Feedback.
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {};
+  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, FF = "todo", FK = "all", FOPEN = {};
   try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
   // use the accent colour chosen on the main page, if there is one
   try {
@@ -74,13 +74,34 @@
   var ACT = {
     "open-a": "opened a headline", "open-m": "opened a Telegram post", "open-r": "opened a Reddit post", "open-t": "opened a stream", "open-v": "opened a video", "open-p": "opened a game", "open-s": "opened a stock",
     refresh: "pressed reload", nseen: "cleared “new”", nfilt: "filtered headlines", filtmenu: "opened Sources", filttoggle: "showed / hid a source", opennotes: "opened notes", opencal: "opened the calendar", bellmenu: "opened the bell",
-    cogmenu2: "opened the cogwheel menu", clockmenu2: "opened the timer menu", acctmenu2: "opened the account menu", setpanel: "opened Settings", setsec: "changed Settings section", editmode: "edited the layout", openhelp: "opened Help", openbrief: "opened the summary",
+    cogmenu2: "opened the cogwheel menu", clockmenu2: "opened the timer menu", acctmenu2: "opened the account menu", setpanel: "opened Settings", setsec: "changed Settings section", editmode: "edited the layout", openhelp: "opened Help", openfb: "opened Feedback", fbsend: "sent feedback", openbrief: "opened the summary",
     noteadd: "added a note / task", notedone: "ticked a task", notetab: "switched notes tab", notedel: "deleted a note", notepin: "pinned a note", calday: "picked a day", calnav: "changed month", dock: "docked a player", undock: "closed a docked player",
     dockchat: "toggled docked chat", twpop: "popped out a stream", twchat: "popped out chat", sidedock: "docked a panel", toastgo: "opened a notification", toastx: "dismissed a notification", bellgo: "opened from history",
     weather: "opened weather", mail: "opened mail", mailread: "marked mail read", spfav: "starred a team", fav: "starred something", hide: "hid an item", boxoff: "hid a box", boxtoggle: "switched a box", signout: "signed out",
     radplay: "played the radio", radstop: "stopped the radio", radvol: "opened the volume", radinfo: "looked at the song", more: "pressed “show more”", fighter: "opened a fighter", nextday: "opened the next event", boxerr: "opened a problem"
   };
   function clickLabel(k) { var p = k.split(":"), w = BOXES[p[0]] || WHERE[p[0]] || p[0]; return w + ": " + (ACT[p[1]] || p[1]); }
+  // feedback types: name in the list, then the questions the sender answered (same order as in the Feedback window)
+  var FBK = { bug: ["Bug", "What went wrong", "How to make it happen again", "What was expected"], improve: ["Improvement", "What should be better", "How it should work", ""], idea: ["New idea", "What it should do", "When it would be used", ""], other: ["Other", "Message", "", ""] };
+  function fbWho(f, byId) { var u = f.user_id && byId[f.user_id]; return u ? u.email : f.contact || (f.user_id ? "a deleted account" : ""); }
+  function fbAct(kind, id) {
+    var f = D && (D.feedback || []).filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!f) return;
+    if (kind === "copy") {
+      var k = FBK[f.kind] || FBK.other, byId = {}; (D.users || []).forEach(function (u) { byId[u.id] = u; });
+      var txt = ["[" + k[0] + "] " + f.title, "About: " + (f.area || "–") + (f.freq ? " · " + f.freq : ""), "From: " + (fbWho(f, byId) || "no name") + " · " + stamp(Date.parse(f.at))];
+      [[k[1], f.a], [k[2], f.b], [k[3], f.c]].forEach(function (p) { if (p[0] && p[1]) txt.push("", p[0] + ":", p[1]); });
+      if (f.info) txt.push("", "Version " + f.info.v + " · " + device(f.info.ua) + " · window " + f.info.win + " · " + f.info.theme + " theme");
+      try { navigator.clipboard.writeText(txt.join("\n")).then(function () { msg("Copied."); }, function () { msg("Could not copy."); }); } catch (e) { msg("Could not copy."); }
+      return;
+    }
+    if (kind === "del" && !confirm("Delete this feedback?\n\n" + f.title)) return;
+    msg("Working…");
+    call(kind === "del" ? { op: "fbdel", id: f.id } : { op: "fbset", id: f.id, status: kind }).then(function () {
+      if (kind === "del") D.feedback = D.feedback.filter(function (x) { return x !== f; }); else f.status = kind;
+      msg(""); render();
+    }).catch(function (e) { msg("That did not work: " + e.message); });
+  }
   function panel(title, hint, body, cls) { return '<div class="apanel ' + (cls || "") + '"><h2>' + title + "</h2>" + (hint ? '<p class="ahint">' + hint + "</p>" : "") + body + "</div>"; }
 
   // ---- the page ----
@@ -119,7 +140,8 @@
       tile(count(ips7), "visitors, last 7 days", "different IP addresses") +
       tile(users.length, "accounts", new7 ? new7 + " new in the last 7 days" : "none new this week") +
       tile(DAY[today].users, "accounts used today", dur(DAY[today].secs) + " on the site in total") + "</div>";
-    var tabs = [["visitors", "Visitors"], ["accounts", "Accounts"], ["usage", "What is used"]];
+    var fbs = D.feedback || [], fbNew = fbs.filter(function (f) { return f.status === "new"; }).length;
+    var tabs = [["visitors", "Visitors"], ["accounts", "Accounts"], ["usage", "What is used"], ["feedback", "Feedback" + (fbNew ? ' <i class="tabn">' + fbNew + " new</i>" : "")]];
     h += '<div class="atabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '"' + (TAB === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div>";
 
     if (TAB === "visitors") {
@@ -190,7 +212,39 @@
         panel("What people do most", "Button presses by signed-in accounts, last 30 days: which box, and what was pressed.", hbars(Object.keys(CLK).sort(function (a, b) { return CLK[b] - CLK[a]; }).slice(0, 14).map(function (k) { return [clickLabel(k), CLK[k]]; })), "w6") +
         panel("Boxes people keep switched on", "Out of " + withPrefs.length + " account" + (withPrefs.length === 1 ? "" : "s") + " that have saved settings.", hbars(Object.keys(BOXES).map(function (k) { return [BOXES[k], withPrefs.filter(function (u) { return prefs[u.id].off.indexOf(k) < 0; }).length]; }).sort(function (a, b) { return b[1] - a[1]; })), "w6") + "</div>";
     }
-    $("aQ").placeholder = TAB === "visitors" ? "Find an IP, country or email…" : "Find an account…";
+    if (TAB === "feedback") {
+      if (D.feedbackErr) h += '<div class="apanel w12 awarn"><b>Feedback cannot be received yet.</b> <span class="mut">' + esc(D.feedbackErr) + "</span></div>";
+      var cnt = function (fn) { return fbs.filter(fn).length; }, chip = function (attr, cur, k, l, n) { return "<button " + attr + '="' + k + '"' + (cur === k ? ' class="on"' : "") + ">" + l + (n == null ? "" : " " + n) + "</button>"; };
+      var flist = fbs.filter(function (f) {
+        if (FF === "todo" ? f.status === "done" : FF !== "all" && f.status !== FF) return false;
+        if (FK !== "all" && f.kind !== FK) return false;
+        return !Q || [f.title, f.a, f.b, f.c, f.area, f.contact, fbWho(f, byId)].join(" ").toLowerCase().indexOf(Q) >= 0;
+      });
+      h += '<div class="apanel w12"><h2>Feedback <span class="achips">' +
+        chip("data-ff", FF, "todo", "To do", cnt(function (f) { return f.status !== "done"; })) + chip("data-ff", FF, "new", "New", fbNew) + chip("data-ff", FF, "doing", "Working on", cnt(function (f) { return f.status === "doing"; })) + chip("data-ff", FF, "done", "Done", cnt(function (f) { return f.status === "done"; })) + chip("data-ff", FF, "all", "Everything") +
+        '<b class="asep"></b>' + chip("data-fk", FK, "all", "All types") + Object.keys(FBK).map(function (k) { return chip("data-fk", FK, k, FBK[k][0], cnt(function (f) { return f.kind === k; })); }).join("") + "</span></h2>" +
+        '<p class="ahint">What people sent from the cogwheel → Feedback, newest first. Click a line to read it and to mark it as being worked on or done.</p>' +
+        '<div class="tablewrap"><table class="atable"><thead><tr><th>Type</th><th>In one line</th><th>About</th><th>From</th><th>Sent</th><th>Status</th></tr></thead><tbody>' +
+        (flist.map(function (f) {
+          var k = FBK[f.kind] || FBK.other, t = Date.parse(f.at), who = fbWho(f, byId), info = f.info || null;
+          var out = '<tr class="frow' + (f.status === "new" ? " isnew" : "") + '" data-f="' + f.id + '"><td><span class="tag k-' + esc(f.kind) + '">' + k[0] + '</span></td><td class="mail">' + esc(f.title) + "</td><td>" + esc(f.area || "–") + "</td><td>" + (who ? esc(who) : '<span class="mut">no name</span>') + '</td><td class="num" title="' + esc(stamp(t)) + '">' + ago(t) + "</td><td>" + (f.status === "done" ? '<span class="mut">done</span>' : f.status === "doing" ? '<span class="tag y">working on</span>' : '<span class="tag bad">new</span>') + "</td></tr>";
+          if (FOPEN[f.id]) {
+            var parts = [[k[1], f.a], [k[2], f.b], [k[3], f.c]].filter(function (p) { return p[0] && p[1]; });
+            if (f.freq) parts.push(["How often", f.freq]);
+            var tech = info ? [["Site version", info.v], ["Device", device(info.ua)], ["Window", info.win], ["Screen", info.scr], ["Theme", info.theme], ["Language", info.lang], ["Time zone", info.tz], ["Boxes switched off", (info.off || []).map(function (b) { return BOXES[b] || b; }).join(", ") || "none"]].filter(function (p) { return p[1] != null && p[1] !== ""; }) : [];
+            var mail = /^[^\s@]+@[^\s@]+$/.test(who) ? who : "";
+            out += '<tr class="udetail"><td colspan="6"><div class="fd"><div>' + parts.map(function (p) { return "<h3>" + esc(p[0]) + '</h3><p class="ftxt">' + esc(p[1]) + "</p>"; }).join("") + "</div><div>" +
+              (tech.length ? "<h3>Technical details</h3><div class=\"fkv\">" + tech.map(function (p) { return "<span>" + esc(p[0]) + "</span><b>" + esc(p[1]) + "</b>"; }).join("") + "</div>" : '<h3>Technical details</h3><p class="mut sn">Not attached.</p>') +
+              (info && info.errs && info.errs.length ? "<h3>Was failing to load at that moment</h3>" + info.errs.map(function (x) { return '<p class="ftxt sn">' + esc(x) + "</p>"; }).join("") : "") +
+              '<p class="mut sn">Sent ' + esc(stamp(t)) + " from " + esc(f.ip || "unknown") + (f.user_id ? "" : " · not signed in") + "</p>" +
+              '<div class="uacts">' + (f.status !== "doing" ? '<button data-fb="doing" data-id="' + f.id + '">Working on it</button>' : "") + (f.status !== "done" ? '<button data-fb="done" data-id="' + f.id + '">Done</button>' : "") + (f.status !== "new" ? '<button data-fb="new" data-id="' + f.id + '">Back to new</button>' : "") +
+              (mail ? '<a class="btn" href="mailto:' + esc(mail) + "?subject=" + encodeURIComponent("OmniTree feedback: " + f.title) + '">Answer by email</a>' : "") +
+              '<button data-fb="copy" data-id="' + f.id + '">Copy as text</button><button class="danger" data-fb="del" data-id="' + f.id + '">Delete</button></div></div></div></td></tr>';
+          }
+          return out;
+        }).join("") || '<tr><td colspan="6" class="mut">' + (fbs.length ? "Nothing here. Try another filter." : "No feedback yet.") + "</td></tr>") + "</tbody></table></div></div>";
+    }
+    $("aQ").placeholder = TAB === "visitors" ? "Find an IP, country or email…" : TAB === "feedback" ? "Find in feedback…" : "Find an account…";
     $("aQ").style.visibility = TAB === "usage" ? "hidden" : "";
     $("aBody").innerHTML = h;
   }
@@ -210,6 +264,14 @@
     var b = e.target.closest("[data-act]");
     if (b) { e.stopPropagation(); act(b.dataset.act, b.dataset.id); return; }
     if (!D) return;
+    var fb = e.target.closest("[data-fb]");
+    if (fb) { fbAct(fb.dataset.fb, fb.dataset.id); return; }
+    var ff = e.target.closest("[data-ff]");
+    if (ff) { FF = ff.dataset.ff; render(); return; }
+    var fk = e.target.closest("[data-fk]");
+    if (fk) { FK = fk.dataset.fk; render(); return; }
+    var frow = e.target.closest("tr.frow");
+    if (frow) { FOPEN[frow.dataset.f] = !FOPEN[frow.dataset.f]; render(); return; }
     var tab = e.target.closest("[data-tab]");
     if (tab) { TAB = tab.dataset.tab; render(); return; }
     var vf = e.target.closest("[data-vf]");

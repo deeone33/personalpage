@@ -1,4 +1,4 @@
-var VERSION = 93;
+var VERSION = 96;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -590,7 +590,7 @@ function render() {
     '<div class="dd"><button data-a="bellmenu" class="ib" aria-label="Notifications" title="Notifications" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "bell") + '"><svg ' + IC + '><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg>' + (missed() ? "<span>" + missed() + "</span>" : "") + "</button>" +
       (MENU_OPEN === "bell" ? bellHtml() : "") + "</div>" +
     '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
-      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="openbrief">Summary</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
+      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="openbrief">Summary</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openfb">Feedback</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
@@ -1677,6 +1677,8 @@ function renderClocks() {
 function positionClocks() {
   var box = $("clocks");
   box.hidden = !alarms().length;
+  // phones: the timers are a row of their own above the boxes (see the stylesheet), nothing to line up
+  if (window.innerWidth <= 820) { box.style.left = box.style.top = ""; var f0 = box.querySelector(".clk"); if (f0) f0.style.marginRight = ""; return; }
   var mail = document.querySelector('[data-id="mail"]'), dateEl = $("date");
   // Level with the mail box. When the "next in your calendar" line is too long for that, the timers line up with the
   // boxes further right instead: the first above the Radio box, the second above the menu box.
@@ -2511,6 +2513,9 @@ document.addEventListener("click", function (e) {
   if (a === "locpick") { locPick(+k); return; }
   if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
+  if (a === "openfb") { MENU_OPEN = ""; render(); $("panel").hidden = true; FBMSG = ""; openFeedback(); return; }
+  if (a === "fbkind") { fbKeep(); FB.kind = k; FBMSG = ""; openFeedback(); return; }
+  if (a === "fbsend") { fbSend(); return; }
   if (a === "helpjump") { var sec = $("help-" + k); if (sec) sec.scrollIntoView({ block: "start" }); return; }
   if (a === "copycode") {
     var code = $("gsCode").textContent;
@@ -2545,6 +2550,8 @@ document.addEventListener("click", function (e) {
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") { spToggleFav(k, SP_OPEN); return; }
   if (a === "fighter") { openFighter(k); return; }
+  if (a === "spside") { SP_SIDE = k === "a" ? "a" : "h"; var se = spFind(SP_OPEN), sd = se && SP_SUM[se.id]; if (sd) spSumDraw(se, sd.d); return; }
+  if (a === "spses") { SP_SES = k; openSport(SP_OPEN); return; }
   if (a === "sptoggle") { spToggleLeague(k, b.checked); return; }
   if (a === "spreset") { delete P.spLeagues; persist(); render(); fetchSports(true); return; }
   if (a === "setsec") { setSec(+k); return; }
@@ -2756,6 +2763,72 @@ function deleteAccount() {
 // ---- Visitor log for the site owner: one line per visit to the front page, signed in or not ----
 // The database itself notes the IP address and country the request came from; the page only adds where the visitor
 // came from (the site's name, not the full address), their language and their time zone. Once per page load.
+// ---- Feedback (cogwheel → Feedback): a bug, an improvement or an idea, sent to the site owner ----
+// What is typed is kept in FB while the page is open, so switching type or closing the window by mistake loses nothing.
+var FB = { kind: "bug", area: "", freq: "", title: "", a: "", b: "", c: "", contact: "", tech: true }, FBMSG = "", FBBUSY = false;
+var FB_KINDS = [["bug", "Something is broken"], ["improve", "Make it better"], ["idea", "Something new"], ["other", "Other"]];
+var FB_AREAS = ["The whole page", "News", "Telegram", "Reddit", "Twitch", "YouTube", "Stocks", "Sports", "Mail", "Weather", "Radio", "Calendar", "Notes & to-dos", "Timers & alarms", "Search bar", "Settings", "Account & sign-in", "Setup guide", "Layout & looks", "Notifications", "Phone / small screen", "Something else"];
+var FB_FREQ = ["Every time", "Often", "Sometimes", "It happened once"];
+// per type: the one-line placeholder, then the questions [field, label, placeholder, rows]
+var FB_Q = {
+  bug: ["e.g. Sports box shows the wrong score", [["a", "What went wrong?", "What you saw, and any message that was on the screen.", 3], ["b", "How can it be made to happen again?", "1. I opened …\n2. I clicked …\n3. Then …", 3], ["c", "What did you expect to happen? (optional)", "", 2]]],
+  improve: ["e.g. Make the stock chart bigger", [["a", "What should be better?", "What it is like today and what bothers you about it.", 3], ["b", "How would you like it to work? (optional)", "", 3]]],
+  idea: ["e.g. A box for podcasts", [["a", "What should it do?", "Describe it as if it already existed.", 3], ["b", "When would you use it? (optional)", "", 2]]],
+  other: ["What is it about?", [["a", "Your message", "", 5]]]
+};
+function fbKeep() {
+  var v = function (id, key) { if ($(id)) FB[key] = $(id).value; };
+  v("fbArea", "area"); v("fbFreq", "freq"); v("fbTitle", "title"); v("fbA", "a"); v("fbB", "b"); v("fbC", "c"); v("fbContact", "contact");
+  if ($("fbTech")) FB.tech = $("fbTech").checked;
+}
+// what is attached when "technical details" is ticked: enough to find a bug, nothing the person has saved
+function fbInfo() {
+  var off = [], errs = [], tz = "";
+  ["weather", "mail", "live", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"].forEach(function (id) {
+    try { if (boxOff(id)) off.push(id); else boxErrs(id).forEach(function (x) { errs.push((id + ": " + x.what + " – " + x.why).slice(0, 160)); }); } catch (e) {}
+  });
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+  return { v: VERSION, ua: String(navigator.userAgent || "").slice(0, 300), win: innerWidth + "x" + innerHeight, scr: screen.width + "x" + screen.height, theme: document.documentElement.getAttribute("data-theme") || "", lang: navigator.language || "", tz: tz, off: off, errs: errs.slice(0, 8) };
+}
+function openFeedback() {
+  var q = FB_Q[FB.kind] || FB_Q.other, opt = function (list, cur, first) { return '<option value="">' + first + "</option>" + list.map(function (x) { return "<option" + (x === cur ? " selected" : "") + ">" + esc(x) + "</option>"; }).join(""); };
+  openModal("Feedback", '<div class="auth fb"><div class="seg">' + FB_KINDS.map(function (x) { return '<button data-a="fbkind" data-k="' + x[0] + '"' + (FB.kind === x[0] ? ' class="on"' : "") + ">" + x[1] + "</button>"; }).join("") + "</div>" +
+    '<div class="fbrow"><label>What is it about?<select id="fbArea">' + opt(FB_AREAS, FB.area, "Choose…") + "</select></label>" +
+    (FB.kind === "bug" ? '<label>How often does it happen?<select id="fbFreq">' + opt(FB_FREQ, FB.freq, "Choose…") + "</select></label>" : "") + "</div>" +
+    '<label>In one line<input type="text" id="fbTitle" maxlength="120" autocomplete="off" placeholder="' + esc(q[0]) + '"></label>' +
+    q[1].map(function (f) { return "<label>" + f[1] + '<textarea id="fb' + f[0].toUpperCase() + '" rows="' + f[3] + '" maxlength="3000" placeholder="' + esc(f[2]) + '"></textarea></label>'; }).join("") +
+    (USER ? "" : '<label>Your email (optional, only if you want an answer)<input type="email" id="fbContact" maxlength="150" autocomplete="email" placeholder="you@example.com"></label>') +
+    '<label class="fbchk"><input type="checkbox" id="fbTech"' + (FB.tech ? " checked" : "") + '><span>Attach technical details <span class="mut">(site version, browser, window size, theme, which boxes are switched off and what is failing to load right now; nothing you have saved)</span></span></label>' +
+    '<div id="fbMsg" class="sn" role="status">' + esc(FBMSG) + "</div>" +
+    '<button class="pri" data-a="fbsend">Send feedback</button>' +
+    '<p class="mut sn">' + (USER ? "Sent with your account email, so you can get an answer." : "You do not need an account to send this.") + " The more detail, the easier it is to fix or build.</p></div>");
+  $("fbTitle").value = FB.title;
+  q[1].forEach(function (f) { $("fb" + f[0].toUpperCase()).value = FB[f[0]] || ""; });
+  if ($("fbContact")) $("fbContact").value = FB.contact;
+  $("fbTitle").focus();
+}
+function fbSend() {
+  if (FBBUSY) return;
+  fbKeep();
+  var say = function (t, id) { FBMSG = t; if ($("fbMsg")) $("fbMsg").textContent = t; if (id && $(id)) $(id).focus(); };
+  if (!sb) { say("Feedback cannot be sent right now: the page has no connection to the server."); return; }
+  if (FB.title.trim().length < 4) { say("Sum it up in one line first.", "fbTitle"); return; }
+  if (FB.a.trim().length < 10) { say("Describe it in a sentence or two.", "fbA"); return; }
+  if (FB.kind === "bug" && FB.b.trim().length < 5) { say("Say how to make it happen again, even roughly. That is what makes a bug fixable.", "fbB"); return; }
+  var q = FB_Q[FB.kind][1], has = function (f) { return q.some(function (x) { return x[0] === f; }); };
+  FBBUSY = true; say("Sending…");
+  sb.rpc("send_feedback", { p: { kind: FB.kind, area: FB.area, freq: FB.kind === "bug" ? FB.freq : "", title: FB.title.trim(), a: FB.a.trim(), b: has("b") ? FB.b.trim() : "", c: has("c") ? FB.c.trim() : "", contact: USER ? "" : FB.contact.trim(), info: FB.tech ? fbInfo() : null } }).then(function (r) {
+    FBBUSY = false;
+    if (r.error) {
+      var m = String(r.error.message || "");
+      say(/limit/i.test(m) ? "You have sent several in a short time. Try again in an hour." : /could not find|does not exist|schema cache/i.test(m) ? "Feedback is not switched on yet. Please try again later." : "Could not send: " + m);
+      return;
+    }
+    FB.title = FB.a = FB.b = FB.c = ""; FBMSG = "";
+    openModal("Feedback", '<div class="auth fb"><p><b>Thank you, it was sent.</b></p><p class="mut sn">It is read by a person.' + (USER || FB.contact.trim() ? " If a question comes up you will get an email." : "") + '</p><button class="pri" data-a="openfb">Send another</button></div>');
+  }, function () { FBBUSY = false; say("Could not send. Check your connection and try again."); });
+}
+
 function logVisit() {
   if (!sb) return;
   var ref = "";
@@ -2869,10 +2942,10 @@ function openHelp() {
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
   html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
   html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups, NBA, NHL, NFL, MLB, tennis, Formula 1, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
-    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. An esports game has <b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and for Counter-Strike 2 also every map with its score and the kills, deaths, assists and rating of the players. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
@@ -3549,8 +3622,18 @@ function spParse(lg, j, pri) {
     } else if (o.kind === "race") {
       // a race weekend (practice, qualifying, race) or a golf tournament
       o.title = e.name || e.shortName || lg.n;
-      o.sessions = (e.competitions || []).map(function (c) { var cs = (c.status && c.status.type) || {}; return { n: (c.type || {}).abbreviation || (c.type || {}).text || "", state: cs.state || "pre", ts: Date.parse(c.date), detail: cs.shortDetail || "" }; }).filter(function (s) { return s.n; });
+      // each session keeps its running order (Formula 1: the classification of practice, qualifying and the race)
+      var byOrder = function (list) { return (list || []).slice().sort(function (a, b) { return (a.order || 999) - (b.order || 999); }); };
+      o.sessions = (e.competitions || []).map(function (c) {
+        var cs = (c.status && c.status.type) || {};
+        return { n: (c.type || {}).abbreviation || (c.type || {}).text || "", state: cs.state || "pre", ts: Date.parse(c.date), detail: cs.shortDetail || "",
+          res: (cs.state || "pre") === "pre" ? [] : byOrder(c.competitors).filter(function (x) { return x.order; }).slice(0, 30).map(function (x) { return (x.athlete || {}).displayName || "?"; }) };
+      }).filter(function (s) { return s.n; });
       var lead = ((e.competitions || [])[(e.competitions || []).length - 1] || {}).competitors || [];
+      // golf: the leaderboard with the score to par and each round
+      if (lg.sp === "golf") o.field = byOrder(lead).slice(0, 80).map(function (c) {
+        return { n: (c.athlete || {}).displayName || "?", s: c.score != null && typeof c.score !== "object" ? String(c.score) : "", r: (c.linescores || []).map(function (l) { return l.value >= 55 ? Math.round(l.value) : ""; }).slice(0, 4) };   // under 55 strokes = a round still being played
+      });
       o.top = lead.slice().sort(function (a, b) { return (a.order || 99) - (b.order || 99); }).slice(0, 5).map(function (c) { return { n: (c.athlete || {}).displayName || "?", s: c.score != null && typeof c.score !== "object" ? String(c.score) : "" }; });
       var liveS = o.sessions.filter(function (s) { return s.state === "in"; })[0], nextS = o.sessions.filter(function (s) { return s.state === "pre"; })[0];
       if (liveS) { o.state = "in"; o.detail = liveS.n; }
@@ -3565,7 +3648,7 @@ function spParse(lg, j, pri) {
           n: t.shortDisplayName || t.displayName || "?", ab: String(t.abbreviation || t.shortDisplayName || t.displayName || "?").slice(0, 4).toUpperCase(), s: c.score, logo: safeUrl(t.logo), win: !!c.winner, id: String(t.id || ""),
           lines: (c.linescores || []).map(function (l) { return Math.round(l.value); }), st: st,
           // top performers (points, goals, assists...), one per category
-          lead: (c.leaders || []).slice(0, 3).map(function (l) { var x = (l.leaders || [])[0] || {}; return { cat: l.shortDisplayName || l.displayName || "", who: (x.athlete || {}).displayName || "", val: x.displayValue || "" }; }).filter(function (l) { return l.who; })
+          lead: (c.leaders || []).slice(0, 3).map(function (l) { var x = (l.leaders || [])[0] || {}; return { cat: l.shortDisplayName || l.displayName || "", who: (x.athlete || {}).displayName || "", val: x.displayValue || "" }; }).filter(function (l, i, arr) { return l.who && !arr.slice(0, i).some(function (o) { return o.cat === l.cat && o.who === l.who; }); })
         };
       };
       o.home = side("home"); o.away = side("away");
@@ -3855,7 +3938,13 @@ function spTabHtml(groups, e) {
   // football: played, won, drawn, lost, goal difference, points. Other sports: won, lost, win share, games behind.
   var foot = mine[0].rows[0].s.points != null && mine[0].rows[0].s.ties != null && mine[0].rows[0].s.gamesBehind == null;
   var own = Array.isArray(mine[0].cols) && mine[0].cols.length;   // a source that names its own columns (SHL); the last one is the points
-  var cols = own ? mine[0].cols.map(function (c) { return [String(c[0]), esc(String(c[1]))]; }) : foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]] : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["streak", "Strk"]];
+  var hoc = !own && e.sp === "hockey";   // NHL: points decide, so they go last like in football
+  var cols = own ? mine[0].cols.map(function (c) { return [String(c[0]), esc(String(c[1]))]; }) : foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]]
+    : hoc ? [["gamesPlayed", "GP"], ["wins", "W"], ["losses", "L"], ["otLosses", "OTL"], ["pointDifferential", "+/-"], ["streak", "Strk"], ["points", "Pts"]]
+    : e.sp === "amfootball" ? [["wins", "W"], ["losses", "L"], ["ties", "T"], ["winPercent", "Pct"], ["pointsFor", "PF"], ["pointsAgainst", "PA"], ["streak", "Strk"]]
+    : e.sp === "baseball" ? [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["pointDifferential", "+/-"], ["streak", "Strk"]]
+    : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["Home", "Home"], ["Road", "Away"], ["streak", "Strk"]];
+  if (hoc) foot = true;
   cols = cols.filter(function (c) { return mine[0].rows.some(function (r) { return r.s[c[0]] != null && r.s[c[0]] !== ""; }); });
   return mine.map(function (g) {
     return "<h3>" + esc(mine.length > 1 || !(foot || own) ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
@@ -3875,6 +3964,224 @@ function spTabLoad(e) {
     // bring the first of the two teams into view inside the table's own scroll area
     var me = box.querySelector("tr.me"), w = me && me.closest(".sptabw");
     if (w) w.scrollTop = Math.max(0, me.offsetTop - w.clientHeight / 2 + me.offsetHeight);
+  }).catch(function () {});
+}
+// ---- More about a game, from ESPN's game summary (loaded when the window opens, again every minute while it is live):
+// who scored, the full team stats, the best player lines, line-ups, recent form, odds and who is unavailable. ----
+var SP_SUM = {}, SP_SIDE = "h", SP_SES = "", spSumT = 0;
+// team stats per sport, in the order shown: [ESPN's name, label, 1 = a share (0.9) to show as a percentage]
+var SP_STATX = {
+  football: [["possessionPct", "Possession %"], ["totalShots", "Shots"], ["shotsOnTarget", "Shots on target"], ["wonCorners", "Corners"], ["foulsCommitted", "Fouls"], ["offsides", "Offsides"], ["saves", "Saves"], ["totalPasses", "Passes"], ["passPct", "Pass accuracy %", 1], ["totalTackles", "Tackles"], ["yellowCards", "Yellow cards"], ["redCards", "Red cards"]],
+  basketball: [["fieldGoalsMade-fieldGoalsAttempted", "Field goals"], ["fieldGoalPct", "Field goal %"], ["threePointFieldGoalsMade-threePointFieldGoalsAttempted", "3-pointers"], ["threePointFieldGoalPct", "3-point %"], ["freeThrowsMade-freeThrowsAttempted", "Free throws"], ["totalRebounds", "Rebounds"], ["assists", "Assists"], ["steals", "Steals"], ["blocks", "Blocks"], ["turnovers", "Turnovers"], ["pointsInPaint", "Points in the paint"], ["fastBreakPoints", "Fast-break points"], ["largestLead", "Largest lead"]],
+  hockey: [["shotsTotal", "Shots"], ["saves", "Saves"], ["hits", "Hits"], ["blockedShots", "Blocked shots"], ["faceoffPercent", "Face-offs won %"], ["powerPlayGoals", "Power-play goals"], ["powerPlayOpportunities", "Power plays"], ["penaltyMinutes", "Penalty minutes"], ["takeaways", "Takeaways"], ["giveaways", "Giveaways"]],
+  amfootball: [["totalYards", "Total yards"], ["netPassingYards", "Passing yards"], ["rushingYards", "Rushing yards"], ["firstDowns", "First downs"], ["thirdDownEff", "3rd downs made"], ["turnovers", "Turnovers"], ["sacksYardsLost", "Sacks – yards lost"], ["totalPenaltiesYards", "Penalties – yards"], ["redZoneAttempts", "Red zone made"], ["possessionTime", "Time of possession"]],
+  baseball: [["batting.hits", "Hits"], ["batting.homeRuns", "Home runs"], ["batting.walks", "Walks"], ["batting.strikeouts", "Struck out"], ["batting.runnersLeftOnBase", "Left on base"], ["batting.avg", "Batting average"], ["pitching.strikeouts", "Strikeouts pitched"], ["fielding.errors", "Errors"]]
+};
+// player lines per sport: which of ESPN's groups, the heading, the columns (ESPN's labels), what to sort on, how many
+var SP_BOX = {
+  basketball: [{ g: [0], t: "Players", cols: ["MIN", "PTS", "REB", "AST", "FG", "3PT"], sort: ["PTS", "REB", "AST"], n: 6 }],
+  hockey: [{ g: ["forwards", "defenses"], t: "Skaters", cols: ["G", "A", "S", "+/-", "TOI"], sort: ["G", "A", "S"], n: 6 }, { g: ["goalies"], t: "Goalies", cols: ["SA", "SV", "SV%", "TOI"], n: 2 }],
+  amfootball: [{ g: ["passing"], t: "Passing", cols: ["C/ATT", "YDS", "TD", "INT"], n: 1 }, { g: ["rushing"], t: "Rushing", cols: ["CAR", "YDS", "TD"], n: 2 }, { g: ["receiving"], t: "Receiving", cols: ["REC", "YDS", "TD"], n: 3 }],
+  baseball: [{ g: ["pitching"], t: "Pitchers", cols: ["IP", "H", "ER", "BB", "K"], n: 5 }, { g: ["batting"], t: "Batters", cols: ["AB", "R", "H", "RBI", "HR"], sort: ["H", "RBI", "R"], n: 5 }]
+};
+function spNum(v) { v = String(v == null ? "" : v); var m = v.match(/^(\d+):(\d\d)$/); return m ? +m[1] * 60 + +m[2] : parseFloat(v) || 0; }
+function spDec(ml) { ml = +ml; return ml ? (ml > 0 ? 1 + ml / 100 : 1 + 100 / Math.abs(ml)).toFixed(2) : ""; }   // American odds -> decimal, like the UFC odds
+function spSumParse(e, j) {
+  var side = function (id) { return String(id) === e.home.id ? "h" : String(id) === e.away.id ? "a" : ""; };
+  var d = { sc: [], st: { h: {}, a: {} }, pl: { h: [], a: [] }, lu: {}, form: {}, inj: {}, series: "", odds: null, prob: null, refs: "" }, bx = j.boxscore || {};
+  (bx.teams || []).forEach(function (t) {
+    var s = side((t.team || {}).id);
+    if (!s) return;
+    (t.statistics || []).forEach(function (x) {
+      if (Array.isArray(x.stats)) x.stats.forEach(function (y) { if (y.displayValue != null) d.st[s][x.name + "." + y.name] = String(y.displayValue); });
+      else if (x.displayValue != null && d.st[s][x.name] == null) d.st[s][x.name] = String(x.displayValue);
+    });
+  });
+  (bx.players || []).forEach(function (t) {
+    var s = side((t.team || {}).id);
+    if (!s) return;
+    (SP_BOX[e.sp] || []).forEach(function (c) {
+      var rows = [];
+      (t.statistics || []).forEach(function (g, gi) {
+        if (c.g.indexOf(g.name || g.type || gi) < 0) return;
+        var L = g.labels || [], ix = c.cols.map(function (l) { return L.indexOf(l); });
+        (g.athletes || []).forEach(function (a) {
+          if (!a.stats || !a.stats.length) return;
+          rows.push({ n: (a.athlete || {}).shortName || (a.athlete || {}).displayName || "?", v: ix.map(function (i) { return i < 0 || a.stats[i] == null ? "" : String(a.stats[i]); }) });
+        });
+      });
+      if (c.sort) {
+        var si = c.sort.map(function (l) { return c.cols.indexOf(l); });
+        rows.sort(function (x, y) { for (var k = 0; k < si.length; k++) { var dl = spNum(y.v[si[k]]) - spNum(x.v[si[k]]); if (dl) return dl; } return 0; });
+      }
+      if (rows.length) d.pl[s].push({ t: c.t, cols: c.cols, rows: rows.slice(0, c.n) });
+    });
+  });
+  // who scored (ice hockey, American football, baseball; football has its goals and cards already, basketball scores all the time)
+  if (e.sp === "hockey" || e.sp === "amfootball" || e.sp === "baseball") {
+    var plays = j.scoringPlays || (j.plays || []).filter(function (p) { return p.scoringPlay && (e.sp !== "baseball" || (p.type || {}).type === "play-result"); });
+    d.sc = plays.slice(-40).map(function (p) {
+      var per = p.period || {}, n = per.number || "";
+      return { s: side((p.team || {}).id), per: e.sp === "baseball" ? String(per.type || "").slice(0, 1) + n : e.sp === "amfootball" ? (n > 4 ? "OT" : "Q" + n) : per.displayValue || (n ? "P" + n : ""),
+        clk: (p.clock || {}).displayValue || "", txt: String(p.text || "").slice(0, 150), hs: p.homeScore, as: p.awayScore };
+    }).filter(function (p) { return p.txt; });
+  }
+  // football line-ups: formation, the eleven that started (↓ = taken off) and who came on
+  (e.sp === "football" ? j.rosters || [] : []).forEach(function (t) {
+    var s = side((t.team || {}).id), yes = function (v) { return v === true || !!(v && v.didSub); };
+    if (!s || !Array.isArray(t.roster)) return;
+    var st = t.roster.filter(function (r) { return r.starter; });
+    if (st.length) d.lu[s] = { f: String(t.formation || ""), st: st.map(function (r) { return { j: String(r.jersey || ""), n: (r.athlete || {}).displayName || "?", out: yes(r.subbedOut) }; }),
+      on: t.roster.filter(function (r) { return !r.starter && yes(r.subbedIn); }).map(function (r) { return (r.athlete || {}).displayName || "?"; }) };
+  });
+  (j.lastFiveGames || []).forEach(function (t) {
+    var s = side((t.team || {}).id);
+    if (s) d.form[s] = (t.events || []).slice(0, 5).map(function (g) { return { r: String(g.gameResult || "").slice(0, 1).toUpperCase(), t: [g.score, g.atVs, (g.opponent || {}).displayName].filter(Boolean).join(" ") }; }).filter(function (x) { return /^[WDL]$/.test(x.r); });
+  });
+  d.series = String(((j.seasonseries || [])[0] || {}).summary || "");
+  var pc = (j.pickcenter || [])[0];
+  if (pc) d.odds = { h: spDec((pc.homeTeamOdds || {}).moneyLine), a: spDec((pc.awayTeamOdds || {}).moneyLine), x: spDec((pc.drawOdds || {}).moneyLine), ou: pc.overUnder != null ? String(pc.overUnder) : "" };
+  var pr = j.predictor;
+  if (pr && pr.homeTeam && pr.awayTeam && +pr.homeTeam.gameProjection) d.prob = { h: Math.round(+pr.homeTeam.gameProjection), a: Math.round(+pr.awayTeam.gameProjection) };
+  (j.injuries || []).forEach(function (t) {
+    var s = side((t.team || {}).id);
+    if (s) d.inj[s] = (t.injuries || []).map(function (i) { return { n: (i.athlete || {}).displayName || "", st: String(i.status || (i.type || {}).description || "") }; }).filter(function (i) { return i.n; });
+  });
+  d.refs = (((j.gameInfo || {}).officials) || []).slice(0, 2).map(function (o) { return o.displayName || o.fullName || ""; }).filter(Boolean).join(", ");
+  return d;
+}
+function spSumGet(e) {
+  var cut = e.id.lastIndexOf(":"), lg = e.id.slice(0, cut), eid = e.id.slice(cut + 1), c = SP_SUM[e.id];
+  if (c && Date.now() - c.t < (e.state === "in" ? 45000 : 600000)) return Promise.resolve(c.d);
+  // SHL and esports: the feeds function reads shl.se / bo3.gg and answers in the same shape (so you need to be signed in)
+  if (lg.indexOf("x/") === 0) {
+    if (!sb || !USER) return Promise.reject(new Error("sign in"));
+    return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { gamex: { src: lg.slice(2), id: eid } } }).then(function (r) {
+      var g = r.data && r.data.gamex;
+      if (!g || typeof g !== "object") throw new Error("no details");
+      var arr = function (x) { return Array.isArray(x) ? x : []; }, two = function (x, f) { x = x || {}; return { h: f(x.h), a: f(x.a) }; }, str = function (x) { return x == null ? "" : String(x); };
+      var d = {
+        sc: arr(g.sc).slice(0, 40).map(function (p) { return { s: p.s === "h" || p.s === "a" ? p.s : "", per: str(p.per), clk: str(p.clk), txt: str(p.txt), hs: p.hs == null ? null : +p.hs, as: p.as == null ? null : +p.as }; }),
+        st: two(g.st, function (o) { var out = {}; Object.keys(o || {}).forEach(function (k) { out[k] = str(o[k]); }); return out; }),
+        pl: two(g.pl, function (l) { return arr(l).slice(0, 4).map(function (t) { return { t: str(t.t), cols: arr(t.cols).map(str), rows: arr(t.rows).slice(0, 8).map(function (r) { return { n: str(r.n), v: arr(r.v).map(str) }; }) }; }); }),
+        form: two(g.form, function (l) { return arr(l).slice(0, 5).map(function (x) { return { r: /^[WDL]$/.test(x.r) ? x.r : "", t: str(x.t) }; }).filter(function (x) { return x.r; }); }),
+        lines: two(g.lines, function (l) { return arr(l).slice(0, 8).map(function (n) { return n == null ? 0 : +n || 0; }); }),
+        maps: arr(g.maps).slice(0, 7).map(function (m) { return { n: str(m.n), h: +m.h || 0, a: +m.a || 0, w: m.w === "h" || m.w === "a" ? m.w : "", live: !!m.live }; }),
+        rank: two(g.rank, function (n) { return +n || 0; }), tour: str(g.tour), series: str(g.series), seriesT: str(g.seriesT), att: +g.att || 0,
+        lu: {}, inj: {}, odds: null, prob: null, refs: ""
+      };
+      if (Object.keys(SP_SUM).length > 40) SP_SUM = {};
+      SP_SUM[e.id] = { t: Date.now(), d: d };
+      return d;
+    });
+  }
+  if (!/^\d+$/.test(eid)) return Promise.reject(new Error("no summary"));
+  return fetch("https://site.api.espn.com/apis/site/v2/sports/" + lg + "/summary?event=" + eid)
+    .then(function (r) { if (!r.ok) throw new Error("ESPN answered " + r.status); return r.json(); })
+    .then(function (j) {
+      if (Object.keys(SP_SUM).length > 40) SP_SUM = {};
+      var d = spSumParse(e, j);
+      SP_SUM[e.id] = { t: Date.now(), d: d };
+      return d;
+    });
+}
+function spStatxHtml(e, d) {
+  var rows = (SP_STATX[e.sp] || []).filter(function (s) { return d.st.h[s[0]] != null && d.st.a[s[0]] != null; }).map(function (s) {
+    var show = function (v) { return s[2] && spNum(v) <= 1 ? String(Math.round(spNum(v) * 100)) : v; };
+    var hv = spNum(d.st.h[s[0]]), av = spNum(d.st.a[s[0]]), tot = hv + av || 1;
+    return '<div class="stat"><b>' + esc(show(d.st.h[s[0]])) + '</b><span><em><u style="width:' + Math.round(hv / tot * 100) + '%"></u></em>' + s[1] + "</span><b>" + esc(show(d.st.a[s[0]])) + "</b></div>";
+  });
+  return rows.length ? "<h3>" + (e.sp === "football" ? "Match stats" : "Team stats") + "</h3>" + rows.join("") : "";
+}
+function spSumDraw(e, d) {
+  var two = function (h, a) { return '<div class="leads"><div>' + h + "</div><div>" + a + "</div></div>"; };
+  // who scored
+  if ($("spSc")) $("spSc").innerHTML = d.sc.length ? "<h3>Scoring</h3>" + '<div class="spsc' + (d.sc.length > 8 ? " sptabw" : "") + '">' + d.sc.map(function (p) {
+    return '<div><span class="mut">' + esc(p.per) + (p.clk ? " " + esc(p.clk) : "") + "</span><b>" + esc(p.s === "h" ? e.home.ab : p.s === "a" ? e.away.ab : "") + "</b><span>" + esc(p.txt) + "</span>" + (p.hs != null && p.as != null ? "<b>" + esc(p.hs) + "–" + esc(p.as) + "</b>" : "<b></b>") + "</div>";
+  }).join("") + "</div>" : "";
+  // esports: the maps of the match, each with its score
+  if ($("spSc") && d.maps && d.maps.length) $("spSc").innerHTML = "<h3>Maps</h3>" + '<div class="spsc spmaps">' + d.maps.map(function (m, i) {
+    return '<div><span class="mut">Map ' + (i + 1) + "</span><b>" + esc(m.n.charAt(0).toUpperCase() + m.n.slice(1)) + "</b><span>" + (m.live ? '<span class="pill live">LIVE</span>' : m.w ? esc((m.w === "h" ? e.home : e.away).n) + " won" : "") + "</span><b>" + (m.w || m.live ? m.h + "–" + m.a : "") + "</b></div>";
+  }).join("") + "</div>";
+  // SHL: the score of each period comes with the details
+  if ($("spLn") && d.lines && d.lines.h.length > 1) { e.home.lines = d.lines.h; e.away.lines = d.lines.a; $("spLn").innerHTML = spLinesHtml(e); }
+  // the fuller stats replace the short list from the scoreboard (never with less than it had)
+  var sx = e.state === "pre" ? "" : spStatxHtml(e, d);
+  if ($("spStats") && sx && sx.split('class="stat"').length >= $("spStats").innerHTML.split('class="stat"').length) $("spStats").innerHTML = sx;
+  var h = "";
+  // before and during the game: odds and the chance to win
+  if (e.state !== "post") {
+    var od = d.odds, parts = od ? [od.h ? esc(e.home.ab) + " <b>" + od.h + "</b>" : "", od.x ? "draw <b>" + od.x + "</b>" : "", od.a ? esc(e.away.ab) + " <b>" + od.a + "</b>" : "", od.ou ? "over/under <b>" + esc(od.ou) + "</b>" : ""].filter(Boolean) : [];
+    if (parts.length) h += '<h3>Odds</h3><p class="spod">' + parts.join(" · ") + "</p>";
+    if (d.prob) h += '<div class="stat"><b>' + d.prob.h + '%</b><span><em><u style="width:' + d.prob.h + '%"></u></em>Chance to win</span><b>' + d.prob.a + "%</b></div>";
+  }
+  // form: the last five, latest first; other sports: how the season series stands
+  var chips = function (s) { return (d.form[s] || []).map(function (g) { return '<i class="fm fm' + g.r + '" title="' + esc(g.t) + '">' + g.r + "</i>"; }).join(""); };
+  var rk = d.rank && (d.rank.h || d.rank.a) ? function (s) { return d.rank[s] ? '<small class="mut">World no. ' + d.rank[s] + "</small> " : ""; } : function () { return ""; };
+  if (chips("h") || chips("a")) h += "<h3>Last five</h3>" + two(chips("h") + (rk("h") ? " " + rk("h") : ""), rk("a") + chips("a"));
+  else if (rk("h") || rk("a")) h += "<h3>Ranking</h3>" + two(rk("h"), rk("a"));
+  if (d.series && (d.seriesT || !(chips("h") || chips("a")))) h += "<h3>" + esc(d.seriesT || "This season") + '</h3><p class="spod">' + esc(d.series) + "</p>";
+  if (d.tour) h += '<p class="mut sn">' + esc(d.tour) + "</p>";
+  // player lines, one team at a time
+  var s = d.pl[SP_SIDE] && d.pl[SP_SIDE].length ? SP_SIDE : d.pl.h.length ? "h" : "a";
+  if (d.pl[s].length) {
+    if ($("spLead")) $("spLead").innerHTML = "";   // the player lines say more than the three "top performers" from the scoreboard
+    h +='<h3 class="sph">Players <span class="chips">' + [["h", e.home], ["a", e.away]].filter(function (x) { return d.pl[x[0]].length; }).map(function (x) { return '<button data-a="spside" data-k="' + x[0] + '"' + (s === x[0] ? ' class="on"' : "") + ">" + esc(x[1].ab) + "</button>"; }).join("") + "</span></h3>" +
+      '<div class="sptabw sppl"><table class="sptab">' + d.pl[s].map(function (g) {
+        return "<tr><th></th>" + g.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>" + g.rows.map(function (r) { return '<tr><td class="tn">' + esc(r.n) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" + r.v.map(function (v) { return "<td>" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("");
+      }).join("") + "</table></div>";
+  }
+  // football line-ups
+  var lu = function (s) { var x = d.lu[s]; return x ? (x.f ? '<small class="mut">' + esc(x.f) + "</small>" : "") + x.st.map(function (p) { return "<div><small>" + esc(p.j) + "</small> " + esc(p.n) + (p.out ? ' <span class="mut" title="Taken off">↓</span>' : "") + "</div>"; }).join("") + (x.on.length ? '<div class="mut sn">On: ' + esc(x.on.join(", ")) + "</div>" : "") : ""; };
+  if (lu("h") || lu("a")) h += "<h3>Line-ups</h3>" + '<div class="splu">' + two(lu("h"), lu("a")) + "</div>";
+  // who is unavailable (only worth showing before the end)
+  var inj = function (s) { var l = d.inj[s] || []; return l.slice(0, 6).map(function (i) { return "<div>" + esc(i.n) + (i.st ? ' <small class="mut">' + esc(i.st) + "</small>" : "") + "</div>"; }).join("") + (l.length > 6 ? '<div class="mut sn">+' + (l.length - 6) + " more</div>" : ""); };
+  if (e.state !== "post" && (inj("h") || inj("a"))) h += "<h3>Unavailable</h3>" + two(inj("h"), inj("a"));
+  if (d.refs) h += '<p class="mut sn">' + (e.sp === "football" ? "Referee: " : "Officials: ") + esc(d.refs) + "</p>";
+  if (d.att && !e.att) h += '<p class="mut sn">' + d.att.toLocaleString("en-GB") + " spectators</p>";
+  if ($("spSum")) $("spSum").innerHTML = h;
+}
+function spSumLoad(e) {
+  clearTimeout(spSumT);
+  if (!$("spSum")) return;
+  spSumGet(e).then(function (d) {
+    if (SP_OPEN !== e.id || !$("spSum") || $("modal").hidden) return;
+    spSumDraw(e, d);
+    if (e.state === "in") spSumT = setTimeout(function () { if (SP_OPEN === e.id && $("spSum") && !$("modal").hidden) spSumLoad(spFind(e.id) || e); }, 60000);
+  }).catch(function () {});
+}
+// ---- Season standings under a race or tournament: Formula 1 drivers and teams, tennis world ranking (kept for an hour) ----
+var SP_RANK = {};
+function spRankGet(lgId) {
+  var c = SP_RANK[lgId];
+  if (c && Date.now() - c.t < 3600000) return Promise.resolve(c.g);
+  var done = function (g) { if (g.length) SP_RANK[lgId] = { t: Date.now(), g: g }; return g; }, json = function (r) { if (!r.ok) throw new Error("none"); return r.json(); };
+  if (lgId.indexOf("tennis/") === 0) return fetch("https://site.api.espn.com/apis/site/v2/sports/" + lgId + "/rankings").then(json).then(function (j) {
+    var rk = (j.rankings || [])[0] || {};
+    return done([{ n: "World ranking", pts: "Points", rows: (rk.ranks || []).slice(0, 50).map(function (r) { return { pos: r.current, n: (r.athlete || {}).displayName || "?", p: r.points != null ? Math.round(r.points).toLocaleString("en-GB") : "", mv: r.previous && r.current ? r.previous - r.current : 0 }; }) }]);
+  });
+  if (lgId === "racing/f1") return fetch("https://site.api.espn.com/apis/v2/sports/racing/f1/standings").then(json).then(function (j) {
+    return done((j.children || []).map(function (c) {
+      return { n: /constructor/i.test(c.name || "") ? "Teams" : "Drivers", pts: "Pts", rows: (((c.standings || {}).entries) || []).map(function (x) {
+        var v = {}; (x.stats || []).forEach(function (q) { v[q.name] = q.displayValue; });
+        return { pos: +v.rank || 0, n: (x.athlete || x.team || {}).displayName || "?", p: v.championshipPts != null ? v.championshipPts : v.points != null ? v.points : "", mv: 0 };
+      }).sort(function (a, b) { return (a.pos || 999) - (b.pos || 999); }) };
+    }).filter(function (g) { return g.rows.length; }));
+  });
+  return Promise.reject(new Error("none"));
+}
+function spRankLoad(e) {
+  var lgId = e.id.slice(0, e.id.lastIndexOf(":"));
+  if (!$("spTab")) return;
+  spRankGet(lgId).then(function (groups) {
+    var box = $("spTab");
+    if (!box || SP_OPEN !== e.id) return;
+    box.innerHTML = '<div class="sprk' + (groups.length > 1 ? " two" : "") + '">' + groups.map(function (g) {
+      return "<div><h3>" + esc(g.n) + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th><th>' + esc(g.pts) + "</th></tr>" + g.rows.map(function (r, i) {
+        var mine = (e.names || []).indexOf(r.n) >= 0;
+        return '<tr class="' + (mine ? "me" : "") + '"><td class="ps">' + (r.pos || i + 1) + '</td><td class="tn">' + esc(r.n) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + (r.mv ? ' <small class="' + (r.mv > 0 ? "up" : "dn") + '">' + (r.mv > 0 ? "▲" : "▼") + Math.abs(r.mv) + "</small>" : "") + '</td><td class="pt">' + esc(r.p) + "</td></tr>";
+      }).join("") + "</table></div></div>";
+    }).join("") + "</div>";
   }).catch(function () {});
 }
 // Hover card for a game: the score line, then the short story of it
@@ -3927,21 +4234,30 @@ function openSport(id) {
       }
       var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "No result") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' + (e.kind === "tour" && f.detail ? " " + esc(f.detail) : "") : "";
       return '<div class="row"><span>' + favBtn(f.a) + " <b" + (f.aw ? ' class="win"' : "") + ">" + esc(f.a) + '</b> <span class="mut">vs</span> <b' + (f.bw ? ' class="win"' : "") + ">" + esc(f.b) + "</b> " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") + '</span><span class="r mut">' + res + "</span></div>";
-    }).join("") || '<p class="mut sn">No matches in the next day and a half.</p>');
+    }).join("") || '<p class="mut sn">No matches in the next day and a half.</p>') + (e.kind === "tour" ? '<div id="spTab"></div>' : "");
   } else if (e.kind === "race") {
+    // Formula 1: a session that has run can be clicked to see its order; golf: the whole leaderboard. Season standings load below.
+    var done = e.sessions.filter(function (s) { return s.res && s.res.length; }), ses = done.filter(function (s) { return s.n === SP_SES; })[0] || done[done.length - 1];
     body = head + (e.sessions.length ? "<h3>Sessions</h3>" + e.sessions.map(function (s) {
-      return '<div class="row"><span><b>' + esc(s.n) + '</b></span><span class="r">' + spWhen({ state: s.state, ts: s.ts, kind: "race", detail: "LIVE" }) + "</span></div>";
-    }).join("") : "") + (e.top.length ? "<h3>" + (e.state === "pre" ? "Field" : "Leaders") + "</h3>" + e.top.map(function (t, i) { return '<div class="row"><span>' + (i + 1) + ". <b>" + esc(t.n) + '</b></span><span class="r mut">' + esc(t.s) + "</span></div>"; }).join("") : "");
+      var can = s.res && s.res.length;
+      return '<div class="row' + (ses === s ? " sel" : "") + '"><span>' + (can ? '<button class="lnk" data-a="spses" data-k="' + esc(s.n) + '" title="Show the order of this session"><b>' + esc(s.n) + "</b> ›</button>" : "<b>" + esc(s.n) + "</b>") + '</span><span class="r">' + spWhen({ state: s.state, ts: s.ts, kind: "race", detail: "LIVE" }) + "</span></div>";
+    }).join("") : "") +
+      (ses ? "<h3>" + esc(ses.n) + (ses.state === "in" ? " · running order" : " · result") + '</h3><div class="sptabw sp2c">' + ses.res.map(function (n, i) { return "<div><i>" + (i + 1) + "</i>" + esc(n) + (spIsFav(n) ? ' <i class="fv">★</i>' : "") + "</div>"; }).join("") + "</div>"
+        : e.field && e.field.length ? "<h3>Leaderboard</h3>" + '<div class="sptabw"><table class="sptab"><tr><th></th><th></th><th>Par</th>' + [1, 2, 3, 4].map(function (r) { return "<th>R" + r + "</th>"; }).join("") + "</tr>" + e.field.map(function (p, i) {
+          return '<tr><td class="ps">' + (i + 1) + '</td><td class="tn">' + esc(p.n) + (spIsFav(p.n) ? ' <i class="fv">★</i>' : "") + '</td><td class="pt">' + esc(p.s) + "</td>" + [0, 1, 2, 3].map(function (r) { return "<td>" + (p.r[r] != null ? p.r[r] : "") + "</td>"; }).join("") + "</tr>";
+        }).join("") + "</table></div>"
+        : e.top.length ? "<h3>" + (e.state === "pre" ? "Field" : "Leaders") + "</h3>" + e.top.map(function (t, i) { return '<div class="row"><span>' + (i + 1) + ". <b>" + esc(t.n) + '</b></span><span class="r mut">' + esc(t.s) + "</span></div>"; }).join("") : "") + '<div id="spTab"></div>';
   } else {
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>" + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
       // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
-      (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + spLinesHtml(e) + spStatsHtml(e) + spLeadersHtml(e) +
+      (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + '<div id="spLn">' + spLinesHtml(e) + '</div><div id="spSc"></div><div id="spStats">' + spStatsHtml(e) + '</div><div id="spLead">' + spLeadersHtml(e) + '</div><div id="spSum"></div>' +
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
-  if (e.kind === "team") spTabLoad(e);
+  if (e.kind === "team") { spTabLoad(e); spSumLoad(e); }
+  if (e.kind === "race" || e.kind === "tour") spRankLoad(e);
   if (e.kind === "card") fillOdds($("mBody"));
 }
 // Settings > Sports: one switch per league, grouped by sport

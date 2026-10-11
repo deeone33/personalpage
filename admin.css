@@ -30,6 +30,23 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .tag{display:inline-block;font-size:11px;padding:0 7px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
 .tag.y{border-color:var(--ac);color:var(--fg)}
 .tag.bad{border-color:var(--down);color:var(--down)}
+.atabs .tabn{font-style:normal;font-size:11px;font-weight:700;margin-left:5px;padding:1px 7px;border-radius:99px;background:var(--acsoft);color:var(--fg)}
+.achips{flex-wrap:wrap;justify-content:flex-end}
+.achips .asep{width:1px;background:var(--line);margin:2px 4px}
+.tag.k-bug{border-color:var(--down);color:var(--down)}
+.tag.k-improve{border-color:var(--ac);color:var(--fg)}
+.tag.k-idea{border-color:var(--up);color:var(--up)}
+tr.frow{cursor:pointer}
+tr.frow.isnew .mail{font-weight:700}
+.fd{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}
+.fd h3{margin:10px 0 3px;font-size:12px;color:var(--mut);font-weight:700}
+.fd h3:first-child{margin-top:0}
+.fd .ftxt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.fkv{display:grid;grid-template-columns:auto 1fr;gap:1px 12px;font-size:12.5px}
+.fkv span{color:var(--mut)}
+.fkv b{font-weight:400;overflow-wrap:anywhere}
+.uacts a.btn{font-size:12px;padding:4px 10px}
+@media(max-width:900px){.fd{grid-template-columns:1fr}.achips{flex-wrap:wrap}}
 .vlist{display:grid;gap:2px;font-size:12.5px}
 .vlist>div{display:grid;grid-template-columns:10em minmax(8em,1.2fr) 1fr 1fr 1.2fr;gap:10px;padding:2px 0}
 .vlist b{font-weight:600;font-variant-numeric:tabular-nums}
