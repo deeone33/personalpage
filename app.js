@@ -1,4 +1,4 @@
-var VERSION = 79;
+var VERSION = 80;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -3022,6 +3022,16 @@ function sdYear(y) {
     var same = (map[ymd(h[0])] || []).filter(function (x) { return x.g === "hol" && x.n === h[1]; })[0];
     if (same) same.c += ", " + c[1]; else add(h[0], { id: "hol", n: h[1], g: "hol", c: c[1] });
   }); });
+  // a day that is both a marked day and a public holiday (Good Friday, Christmas Day) is one line, not two;
+  // it keeps the marked day's name for its reminder
+  Object.keys(map).forEach(function (ds) {
+    map[ds] = map[ds].filter(function (x) {
+      if (x.g === "hol") return true;
+      var h = map[ds].filter(function (o) { return o.g === "hol" && o.n === x.n; })[0];
+      if (h) h.also = x.id;
+      return !h;
+    });
+  });
   if (s.season) {
     // the equinoxes and solstices move by a day between years; these are the usual dates
     [[2, 20, "Spring equinox"], [5, 21, "Summer solstice (longest day)"], [8, 22, "Autumn equinox"], [11, 21, "Winter solstice (shortest day)"]].forEach(function (x) { add(sdDate(y, x[0], x[1]), { id: "season", n: x[2], g: "season" }); });
@@ -3057,7 +3067,7 @@ function sdCheck() {
   if (NTF().cal === false || now.getHours() < 8 || !Object.keys(rem).some(function (k) { return rem[k]; })) return;
   var target = plus(sdDate(now.getFullYear(), now.getMonth(), now.getDate()), off), ds = ymd(target);
   specialsOn(ds).forEach(function (x) {
-    if (!rem[x.id] || !once("sd:" + x.id + ":" + x.n + ":" + ds)) return;
+    if (!(rem[x.id] || (x.also && rem[x.also])) || !once("sd:" + x.id + ":" + x.n + ":" + ds)) return;
     toast("cal", x.n + (off === 0 ? " is today" : off === 1 ? " is tomorrow" : " is in " + off + " days"), dayLabel(ds) + (x.g === "hol" ? " · public holiday in " + x.c : ""), { a: "cal", k: ds }, true);
   });
 }
