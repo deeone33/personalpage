@@ -1,10 +1,11 @@
 // OmniTree admin overview.
 // This page holds no data of its own. Everything comes from the feeds function, which first asks Supabase who is
 // signed in and only answers when that is the site owner's confirmed email. Anyone else who opens this page gets "Not allowed".
+// Three tabs: Visitors (everyone who opened the front page, by IP address), Accounts, and What is used.
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1;
+  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {};
   try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
   // use the accent colour chosen on the main page, if there is one
   try {
@@ -43,109 +44,154 @@
 
   // ---- small helpers ----
   function dur(s) { s = Math.round(s || 0); if (s < 60) return s ? "<1m" : "0"; var m = Math.round(s / 60); return m < 60 ? m + "m" : Math.floor(m / 60) + "h " + (m % 60) + "m"; }
-  function ago(t) { if (!t) return "never"; var m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 2 ? "just now" : m < 60 ? m + "m ago" : m < 1440 ? Math.round(m / 60) + "h ago" : Math.round(m / 1440) + "d ago"; }
+  function ago(t) { if (!t) return "never"; var m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 2 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " d ago"; }
   function date(t) { return t ? new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "–"; }
-  function dayKey(t) { return new Date(t).toISOString().slice(0, 10); }
+  function stamp(t) { return t ? new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "–"; }
+  function dayKey(t) { var d = new Date(t); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }   // your own (local) day
   function lastDays(n) { var out = []; for (var i = n - 1; i >= 0; i--) out.push(dayKey(Date.now() - i * 86400000)); return out; }
   function bars(vals, days, unit) {
     var max = Math.max.apply(null, vals.concat([1]));
     return '<div class="bars">' + vals.map(function (v, i) { return "<i" + (v ? "" : ' class="z"') + ' style="height:' + Math.max(1, Math.round(v / max * 100)) + '%" title="' + esc(days[i] + ": " + (unit === "time" ? dur(v) : v)) + '"></i>'; }).join("") +
-      '</div><div class="baxis"><span>' + esc(days[0].slice(5)) + "</span><span>peak " + (unit === "time" ? dur(max) : max) + "</span><span>" + esc(days[days.length - 1].slice(5)) + "</span></div>";
+      '</div><div class="baxis"><span>' + esc(days[0].slice(5)) + "</span><span>highest day: " + (unit === "time" ? dur(max) : max) + "</span><span>today</span></div>";
   }
   function hbars(rows, unit) {
     var max = Math.max.apply(null, rows.map(function (r) { return r[1]; }).concat([1]));
     return rows.length ? rows.map(function (r) { return '<div class="hb"><span title="' + esc(r[0]) + '">' + esc(r[0]) + '</span><em><u style="width:' + Math.round(r[1] / max * 100) + '%"></u></em><b>' + (unit === "time" ? dur(r[1]) : r[1]) + "</b></div>"; }).join("") : '<p class="mut sn">Nothing yet.</p>';
   }
-  var BOXES = { weather: "Weather", mail: "Mail", live: "Converter", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
-  var WHERE = { page: "Page", settings: "Settings", window: "Pop-up window", side: "Docked panel", menu: "Menu box", live: "Converter" };
+  // "Mozilla/5.0 (Windows NT 10.0 ...) Chrome/141 ..." -> "Chrome on Windows"
+  function device(ua) {
+    ua = String(ua || "");
+    if (!ua) return "Unknown";
+    if (/bot|crawl|spider|slurp|preview|headless|monitor|curl|python|wget/i.test(ua)) return "Automated (a bot)";
+    var br = /Edg\//.test(ua) ? "Edge" : /OPR\/|Opera/.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+    var os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad|iPod/.test(ua) ? "iPhone / iPad" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    return br + (os ? " on " + os : "");
+  }
+  var CN = null; try { CN = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}
+  function country(cc) { cc = String(cc || "").toUpperCase(); if (!/^[A-Z]{2}$/.test(cc) || cc === "XX" || cc === "T1") return "Unknown"; try { return (CN && CN.of(cc)) || cc; } catch (e) { return cc; } }
+  var BOXES = { weather: "Weather", mail: "Mail", live: "Radio", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
+  var WHERE = { page: "Page", settings: "Settings", window: "A window", side: "Docked panel", menu: "Menu icons", live: "Radio" };
   var ACT = {
-    "open-a": "open a headline", "open-m": "open a Telegram post", "open-r": "open a Reddit post", "open-t": "open a stream", "open-v": "open a video", "open-p": "open a game", "open-s": "open a stock",
-    refresh: "reload the box", nseen: "clear “new”", nfilt: "filter headlines", filtmenu: "Sources menu", filttoggle: "show/hide a source", opennotes: "open notes", opencal: "open calendar", bellmenu: "notifications bell",
-    cogmenu2: "cogwheel menu", clockmenu2: "timer menu", acctmenu2: "account menu", setpanel: "open settings", setsec: "switch settings section", editmode: "edit layout", openhelp: "open help", openbrief: "open summary",
-    noteadd: "add a note / task", notedone: "tick a task", notetab: "switch notes tab", notedel: "delete a note", notepin: "pin a note", calday: "pick a day", calnav: "change month", dock: "dock a player", undock: "close a docked player",
-    dockchat: "toggle docked chat", twpop: "pop out a stream", twchat: "pop out chat", sidedock: "dock / undock a panel", toastgo: "open a notification", toastx: "dismiss a notification", bellgo: "open from history",
-    convswap: "swap currencies", weather: "open weather", mail: "open mail", mailread: "mark mail read", spfav: "favorite a team", fav: "favorite", hide: "hide an item", boxoff: "hide a box", boxtoggle: "switch a box", signout: "sign out"
+    "open-a": "opened a headline", "open-m": "opened a Telegram post", "open-r": "opened a Reddit post", "open-t": "opened a stream", "open-v": "opened a video", "open-p": "opened a game", "open-s": "opened a stock",
+    refresh: "pressed reload", nseen: "cleared “new”", nfilt: "filtered headlines", filtmenu: "opened Sources", filttoggle: "showed / hid a source", opennotes: "opened notes", opencal: "opened the calendar", bellmenu: "opened the bell",
+    cogmenu2: "opened the cogwheel menu", clockmenu2: "opened the timer menu", acctmenu2: "opened the account menu", setpanel: "opened Settings", setsec: "changed Settings section", editmode: "edited the layout", openhelp: "opened Help", openbrief: "opened the summary",
+    noteadd: "added a note / task", notedone: "ticked a task", notetab: "switched notes tab", notedel: "deleted a note", notepin: "pinned a note", calday: "picked a day", calnav: "changed month", dock: "docked a player", undock: "closed a docked player",
+    dockchat: "toggled docked chat", twpop: "popped out a stream", twchat: "popped out chat", sidedock: "docked a panel", toastgo: "opened a notification", toastx: "dismissed a notification", bellgo: "opened from history",
+    weather: "opened weather", mail: "opened mail", mailread: "marked mail read", spfav: "starred a team", fav: "starred something", hide: "hid an item", boxoff: "hid a box", boxtoggle: "switched a box", signout: "signed out",
+    radplay: "played the radio", radstop: "stopped the radio", radvol: "opened the volume", radinfo: "looked at the song", more: "pressed “show more”", fighter: "opened a fighter", nextday: "opened the next event", boxerr: "opened a problem"
   };
-  function clickLabel(k) { var p = k.split(":"), w = BOXES[p[0]] || WHERE[p[0]] || p[0]; return w + " · " + (ACT[p[1]] || p[1]); }
+  function clickLabel(k) { var p = k.split(":"), w = BOXES[p[0]] || WHERE[p[0]] || p[0]; return w + ": " + (ACT[p[1]] || p[1]); }
+  function panel(title, hint, body, cls) { return '<div class="apanel ' + (cls || "") + '"><h2>' + title + "</h2>" + (hint ? '<p class="ahint">' + hint + "</p>" : "") + body + "</div>"; }
 
   // ---- the page ----
   function render() {
-    var users = D.users || [], usage = D.usage || [], prefs = D.prefs || {}, now = D.now || Date.now(), d30 = lastDays(30), d7 = d30.slice(-7), today = d30[29];
-    var U = {}, DAY = {}, CLK = {}, BOXCLK = {};
-    d30.forEach(function (d) { DAY[d] = { secs: 0, users: 0, clicks: 0 }; });
+    var users = D.users || [], usage = D.usage || [], prefs = D.prefs || {}, visits = D.visits || [], now = D.now || Date.now(), d30 = lastDays(30), d7 = d30.slice(-7), today = d30[29];
+    var byId = {}; users.forEach(function (u) { byId[u.id] = u; });
+    // signed-in use, per account and per day
+    var U = {}, DAY = {}, CLK = {};
+    d30.forEach(function (d) { DAY[d] = { secs: 0, users: 0, ips: {}, anon: {} }; });
     usage.forEach(function (r) {
-      var u = U[r.user_id] = U[r.user_id] || { days: {}, s7: 0, s30: 0, c30: 0, seen: 0, clk: {} }, ck = r.clicks || {}, n = 0;
-      Object.keys(ck).forEach(function (k) { var v = +ck[k] || 0; n += v; u.clk[k] = (u.clk[k] || 0) + v; CLK[k] = (CLK[k] || 0) + v; var bx = k.split(":")[0]; BOXCLK[bx] = (BOXCLK[bx] || 0) + v; });
-      u.days[r.day] = r.secs; u.s30 += r.secs; u.c30 += n;
+      var u = U[r.user_id] = U[r.user_id] || { days: {}, s7: 0, s30: 0, seen: 0, clk: {} }, ck = r.clicks || {};
+      Object.keys(ck).forEach(function (k) { var v = +ck[k] || 0; u.clk[k] = (u.clk[k] || 0) + v; CLK[k] = (CLK[k] || 0) + v; });
+      u.days[r.day] = r.secs; u.s30 += r.secs;
       if (d7.indexOf(r.day) >= 0) u.s7 += r.secs;
       var ls = Date.parse(r.last_seen); if (ls > u.seen) u.seen = ls;
-      if (DAY[r.day]) { DAY[r.day].secs += r.secs; DAY[r.day].users++; DAY[r.day].clicks += n; }
+      if (DAY[r.day]) { DAY[r.day].secs += r.secs; DAY[r.day].users++; }
     });
-    var signups = d30.map(function (d) { return users.filter(function (u) { return u.created && dayKey(Date.parse(u.created)) === d; }).length; });
-    var active7 = Object.keys(U).filter(function (id) { return U[id].s7 > 0; }).length, secs7 = d7.reduce(function (a, d) { return a + DAY[d].secs; }, 0);
+    // visitors: one entry per IP address, with all its visits (the list from the function is newest first)
+    var IP = {}, ipList = [];
+    visits.forEach(function (v) {
+      var t = Date.parse(v.at), d = dayKey(t), k = v.ip || "unknown";
+      var o = IP[k]; if (!o) { o = IP[k] = { ip: k, n: 0, last: t, first: t, cc: v.cc, ua: v.ua, ref: "", tz: v.tz, lang: v.lang, who: {}, rows: [] }; ipList.push(o); }
+      o.n++; o.first = Math.min(o.first, t); o.rows.push(v);
+      if (v.ref && !o.ref) o.ref = v.ref;
+      if (v.user_id) o.who[v.user_id] = 1;
+      if (DAY[d]) { DAY[d].ips[k] = 1; if (!v.user_id) DAY[d].anon[k] = 1; }
+    });
+    var count = function (o) { return Object.keys(o).length; };
+    var ips7 = {}; d7.forEach(function (d) { Object.keys(DAY[d].ips).forEach(function (k) { ips7[k] = 1; }); });
     var new7 = users.filter(function (u) { return u.created && now - Date.parse(u.created) < 7 * 86400000; }).length;
-    var withPrefs = users.filter(function (u) { return prefs[u.id]; });
-    $("aWho").textContent = "Signed in as " + D.me + " · function version " + D.fn + " · updated " + new Date(now).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    var tile = function (v, l) { return '<div class="atile"><b>' + v + "</b><span>" + l + "</span></div>"; };
-    var h = '<div class="atiles">' + tile(users.length, "accounts") + tile(new7, "new in the last 7 days") + tile(users.filter(function (u) { return !u.confirmed; }).length, "email not confirmed") +
-      tile(DAY[today].users, "active today") + tile(active7, "active in the last 7 days") + tile(dur(DAY[today].secs), "time on site today") + tile(dur(secs7), "time on site, 7 days") +
-      tile(active7 ? dur(secs7 / active7 / 7) : "0", "per active user per day") + "</div>";
-    if (D.usageErr) h += '<div id="aMsg2" class="apanel w12" style="margin-bottom:12px"><b>Usage is not being collected yet.</b> <span class="mut">' + esc(D.usageErr) + "</span></div>";
-    h += '<div class="agrid">' +
-      '<div class="apanel"><h2>Active accounts per day <small>last 30 days</small></h2>' + bars(d30.map(function (d) { return DAY[d].users; }), d30) + "</div>" +
-      '<div class="apanel"><h2>Time on site per day <small>all accounts</small></h2>' + bars(d30.map(function (d) { return DAY[d].secs; }), d30, "time") + "</div>" +
-      '<div class="apanel"><h2>New accounts per day <small>last 30 days</small></h2>' + bars(signups, d30) + "</div>" +
-      '<div class="apanel"><h2>Clicks per day <small>all accounts</small></h2>' + bars(d30.map(function (d) { return DAY[d].clicks; }), d30) + "</div>" +
-      '<div class="apanel w4"><h2>Most used <small>clicks, 30 days</small></h2>' + hbars(Object.keys(CLK).sort(function (a, b) { return CLK[b] - CLK[a]; }).slice(0, 14).map(function (k) { return [clickLabel(k), CLK[k]]; })) + "</div>" +
-      '<div class="apanel w4"><h2>Clicks by area <small>30 days</small></h2>' + hbars(Object.keys(BOXCLK).sort(function (a, b) { return BOXCLK[b] - BOXCLK[a]; }).slice(0, 14).map(function (k) { return [BOXES[k] || WHERE[k] || k, BOXCLK[k]]; })) + "</div>" +
-      '<div class="apanel w4"><h2>Boxes switched on <small>of ' + withPrefs.length + " accounts with settings</small></h2>" + hbars(Object.keys(BOXES).map(function (k) { return [BOXES[k], withPrefs.filter(function (u) { return prefs[u.id].off.indexOf(k) < 0; }).length]; }).sort(function (a, b) { return b[1] - a[1]; })) + "</div>" +
-      '<div class="apanel w4"><h2>Features set up <small>accounts</small></h2>' + hbars([
-        ["Finished the setup guide", function (p) { return p.onboarded; }], ["Own news sources", function (p) { return p.news >= 0; }], ["Own Telegram channels", function (p) { return p.tg >= 0; }], ["Own subreddits", function (p) { return p.rd >= 0; }],
-        ["Own stock list", function (p) { return p.stocks > 0; }], ["Twitch connected", function (p) { return p.twitch; }], ["YouTube imported", function (p) { return p.yt > 0; }], ["Gmail connected", function (p) { return p.mail > 0; }],
-        ["Uses notes or to-dos", function (p) { return p.notes + p.todos > 0; }], ["Uses the calendar", function (p) { return p.cal > 0; }], ["Docked a panel", function (p) { return p.docked.length > 0; }], ["Sports favorites", function (p) { return p.favs > 0; }],
-        ["Desktop notifications", function (p) { return p.desktopNtf; }], ["Light theme", function (p) { return p.theme === "light"; }]
-      ].map(function (f) { return [f[0], withPrefs.filter(function (u) { return f[1](prefs[u.id]); }).length]; }).sort(function (a, b) { return b[1] - a[1]; })) + "</div>" +
-      '<div class="apanel w4"><h2>Most time on site <small>7 days</small></h2>' + hbars(users.filter(function (u) { return U[u.id] && U[u.id].s7; }).sort(function (a, b) { return U[b.id].s7 - U[a.id].s7; }).slice(0, 10).map(function (u) { return [u.email, U[u.id].s7]; }), "time") + "</div>" +
-      '<div class="apanel w4"><h2>Latest settings changes</h2>' + (withPrefs.slice().sort(function (a, b) { return Date.parse(prefs[b.id].updated) - Date.parse(prefs[a.id].updated); }).slice(0, 10).map(function (u) {
-        return '<div class="hb" style="grid-template-columns:1fr auto"><span>' + esc(u.email) + '</span><b class="mut" style="font-weight:400">' + ago(Date.parse(prefs[u.id].updated)) + "</b></div>";
-      }).join("") || '<p class="mut sn">Nothing yet.</p>') + "</div></div>";
+    $("aWho").textContent = "Signed in as " + D.me + " · updated " + new Date(now).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
-    // accounts table
-    var rows = users.map(function (u) { var x = U[u.id] || { s7: 0, s30: 0, c30: 0, seen: 0, days: {}, clk: {} }; return { u: u, x: x, p: prefs[u.id], created: Date.parse(u.created) || 0, last: Date.parse(u.last) || 0, seen: x.seen, s7: x.s7, s30: x.s30, c30: x.c30, email: String(u.email || "").toLowerCase() }; })
-      .filter(function (r) { return !Q || r.email.indexOf(Q) >= 0; })
-      .sort(function (a, b) { return (a[SORT] > b[SORT] ? 1 : a[SORT] < b[SORT] ? -1 : 0) * SORTDIR || b.created - a.created; });
-    var th = function (k, l) { return '<th data-sort="' + k + '"' + (SORT === k ? ' class="on"' : "") + ">" + l + (SORT === k ? (SORTDIR < 0 ? " ▾" : " ▴") : "") + "</th>"; };
-    h += '<div class="apanel w12"><h2>Accounts <small>' + rows.length + " shown · click a row for details and actions</small></h2><div class=\"tablewrap\"><table class=\"atable\"><thead><tr>" +
-      th("email", "Email") + th("created", "Created") + th("last", "Last sign-in") + th("seen", "Last active") + th("s7", "Time 7d") + th("s30", "Time 30d") + th("c30", "Clicks 30d") + "<th>Setup</th></tr></thead><tbody>" +
-      rows.map(function (r) {
-        var u = r.u, p = r.p, tags = [];
-        if (u.admin) tags.push('<span class="y">owner</span>');
-        if (!u.confirmed) tags.push('<span class="bad">email not confirmed</span>');
-        if (u.banned) tags.push('<span class="bad">blocked</span>');
-        if (!p) tags.push("<span>no settings saved</span>");
-        else {
-          if (p.twitch) tags.push('<span class="y">Twitch</span>');
-          if (p.yt) tags.push('<span class="y">YouTube ' + p.yt + "</span>");
-          if (p.mail) tags.push('<span class="y">Gmail ' + p.mail + "</span>");
-          if (p.stocks) tags.push("<span>stocks " + p.stocks + "</span>");
-          if (p.notes + p.todos) tags.push("<span>notes " + (p.notes + p.todos) + "</span>");
-          if (p.cal) tags.push("<span>events " + p.cal + "</span>");
-          if (p.off.length) tags.push("<span>" + p.off.length + " box" + (p.off.length > 1 ? "es" : "") + " off</span>");
-        }
-        var out = '<tr class="urow" data-u="' + esc(u.id) + '"><td class="mail">' + esc(u.email) + '</td><td class="num">' + date(r.created) + '</td><td class="num">' + ago(r.last) + '</td><td class="num">' + ago(r.seen) + '</td><td class="num">' + dur(r.s7) + '</td><td class="num">' + dur(r.s30) + '</td><td class="num">' + r.c30 + '</td><td><div class="tags">' + tags.join("") + "</div></td></tr>";
-        if (OPEN[u.id]) {
-          var d14 = d30.slice(-14);
-          out += '<tr class="udetail"><td colspan="8"><div class="ud"><div><h3>Time per day, last 14 days</h3>' + bars(d14.map(function (d) { return r.x.days[d] || 0; }), d14, "time") +
-            (p ? '<h3 style="margin-top:12px">Setup</h3><div class="tags">' + ["theme " + p.theme, "news sources " + (p.news < 0 ? "default" : p.news), "Telegram " + (p.tg < 0 ? "default" : p.tg), "subreddits " + (p.rd < 0 ? "default" : p.rd), "leagues " + (p.leagues < 0 ? "default" : p.leagues),
-              "notes " + p.notes, "to-dos " + p.todos, "events " + p.cal, p.off.length ? "off: " + p.off.join(", ") : "all boxes on", p.docked.length ? "docked: " + p.docked.join(", ") : "nothing docked", "settings changed " + ago(Date.parse(p.updated))].map(function (t) { return "<span>" + esc(t) + "</span>"; }).join("") + "</div>" : "") +
-            "</div><div><h3>Most used by this account, 30 days</h3>" + hbars(Object.keys(r.x.clk).sort(function (a, b) { return r.x.clk[b] - r.x.clk[a]; }).slice(0, 8).map(function (k) { return [clickLabel(k), r.x.clk[k]]; })) +
-            '<div class="uacts"><button data-act="reset" data-id="' + esc(u.id) + '">Send password reset email</button>' +
-            (u.confirmed ? "" : '<button data-act="confirm" data-id="' + esc(u.id) + '">Mark email as confirmed</button>') +
-            (u.admin ? "" : '<button data-act="' + (u.banned ? "unblock" : "block") + '" data-id="' + esc(u.id) + '">' + (u.banned ? "Unblock" : "Block sign-in") + '</button><button class="danger" data-act="delete" data-id="' + esc(u.id) + '">Delete account…</button>') +
-            "</div></div></div></td></tr>";
-        }
-        return out;
-      }).join("") + "</tbody></table></div></div>";
+    var tile = function (v, l, s) { return '<div class="atile"><b>' + v + "</b><span>" + l + "</span>" + (s ? "<small>" + s + "</small>" : "") + "</div>"; };
+    var h = '<div class="atiles">' +
+      tile(count(DAY[today].ips), "visitors today", count(DAY[today].anon) + " of them not signed in") +
+      tile(count(ips7), "visitors, last 7 days", "different IP addresses") +
+      tile(users.length, "accounts", new7 ? new7 + " new in the last 7 days" : "none new this week") +
+      tile(DAY[today].users, "accounts used today", dur(DAY[today].secs) + " on the site in total") + "</div>";
+    var tabs = [["visitors", "Visitors"], ["accounts", "Accounts"], ["usage", "What is used"]];
+    h += '<div class="atabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '"' + (TAB === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div>";
+
+    if (TAB === "visitors") {
+      if (D.visitsErr) h += '<div class="apanel w12 awarn"><b>Visits are not being recorded yet.</b> <span class="mut">' + esc(D.visitsErr) + "</span></div>";
+      var top = function (get, n) { var m = {}; ipList.forEach(function (o) { var k = get(o); m[k] = (m[k] || 0) + 1; }); return Object.keys(m).sort(function (a, b) { return m[b] - m[a]; }).slice(0, n).map(function (k) { return [k, m[k]]; }); };
+      var list = ipList.filter(function (o) {
+        var names = Object.keys(o.who).map(function (id) { return (byId[id] || {}).email || ""; }).join(" ").toLowerCase();
+        if (VF === "anon" && count(o.who)) return false;
+        if (VF === "user" && !count(o.who)) return false;
+        return !Q || o.ip.toLowerCase().indexOf(Q) >= 0 || names.indexOf(Q) >= 0 || country(o.cc).toLowerCase().indexOf(Q) >= 0;
+      });
+      h += '<div class="agrid">' +
+        panel("Visitors per day", "How many different IP addresses opened the front page each day, last 30 days. A visitor does not need an account.", bars(d30.map(function (d) { return count(DAY[d].ips); }), d30), "w6") +
+        panel("Where they are", "By the country of the IP address, last 30 days.", hbars(top(function (o) { return country(o.cc); }, 6)), "w3") +
+        panel("How they got here", "The site they clicked from. “Direct” means they typed the address or used a bookmark.", hbars(top(function (o) { return o.ref || "Direct"; }, 6)), "w3") + "</div>";
+      h += '<div class="apanel w12"><h2>Visitors by IP address <span class="achips">' + [["all", "Everyone"], ["anon", "Not signed in"], ["user", "Signed in"]].map(function (f) { return '<button data-vf="' + f[0] + '"' + (VF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
+        '<p class="ahint">One line per IP address, most recent first. Click a line to see each of its visits. Reloading within 30 minutes counts as the same visit. Kept for 90 days.</p>' +
+        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th>Last visit</th><th>Visits</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
+        (list.slice(0, 300).map(function (o) {
+          var who = Object.keys(o.who).map(function (id) { var u = byId[id]; return u ? esc(u.email) + (u.admin ? ' <span class="tag y">you</span>' : "") : "a deleted account"; });
+          var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc(stamp(o.last)) + '">' + ago(o.last) + '</td><td class="num">' + o.n + "</td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
+          if (VOPEN[o.ip]) out += '<tr class="udetail"><td colspan="7"><div class="vlist">' + o.rows.slice(0, 40).map(function (v) {
+            var u = v.user_id && byId[v.user_id];
+            return "<div><b>" + esc(stamp(Date.parse(v.at))) + "</b><span>" + (u ? esc(u.email) : v.user_id ? "a deleted account" : "not signed in") + "</span><span>" + esc(device(v.ua)) + "</span><span>" + esc(v.ref || "Direct") + "</span><span class=\"mut\">" + esc([v.lang, v.tz].filter(Boolean).join(" · ")) + "</span></div>";
+          }).join("") + (o.rows.length > 40 ? '<div class="mut">… and ' + (o.rows.length - 40) + " earlier visits</div>" : "") + "</div></td></tr>";
+          return out;
+        }).join("") || '<tr><td colspan="7" class="mut">' + (visits.length ? "Nobody matches." : "No visits recorded yet.") + "</td></tr>") +
+        "</tbody></table></div>" + (list.length > 300 ? '<p class="ahint">Showing the 300 most recent of ' + list.length + ".</p>" : "") + "</div>";
+    }
+
+    if (TAB === "accounts") {
+      var rows = users.map(function (u) { var x = U[u.id] || { s7: 0, s30: 0, seen: 0, days: {}, clk: {} }; return { u: u, x: x, p: prefs[u.id], created: Date.parse(u.created) || 0, seen: Math.max(x.seen, Date.parse(u.last) || 0), s7: x.s7, s30: x.s30, email: String(u.email || "").toLowerCase() }; })
+        .filter(function (r) { return !Q || r.email.indexOf(Q) >= 0; })
+        .sort(function (a, b) { return (a[SORT] > b[SORT] ? 1 : a[SORT] < b[SORT] ? -1 : 0) * SORTDIR || b.created - a.created; });
+      var th = function (k, l) { return '<th data-sort="' + k + '" class="srt' + (SORT === k ? " on" : "") + '">' + l + (SORT === k ? (SORTDIR < 0 ? " ▾" : " ▴") : "") + "</th>"; };
+      h += '<div class="agrid">' + panel("New accounts per day", "Last 30 days.", bars(d30.map(function (d) { return users.filter(function (u) { return u.created && dayKey(Date.parse(u.created)) === d; }).length; }), d30), "w6") +
+        panel("Accounts used per day", "How many accounts had the page open each day, last 30 days.", bars(d30.map(function (d) { return DAY[d].users; }), d30), "w6") + "</div>";
+      h += '<div class="apanel w12"><h2>Accounts</h2><p class="ahint">' + rows.length + " shown. Click a line for details and for the actions: send a password reset, block or delete. Click a column name to sort.</p>" +
+        '<div class="tablewrap"><table class="atable"><thead><tr>' + th("email", "Email") + th("created", "Joined") + th("seen", "Last seen") + th("s7", "Time, 7 days") + th("s30", "Time, 30 days") + "<th>Status</th></tr></thead><tbody>" +
+        rows.map(function (r) {
+          var u = r.u, p = r.p, tags = [];
+          if (u.admin) tags.push('<span class="tag y">you (owner)</span>');
+          if (!u.confirmed) tags.push('<span class="tag bad">email not confirmed</span>');
+          if (u.banned) tags.push('<span class="tag bad">blocked</span>');
+          if (!p) tags.push('<span class="tag">has not set anything up</span>');
+          var out = '<tr class="urow" data-u="' + esc(u.id) + '"><td class="mail">' + esc(u.email) + '</td><td class="num">' + date(r.created) + '</td><td class="num">' + ago(r.seen) + '</td><td class="num">' + dur(r.s7) + '</td><td class="num">' + dur(r.s30) + "</td><td>" + (tags.join(" ") || '<span class="mut">fine</span>') + "</td></tr>";
+          if (OPEN[u.id]) {
+            var d14 = d30.slice(-14), set = p ? [p.twitch ? "Twitch connected" : "", p.yt ? "YouTube: " + p.yt + " channels" : "", p.mail ? "Gmail: " + p.mail + " inbox" + (p.mail > 1 ? "es" : "") : "", p.stocks ? p.stocks + " stocks" : "",
+              p.notes + p.todos ? (p.notes + p.todos) + " notes and to-dos" : "", p.cal ? p.cal + " calendar events" : "", p.off.length ? "switched off: " + p.off.map(function (k) { return BOXES[k] || k; }).join(", ") : "all boxes on", p.theme + " theme"].filter(Boolean) : [];
+            out += '<tr class="udetail"><td colspan="6"><div class="ud"><div><h3>Time on the site per day, last 14 days</h3>' + bars(d14.map(function (d) { return r.x.days[d] || 0; }), d14, "time") +
+              (set.length ? '<h3 style="margin-top:12px">What this account has set up</h3><div class="tags">' + set.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
+              "</div><div><h3>What this account uses most, last 30 days</h3>" + hbars(Object.keys(r.x.clk).sort(function (a, b) { return r.x.clk[b] - r.x.clk[a]; }).slice(0, 8).map(function (k) { return [clickLabel(k), r.x.clk[k]]; })) +
+              '<div class="uacts"><button data-act="reset" data-id="' + esc(u.id) + '">Send password reset email</button>' +
+              (u.confirmed ? "" : '<button data-act="confirm" data-id="' + esc(u.id) + '">Mark email as confirmed</button>') +
+              (u.admin ? "" : '<button data-act="' + (u.banned ? "unblock" : "block") + '" data-id="' + esc(u.id) + '">' + (u.banned ? "Unblock" : "Block sign-in") + '</button><button class="danger" data-act="delete" data-id="' + esc(u.id) + '">Delete account…</button>') +
+              "</div></div></div></td></tr>";
+          }
+          return out;
+        }).join("") + "</tbody></table></div></div>";
+    }
+
+    if (TAB === "usage") {
+      if (D.usageErr) h += '<div class="apanel w12 awarn"><b>Usage is not being collected yet.</b> <span class="mut">' + esc(D.usageErr) + "</span></div>";
+      var withPrefs = users.filter(function (u) { return prefs[u.id]; });
+      h += '<div class="agrid">' +
+        panel("Time on the site per day", "All signed-in accounts together, last 30 days. Only counted while the page is open and visible.", bars(d30.map(function (d) { return DAY[d].secs; }), d30, "time"), "w6") +
+        panel("Who spends the most time", "Last 7 days.", hbars(users.filter(function (u) { return U[u.id] && U[u.id].s7; }).sort(function (a, b) { return U[b.id].s7 - U[a.id].s7; }).slice(0, 8).map(function (u) { return [u.email, U[u.id].s7]; }), "time"), "w6") +
+        panel("What people do most", "Button presses by signed-in accounts, last 30 days: which box, and what was pressed.", hbars(Object.keys(CLK).sort(function (a, b) { return CLK[b] - CLK[a]; }).slice(0, 14).map(function (k) { return [clickLabel(k), CLK[k]]; })), "w6") +
+        panel("Boxes people keep switched on", "Out of " + withPrefs.length + " account" + (withPrefs.length === 1 ? "" : "s") + " that have saved settings.", hbars(Object.keys(BOXES).map(function (k) { return [BOXES[k], withPrefs.filter(function (u) { return prefs[u.id].off.indexOf(k) < 0; }).length]; }).sort(function (a, b) { return b[1] - a[1]; })), "w6") + "</div>";
+    }
+    $("aQ").placeholder = TAB === "visitors" ? "Find an IP, country or email…" : "Find an account…";
+    $("aQ").style.visibility = TAB === "usage" ? "hidden" : "";
     $("aBody").innerHTML = h;
   }
 
@@ -163,10 +209,17 @@
   document.addEventListener("click", function (e) {
     var b = e.target.closest("[data-act]");
     if (b) { e.stopPropagation(); act(b.dataset.act, b.dataset.id); return; }
+    if (!D) return;
+    var tab = e.target.closest("[data-tab]");
+    if (tab) { TAB = tab.dataset.tab; render(); return; }
+    var vf = e.target.closest("[data-vf]");
+    if (vf) { VF = vf.dataset.vf; render(); return; }
     var th = e.target.closest("th[data-sort]");
-    if (th && D) { if (SORT === th.dataset.sort) SORTDIR = -SORTDIR; else { SORT = th.dataset.sort; SORTDIR = SORT === "email" ? 1 : -1; } render(); return; }
+    if (th) { if (SORT === th.dataset.sort) SORTDIR = -SORTDIR; else { SORT = th.dataset.sort; SORTDIR = SORT === "email" ? 1 : -1; } render(); return; }
     var row = e.target.closest("tr.urow");
-    if (row && D) { OPEN[row.dataset.u] = !OPEN[row.dataset.u]; render(); }
+    if (row) { OPEN[row.dataset.u] = !OPEN[row.dataset.u]; render(); return; }
+    var vrow = e.target.closest("tr.vrow");
+    if (vrow) { VOPEN[vrow.dataset.ip] = !VOPEN[vrow.dataset.ip]; render(); }
   });
   $("aQ").addEventListener("input", function (e) { Q = e.target.value.trim().toLowerCase(); if (D) render(); });
   $("aRefresh").onclick = load;

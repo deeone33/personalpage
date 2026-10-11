@@ -1,4 +1,4 @@
-var VERSION = 90;
+var VERSION = 91;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2737,7 +2737,18 @@ function deleteAccount() {
     openModal("Account deleted", "<p>Your account and everything saved in it have been deleted.</p><p class=\"mut sn\">You can create a new one any time with the person icon.</p>");
   }).catch(function (e) { msg.textContent = "Could not delete the account: " + String((e && e.message) || e); });
 }
+// ---- Visitor log for the site owner: one line per visit to the front page, signed in or not ----
+// The database itself notes the IP address and country the request came from; the page only adds where the visitor
+// came from (the site's name, not the full address), their language and their time zone. Once per page load.
+function logVisit() {
+  if (!sb) return;
+  var ref = "";
+  try { ref = document.referrer ? new URL(document.referrer).hostname : ""; if (ref === location.hostname) ref = ""; } catch (e) {}
+  var tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+  try { sb.rpc("log_visit", { p_ref: ref, p_lang: navigator.language || "", p_tz: tz }).then(function () {}, function () {}); } catch (e) {}
+}
 function initAuth() {
+  setTimeout(logVisit, 3000);   // after the sign-in state is known, so a signed-in visit carries its account
   renderAccount();
   if (!sb) { loadSamples(); return; }
   setTimeout(function () { if (!USER && !PREVIEW) loadSamples(); }, 1500);
@@ -2862,7 +2873,7 @@ function openHelp() {
     '<li><b>Sign-in activity:</b> every device and browser signed in to your account right now and the latest sign-ins, with a button to sign out everywhere else. You can also be emailed the first time a new browser signs in (needs an inbox under Mail).</li>' +
     '<li><b>Delete account:</b> removes the account and everything saved in it, for good.</li>' +
     '<li><b>Backup:</b> downloads all settings, sources, notes and layout as a file you can restore later.</li></ul>' +
-    '<p>Everything you set up is private to your own account &mdash; nobody else using this site can see it. To run the site, it counts how long the page is open and how often each kind of button is used per account; never what you read, type, search or save. Text you translate in the search bar goes to the MyMemory translation service, and radio stations are played straight from the stations\' own servers.</p>';
+    '<p>Everything you set up is private to your own account &mdash; nobody else using this site can see it. To run the site, it counts how long the page is open and how often each kind of button is used per account; never what you read, type, search or save. Each visit to the page, signed in or not, is also noted with its IP address, country and browser; that log is kept for 90 days and only the site owner can see it. Text you translate in the search bar goes to the MyMemory translation service, and radio stations are played straight from the stations\' own servers.</p>';
 
   openModal("Help", html);
 }

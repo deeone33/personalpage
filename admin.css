@@ -14,11 +14,32 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .atiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .atile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .atile b{display:block;font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
-.atile span{font-size:12px;color:var(--mut)}
+.atile span{font-size:12.5px;color:var(--fg)}
+.atile small{display:block;font-size:11.5px;color:var(--mut)}
+/* the three tabs */
+.atabs{display:flex;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--line)}
+.atabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 14px;font-size:14px;font-weight:600;color:var(--mut)}
+.atabs button:hover{color:var(--fg)}
+.atabs button.on{color:var(--fg);border-bottom-color:var(--ac)}
+/* one plain sentence under a panel's title, saying what it shows */
+.ahint{margin:-4px 0 10px;font-size:12px;color:var(--mut);line-height:1.4}
+.achips{margin-left:auto;display:flex;gap:4px}
+.achips button{font-size:11.5px;padding:1px 9px;border-radius:99px;font-weight:400}
+.achips button.on{border-color:var(--ac);color:var(--fg);background:var(--acsoft)}
+.awarn{margin-bottom:12px;border-color:var(--ac)}
+.tag{display:inline-block;font-size:11px;padding:0 7px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.tag.y{border-color:var(--ac);color:var(--fg)}
+.tag.bad{border-color:var(--down);color:var(--down)}
+.vlist{display:grid;gap:2px;font-size:12.5px}
+.vlist>div{display:grid;grid-template-columns:10em minmax(8em,1.2fr) 1fr 1fr 1.2fr;gap:10px;padding:2px 0}
+.vlist b{font-weight:600;font-variant-numeric:tabular-nums}
+.atable tr.vrow{cursor:pointer}
+.atable tr.vrow:hover td{background:var(--acsoft)}
+.atable th.srt{cursor:pointer}
 .agrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:12px}
 .apanel{grid-column:span 6;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
-.apanel.w4{grid-column:span 4}.apanel.w12{grid-column:span 12}
-.apanel h2{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--mut);display:flex;align-items:center;gap:6px}
+.apanel.w4{grid-column:span 4}.apanel.w12{grid-column:span 12}.apanel.w6{grid-column:span 6}.apanel.w3{grid-column:span 3}
+.apanel h2{margin:0 0 10px;font-size:14px;font-weight:700;color:var(--fg);display:flex;align-items:center;gap:6px}
 .apanel h2::before{content:"";width:3px;height:12px;border-radius:3px;background:var(--ac)}
 .apanel h2 small{font-weight:400;margin-left:auto}
 /* bar chart: one column per day */
@@ -35,7 +56,7 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .hb b{font-variant-numeric:tabular-nums;font-weight:600;min-width:34px;text-align:right}
 /* accounts table */
 .atable{width:100%;border-collapse:collapse;font-size:13px}
-.atable th{text-align:left;font-weight:600;color:var(--mut);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+.atable th{text-align:left;font-weight:600;color:var(--mut);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;user-select:none}
 .atable th.on{color:var(--fg)}
 .atable td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .atable tr.urow{cursor:pointer}
@@ -52,4 +73,4 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 .uacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .uacts button{font-size:12px;padding:4px 10px}
 .tablewrap{overflow-x:auto}
-@media(max-width:900px){.apanel,.apanel.w4{grid-column:span 12}.ud{grid-template-columns:1fr}}
+@media(max-width:900px){.apanel,.apanel.w4,.apanel.w6,.apanel.w3{grid-column:span 12}.ud{grid-template-columns:1fr}.vlist>div{grid-template-columns:1fr 1fr}}
