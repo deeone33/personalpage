@@ -62,9 +62,11 @@
   <h2 id="content">What you save in OmniTree</h2>
   <p>So that your page looks the same on every device, your setup is stored with your account:</p>
   <ul>
-    <li>Your settings and layout: which boxes are on, where they are, colors, text size, shortcuts.</li>
+    <li>Your settings and layout: which boxes are on, where they are, colors, text size, shortcuts, how the date and time are shown, and your world-clock cities.</li>
+    <li>Your bookmarks: the names and addresses of the links on your bookmarks bar.</li>
     <li>Your sources: news sites, Telegram channels, subreddits, YouTube channels, stock symbols, sports leagues, favorite teams and players, cities for the weather, radio stations.</li>
     <li>What you write: notes, to-dos, calendar events, birthdays, timers and alarms.</li>
+    <li>What you have already seen: up to when each box counts as read, which posts you opened, which notifications were already given and when you cleared them. This is what lets your phone and your computer agree. Posts and notifications are kept as short fingerprints (a few letters and digits each), not as their addresses or texts.</li>
     <li>Your wallpaper picture, if you upload one.</li>
     <li>For connected accounts: the access code Twitch gives the page, and the address and secret code of your own Gmail script (see <a href="#connect">Connected accounts</a>).</li>
   </ul>
@@ -83,7 +85,7 @@
   <ul>
     <li><b>Twitch:</b> you log in on Twitch's own page. OmniTree receives an access code that only allows reading the list of channels you follow. It never sees your Twitch password. You can remove the access in Settings → Twitch or on twitch.tv.</li>
     <li><b>Gmail:</b> you install a small script in your own Google account. OmniTree stores the script's address and its secret code, and asks it for your unread count and the sender, subject and first line of the latest unread emails. These pass through OmniTree's server on the way to your browser and are not stored there. The script cannot delete or move mail. You can stop it at any time by deleting the script in your Google account.</li>
-    <li><b>News, Reddit, Telegram, YouTube, some sports:</b> OmniTree's server fetches these public sources for you. The list of sources you asked for is sent to the server for that purpose; the answers are kept for a few minutes to avoid fetching the same thing twice, not linked to you.</li>
+    <li><b>News, Reddit, Telegram, YouTube, some sports and esports:</b> OmniTree's server fetches these public sources for you. The list of sources you asked for is sent to the server for that purpose; the answers are kept for a few minutes to avoid fetching the same thing twice, not linked to you.</li>
     <li><b>Email notifications:</b> if you switch them on, they are sent by your own Gmail script to your own address.</li>
   </ul>
 
@@ -97,6 +99,7 @@
     <tr><td>Twitch, YouTube, TradingView</td><td>Players and charts shown inside the page, only when you use them</td><td>Your IP address and browser; they may set their own cookies, under their own privacy policies</td></tr>
     <tr><td>Sports, weather, market, translation and music-information sources (among them ESPN, Open-Meteo, CoinGecko, MyMemory, Apple iTunes Search, MusicBrainz) and the radio stations you play</td><td>Deliver scores, forecasts, prices, translations, song details and audio straight to your browser</td><td>Your IP address and browser, and what you asked for (for example the city, or the text you asked to translate)</td></tr>
     <tr><td>Pictures in news, Reddit and Telegram items</td><td>Loaded from the site they belong to</td><td>Your IP address and browser</td></tr>
+    <tr><td>The sites in your bookmarks, when a bookmark is set to show “the site’s own icon”</td><td>Deliver that small icon each time the page opens</td><td>Your IP address and browser. Choosing one of the built-in icons avoids this.</td></tr>
   </table>
   <p>Some of these companies are outside the European Union, mainly in the United States. Where personal data is transferred there, it is done under the safeguards those providers offer, such as the EU–US Data Privacy Framework or standard contractual clauses.</p>
 

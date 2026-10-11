@@ -930,12 +930,15 @@ body.noshadow #srchAns{box-shadow:none}
 .spwin .row.sel b{color:var(--ac)}
 @media(max-width:520px){.sprk.two{grid-template-columns:1fr}}
 
+/* The cogwheel menu opens towards the left, like the account menu beside it. It sits near the right edge of the page,
+   and opening to the right it ran off the screen in a window about 1000px wide (and on phones). */
+.menurow .dd:nth-last-child(2) .menu:not(.bell){left:auto;right:0}
+
 /* ---- Phones only: the notifications list is as wide as the menu box (it used to hang off the left edge of the
    screen), and the four kinds of feedback sit two by two so that all of them can be pressed ---- */
 @media(max-width:520px){
   .menurow .dd:has(>.menu.bell){position:static}
   .menurow .menu.bell{left:8px;right:8px;width:auto;min-width:0;max-width:none}
-  .menurow .dd:nth-last-child(2) .menu:not(.bell){left:auto;right:0}   /* the cogwheel menu opened 5px past the right edge of the screen */
   .auth.fb .seg{flex-wrap:wrap}
   .auth.fb .seg button{flex:1 1 45%;white-space:normal}
 }
@@ -974,7 +977,7 @@ body.noshadow #srchAns{box-shadow:none}
 #grid .card:not(.compact)>.th{min-height:24px}
 
 /* ---- Bookmarks bar: one slim row at the very top of the page (scrolls away with it) ---- */
-#bm{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;align-items:center}
+#bm{display:flex;flex-wrap:wrap;gap:5px;margin:-10px 0 10px;align-items:center}   /* -10px: the bar sits 10px from the top of the page instead of the page's usual 20px */
 #bm[hidden]{display:none}
 #bm[data-al=c]{justify-content:center}
 #bm[data-al=r]{justify-content:flex-end}
