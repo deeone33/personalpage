@@ -1,4 +1,4 @@
-// OmniRama admin overview.
+// OmniTree admin overview.
 // This page holds no data of its own. Everything comes from the feeds function, which first asks Supabase who is
 // signed in and only answers when that is the site owner's confirmed email. Anyone else who opens this page gets "Not allowed".
 (function () {

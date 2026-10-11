@@ -4,7 +4,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https://player.twitch.tv https://www.twitch.tv https://www.youtube-nocookie.com https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
-<title>OmniRama</title>
+<title>OmniTree</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
@@ -20,12 +20,12 @@
   <header>
     <div><div id="day">Day</div><div id="date" class="mut">Date</div><button id="nextUp" data-a="nextday" title="Open the calendar on this day" hidden></button></div>
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search…  ( / )" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
-    <img id="logoImg" alt="OmniRama" src="logo.png" width="512" height="109">
+    <div id="logoImg" role="img" aria-label="OmniTree"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
   </header>
   <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the radio, the search bar, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
   <div id="clocks"></div>
   <div id="grid"></div>
-  <footer class="mut">OmniRama · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button></footer>
+  <footer class="mut">OmniTree · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button></footer>
 </main>
 <div id="panel" hidden>
  <div class="setwin" role="dialog" aria-modal="true" aria-label="Settings">

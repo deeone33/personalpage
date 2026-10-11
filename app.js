@@ -1,4 +1,4 @@
-var VERSION = 88;
+var VERSION = 90;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2087,7 +2087,7 @@ function radioPlay() {
   RAD.a.src = s[3]; RAD.a.volume = radioVol() / 100;
   var p = RAD.a.play();
   if (p && p.catch) p.catch(function () { if (RAD.id === s[0] && RAD.state === "load") { RAD.state = "err"; render(); } });
-  try { if (navigator.mediaSession && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: s[1], artist: "OmniRama radio" }); } catch (e) {}
+  try { if (navigator.mediaSession && window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: s[1], artist: "OmniTree radio" }); } catch (e) {}
   render();
   radioNow(true);
 }
@@ -2748,7 +2748,7 @@ function initAuth() {
   });
 }
 // The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
-var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniRama&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
+var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
 function openHelp() {
   var toc = [
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
@@ -2927,8 +2927,8 @@ function sendNtfMail(items) {
   if (!sb || !USER) return Promise.resolve("Sign in first.");
   if (!c) return Promise.resolve("Connect a Gmail inbox first (Settings, Mail). The emails are sent by that inbox's script, to itself.");
   var when = function (t) { return new Date(t).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); };
-  var subject = items.length === 1 ? "OmniRama: " + items[0].t : "OmniRama: " + items.length + " notifications";
-  var text = items.map(function (x) { return when(x.ts) + "  " + x.t + (x.b ? "\n       " + x.b : ""); }).join("\n\n") + "\n\n(Sent by your OmniRama page. Switch this off in Settings, Notifications.)";
+  var subject = items.length === 1 ? "OmniTree: " + items[0].t : "OmniTree: " + items.length + " notifications";
+  var text = items.map(function (x) { return when(x.ts) + "  " + x.t + (x.b ? "\n       " + x.b : ""); }).join("\n\n") + "\n\n(Sent by your OmniTree page. Switch this off in Settings, Notifications.)";
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailNotify: { url: c.url, t: c.t, subject: subject, text: text } } }).then(function (r) {
     if (r.error) return r.error.message || "The function did not answer.";
     if (r.data && r.data.sent) return "";
@@ -4161,7 +4161,7 @@ function wizPage(id) {
   if (id === "stocks") return "<p>Type the symbols you want to follow, separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. NVDA, AAPL, TSLA, BTCUSD, ETHUSD") +
     '<p class="mut sn">Use TradingView? In Settings → Stocks you can paste a shared watchlist link and import the whole list at once.</p>';
   if (id === "twitch") return "<p>Connect your Twitch account so the box can show which of the channels you follow are live. The page only asks to <b>see who you follow</b>; it cannot chat, follow or change anything.</p>" +
-    mock("id.twitch.tv", "<b>OmniRama wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
+    mock("id.twitch.tv", "<b>OmniTree wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
     (twToken() ? '<p><span class="pill ac">✓ Twitch is connected</span></p>' : '<p><button class="pri" data-a="wiztw">Connect Twitch</button></p>') +
     '<p class="mut sn">Tip: with Twitch Turbo or a sub, use <b>Pop out</b> on a stream to watch without ads.</p>';
@@ -4191,7 +4191,7 @@ function wizPage(id) {
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
     "<li><b>Weather:</b> click the weather box to pick your city.</li><li><b>Shortcuts:</b> press <code>?</code> for the full help.</li></ul>";
 }
-var WIZ_TITLES = { pick: "Welcome to OmniRama", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
+var WIZ_TITLES = { pick: "Welcome to OmniTree", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
 function wizRender() {
   var pages = wizPages();
   WIZ.step = Math.max(0, Math.min(pages.length - 1, WIZ.step));
@@ -4643,7 +4643,7 @@ function checkDevice() {
   P.devs = devs; persist();
   // the very first device of an account is not news; after that every new one is
   if (first || P.devMail === false || !mailCfg()) return;
-  sendNtfMail([{ ts: Date.now(), t: "New sign-in to your OmniRama account", b: name + ", " + when(Date.now()) + ". If this was you, nothing needs doing. If not: change your password, then Settings > Account > Sign-in activity > Sign out everywhere else." }]);
+  sendNtfMail([{ ts: Date.now(), t: "New sign-in to your OmniTree account", b: name + ", " + when(Date.now()) + ". If this was you, nothing needs doing. If not: change your password, then Settings > Account > Sign-in activity > Sign out everywhere else." }]);
 }
 
 // ---- Settings search: type a word, get every setting that mentions it, click to jump there ----
@@ -4685,10 +4685,10 @@ document.addEventListener("keydown", function (e) { if (e.target.id === "setQ" &
 
 // ---- Backup and restore ----
 $("bkExport").onclick = function () {
-  var data = JSON.stringify({ app: "OmniRama", v: VERSION, at: new Date().toISOString(), prefs: Object.assign({}, P, { tw: undefined }) }, null, 2);
+  var data = JSON.stringify({ app: "OmniTree", v: VERSION, at: new Date().toISOString(), prefs: Object.assign({}, P, { tw: undefined }) }, null, 2);
   var a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
-  a.download = "omnirama-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.download = "omnitree-backup-" + new Date().toISOString().slice(0, 10) + ".json";
   document.body.appendChild(a); a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   $("bkMsg").textContent = "Backup downloaded.";
@@ -4699,9 +4699,9 @@ $("bkFile").onchange = function (e) {
   var fr = new FileReader();
   fr.onload = function () {
     var p = null;
-    try { var j = JSON.parse(fr.result); p = j && j.app === "OmniRama" ? j.prefs : null; } catch (x) {}
+    try { var j = JSON.parse(fr.result); p = j && (j.app === "OmniTree" || j.app === "Omni" + "Rama") ? j.prefs : null; } catch (x) {}   // also backups made under the site's earlier name
     e.target.value = "";
-    if (!p || typeof p !== "object" || Array.isArray(p)) { $("bkMsg").textContent = "That file is not an OmniRama backup."; return; }
+    if (!p || typeof p !== "object" || Array.isArray(p)) { $("bkMsg").textContent = "That file is not an OmniTree backup."; return; }
     if (!confirm("Replace your current settings, sources, notes and layout with this backup?")) return;
     var tw = P.tw;
     P = Object.assign({ theme: "dark", accent: DEFAULT_ACCENT, fav: {}, hidden: {} }, p);

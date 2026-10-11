@@ -1,4 +1,4 @@
-/* ============ OmniRama ============
+/* ============ OmniTree ============
    Colors come from app.js (applyTheme sets --bg --fg --mut --card --solid --line --ac --acfg --acsoft --acglow),
    so everything here only uses those tokens. */
 *{box-sizing:border-box}
@@ -29,7 +29,14 @@ header{display:flex;justify-content:space-between;align-items:flex-start;gap:12p
 #nextUp[hidden]{display:none}
 #nextUp:hover{text-decoration:underline}
 header.hasnext{margin-bottom:6px}
-#logoImg{height:44px;width:auto;display:block;flex:none;filter:drop-shadow(0 4px 14px rgba(0,0,0,.25))}
+/* The logo: the tree, a thin divider, then the name in two pictures. "OMNI" is dark in the picture, so on the dark
+   theme it is turned light; "TREE" keeps its own blue. */
+#logoImg{--lh:44px;height:var(--lh);display:flex;align-items:center;gap:calc(var(--lh)*.2);flex:none;filter:drop-shadow(0 4px 14px rgba(0,0,0,.25))}
+#logoImg .lgi{height:calc(var(--lh)*.8);width:auto;display:block}
+#logoImg .lgs{width:1px;height:calc(var(--lh)*.68);background:var(--mut);opacity:.5}
+#logoImg .lgo,#logoImg .lgt{height:calc(var(--lh)*.5);width:auto;display:block}
+html[data-theme=dark] #logoImg .lgo{filter:invert(1) brightness(1.15)}
+#logoImg .lgt{margin-left:calc(var(--lh)*-.2)}
 /* Thin search box on the top line of the header; timers sit on the date line below it, so they never touch */
 #srch{flex:0 1 280px;align-self:flex-start;margin:2px auto 0}
 #srchIn{width:100%;height:26px;font:inherit;font-size:12.5px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:0 12px;outline:0;transition:border-color .15s}
@@ -690,7 +697,7 @@ button.danger:hover{background:var(--down);color:#fff}
   header{flex-wrap:wrap}
   #srch{order:3;flex:1 1 100%;margin:0}
   #day{font-size:calc(30px*var(--gfs,1))}
-  #logoImg{height:30px}
+  #logoImg{--lh:30px}
   #grid{grid-template-columns:1fr}
   #grid .card{grid-column:auto}
   .pairwrap{grid-column:auto;flex-wrap:wrap}

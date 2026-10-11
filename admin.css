@@ -1,4 +1,4 @@
-/* OmniRama admin overview. Always dark; builds on style.css (colors, buttons, pills, rows). */
+/* OmniTree admin overview. Always dark; builds on style.css (colors, buttons, pills, rows). */
 :root{--ac:#f5b942;--acfg:#111;--acsoft:rgba(245,185,66,.16);--acglow:rgba(245,185,66,.35)}
 body.adminpage{background:var(--bg);color:var(--fg)}
 #adm{max-width:1280px;margin:auto;padding:22px 20px 60px}
