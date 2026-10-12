@@ -1,4 +1,4 @@
-var VERSION = 144;
+var VERSION = 145;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2690,6 +2690,16 @@ function fitHeads() { Array.prototype.forEach.call(document.querySelectorAll("#g
 var fitHeadT = 0;
 window.addEventListener("resize", function () { clearTimeout(fitHeadT); fitHeadT = setTimeout(fitHeads, 120); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitHeads(); });
+// The boxes also change width without the window changing size (zooming, a panel docked at the side, a scroll bar coming
+// or going): whenever the grid or a box gets a new width, the top lines are fitted again, wider as well as narrower.
+var fitHeadW = {};
+if (window.ResizeObserver && $("grid")) new ResizeObserver(function () {
+  var ch = false;
+  Array.prototype.forEach.call($("grid").children, function (c) { var id = c.dataset.id || "", w = c.clientWidth; if (fitHeadW[id] !== w) { fitHeadW[id] = w; ch = true; } });
+  if (ch) { clearTimeout(fitHeadT); fitHeadT = setTimeout(fitHeads, 60); }
+}).observe($("grid"));
+window.addEventListener("pageshow", function () { fitHeads(); });
+document.addEventListener("visibilitychange", function () { if (!document.hidden) fitHeads(); });
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
