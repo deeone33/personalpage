@@ -1,4 +1,4 @@
-var VERSION = 136;
+var VERSION = 137;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1532,7 +1532,7 @@ function radFind() {
       seen[s.stationuuid] = 1;
       return true;
     }).sort(function (a, b) { return (+b.clickcount || 0) - (+a.clickcount || 0); }).slice(0, 15).map(function (s) {
-      return { id: "u_" + String(s.stationuuid).replace(/[^\w-]/g, "").slice(0, 36), n: String(s.name).trim().slice(0, 60), u: String(s.url_resolved || s.url), c: String(s.country || s.countrycode || "").slice(0, 30), tags: String(s.tags || "").split(",").filter(Boolean).slice(0, 3).join(", ").slice(0, 60), kb: +s.bitrate || 0 };
+      return { id: "u_" + String(s.stationuuid).replace(/[^\w-]/g, "").slice(0, 36), n: String(s.name).trim().slice(0, 60), u: String(s.url_resolved || s.url), c: radCountry(s.country || s.countrycode), tags: String(s.tags || "").split(",").filter(Boolean).slice(0, 3).join(", ").slice(0, 60), kb: +s.bitrate || 0 };
     });
     box.innerHTML = RBRES.length ? RBRES.map(function (s, i) {
       return '<div class="row"><span><span class="bnm rbn">' + esc(s.n) + '</span> <small class="mut">' + esc([s.c, s.tags, s.kb ? s.kb + " kbit" : ""].filter(Boolean).join(" · ")) + "</small></span>" + radHaveHtml(s, i) + "</div>";
@@ -3941,7 +3941,9 @@ function radioHtml() {
     '<button data-a="radplay" class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" aria-label="Play" title="' + tip + '"><svg ' + RI + '><path d="M8 5.500v13l10.500-6.500z"/></svg></button>' +
     '<button data-a="radstop" class="ib" aria-label="Stop" title="Stop"><svg ' + RI + '><rect x="6.500" y="6.500" width="11" height="11" rx="1.500"/></svg></button>' +
     '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
-    (MENU_OPEN === "vol" ? '<div class="menu volpop"><input type="range" id="radVol" min="0" max="100" step="1" value="' + v + '" aria-label="Radio volume"><span id="radVolN">' + v + "</span></div>" : "") + "</div></div>";
+    (MENU_OPEN === "vol" ? '<div class="menu volpop"><input type="range" id="radVol" min="0" max="100" step="1" value="' + v + '" aria-label="Radio volume"><span id="radVolN">' + v + "</span></div>" : "") + "</div>" +
+    // the same window a click on the box opens, as a button of its own (the box is small to hit, on a phone above all)
+    '<button data-a="radinfob" class="ib" aria-label="What is playing, and about this station" title="What is playing, and about this station"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.500h.01"/></svg></button></div>';
 }
 document.addEventListener("change", function (e) {
   if (e.target.id !== "radSel") return;
@@ -4049,10 +4051,43 @@ function radioInfoHtml(info, writers) {
   return head + (before.length ? "<h3>Played before</h3>" + before.map(function (o) {
     return '<div class="row rnph"><span><b>' + esc(o.s) + '</b> <span class="mut">' + esc(o.a) + '</span></span><span class="r mut">' + new Date(o.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) + "</span></div>";
   }).join("") : "") +
-    '<p class="mut sn rnpf">' + esc(st[1]) + " · " + esc(st[2]) + " · " + esc(st[4]) + (USER ? " · Earlier songs are noted while the radio plays on this page." : "") + "</p>";
+    (before.length && USER ? '<p class="mut sn rnpf">Earlier songs are noted while the radio plays on this page.</p>' : "") +
+    '<h3>The station</h3><div id="rnpSt">' + radStHtml(st, (RSTC[st[0]] || {}).v) + "</div>";
+}
+// ---- About the station itself: what we know (name, genre, language) plus, looked up once a week in the Radio Browser
+// catalogue, its country, website, sound quality and a few of its own tags. One compact block under the songs. ----
+var RSTC = load("sp_rst", {});
+// the catalogue's formal country names, said the short way
+function radCountry(c) { c = String(c || "").replace(/^The /, ""); return (/^United Kingdom/i.test(c) ? "United Kingdom" : /^United States/i.test(c) ? "United States" : /^Russian Fed/i.test(c) ? "Russia" : /^Republic Of Moldova|^Moldova/i.test(c) ? "Moldova" : /^Korea, Republic|^Republic Of Korea/i.test(c) ? "South Korea" : c).slice(0, 30); }
+function radStHtml(st, v) {
+  v = v || {};
+  var own = /^u_/.test(st[0]), l1 = [own ? "" : st[2], st[4] && st[4] !== "—" && st[4] !== v.c ? st[4] : "", v.c].filter(Boolean).join(" · "), l2 = [v.kb ? v.kb + " kbit" + (v.codec ? " " + v.codec : "") : "", v.tags].filter(Boolean).join(" · ");
+  return '<div class="rst">' + (v.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" loading="lazy" src="' + esc(v.logo) + '">' : "") + '<div class="rstt"><b>' + esc(st[1]) + "</b>" + (l1 ? "<small>" + esc(l1) + "</small>" : "") + (l2 ? "<small>" + esc(l2) + "</small>" : "") + "</div>" + (v.home ? linkBtn(v.home, "Website") : "") + "</div>";
+}
+function radStInfo(st) {
+  var c = RSTC[st[0]];
+  if (c && Date.now() - c.t < 604800000) return Promise.resolve(c.v);
+  var uuid = /^u_[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(st[0]) ? st[0].slice(2) : "";
+  return (uuid ? rbGet("stations/byuuid/" + uuid) : rbGet("stations/search?hidebroken=true&order=clickcount&reverse=true&limit=15&name=" + encodeURIComponent(st[1]))).then(function (list) {
+    list = Array.isArray(list) ? list : [];
+    // the same station, not just one of the same name: the same stream address, or the same stream name and a name that starts
+    // the same, or exactly the same name in the country its language belongs to
+    var key = radKey(st[3]), seg = radSeg(st[3]), nm = radFlat(st[1]), lang = String(st[4] || "").toLowerCase().replace(/[^a-z ]/g, ""), root = RAD_LANGC[lang] != null ? RAD_LANGC[lang] : lang.slice(0, 3);
+    var u = function (s) { return String(s.url_resolved || s.url || ""); }, inC = function (s) { return !!root && String(s.country || "").toLowerCase().indexOf(root) >= 0; };
+    var hit = uuid ? list[0] : list.filter(function (s) { return radKey(u(s)) === key; })[0] || list.filter(function (s) { return seg.length >= 3 && radSeg(u(s)) === seg && radFlat(s.name).indexOf(nm) === 0; })[0] || list.filter(function (s) { return radFlat(s.name) === nm && inC(s); })[0];
+    var v = hit ? { c: radCountry(hit.country), home: /^https?:\/\/[^\s]+\.[^\s]+/.test(String(hit.homepage || "")) ? safeUrl(String(hit.homepage).slice(0, 300)) : "", kb: +hit.bitrate > 0 ? +hit.bitrate : 0, codec: String(hit.codec || "").replace(/[^A-Za-z0-9+]/g, "").slice(0, 8),
+      tags: String(hit.tags || "").split(",").map(function (t) { return t.trim(); }).filter(function (t) { return t && t.length < 22; }).slice(0, 3).join(", "), logo: /^https:\/\//.test(String(hit.favicon || "")) ? String(hit.favicon).slice(0, 300) : "" } : {};
+    RSTC[st[0]] = { t: Date.now(), v: v };
+    var ks = Object.keys(RSTC);
+    if (ks.length > 80) ks.sort(function (a, b) { return RSTC[a].t - RSTC[b].t; }).slice(0, ks.length - 80).forEach(function (k) { delete RSTC[k]; });
+    save("sp_rst", RSTC);
+    return v;
+  }).catch(function () { return {}; });
 }
 function openRadioInfo() {
   openModal(RAD_T, radioInfoHtml());
+  var st0 = radioCur();
+  if (st0) radStInfo(st0).then(function (v) { var now = radioCur(); if (now && now[0] === st0[0] && !$("modal").hidden && $("mTitle").textContent === RAD_T && $("rnpSt")) $("rnpSt").innerHTML = radStHtml(st0, v); });
   radioNow(RNP.raw == null).then(radioRefresh);
   radioRefresh();
 }
@@ -4426,6 +4461,7 @@ document.addEventListener("click", function (e) {
     }).catch(function () { alert("Could not copy automatically. Select the text below and copy it manually (Ctrl+C or Cmd+C)."); });
     return;
   }
+  if (a === "radinfob") { openRadioInfo(); return; }
   if (a === "radinfo") { if (!e.target.closest("select, button, input, .dd, .tools")) openRadioInfo(); return; }
   if (a === "radplay") { radioPlay(); return; }
   if (a === "radstop") { radioStop(); return; }
@@ -4952,7 +4988,7 @@ function openHelp() {
     '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
     '</ol>';
 
-  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. A station that is already in the list, also when the catalogue has it under another address, is not added a second time: it is ticked instead. The song that is playing shows for your own stations too, whenever the station sends it along with the music (most do; some only send their own name or nothing). A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
+  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. A station that is already in the list, also when the catalogue has it under another address, is not added a second time: it is ticked instead. The song that is playing shows for your own stations too, whenever the station sends it along with the music (most do; some only send their own name or nothing). A red play button means that station could not be reached just now. <b>What is playing:</b> press the ⓘ button after the volume button (or click the box itself; hovering it shows the song, artist and album cover) for the song with album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Under them is a short note about the station: its genre, language and country, its sound quality, a few of its own tags and a link to its website, as far as the public station catalogue knows them. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
   html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p>';
 

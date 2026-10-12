@@ -209,6 +209,13 @@ p.tools{align-items:center;gap:6px}
 .rnph{font-size:13px;padding:4px 0}
 .rnph span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rnpf{margin:10px 0 0}
+/* the station itself, one compact block under the songs: logo, name, two short lines, website */
+.rst{display:flex;align-items:center;gap:10px;min-width:0}
+.rst img{flex:none;width:36px;height:36px;border-radius:8px;object-fit:contain;background:var(--bg);border:1px solid var(--line)}
+.rstt{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:1px}
+.rstt b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rstt small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rst .btn{flex:none;padding:3px 10px;font-size:12px}
 #peek .rpk{flex-direction:row;gap:9px;align-items:center}
 #peek.fpk .rpk img{flex:none;width:52px;height:52px;border-radius:6px;object-fit:cover}
 #peek.fpk:has(.rpk){width:270px}
@@ -905,7 +912,9 @@ body.dockslim #dockGrip{display:none}
 @media(max-width:350px){.wizgrid{grid-template-columns:1fr}}
 /* a desktop window that is only just wide enough for columns (821 to 1000px): the narrow boxes need their head buttons
    and the menu icons a little tighter to fit */
-@media(min-width:821px) and (max-width:1000px){.hc select[data-s^=sort]{flex:0 1 auto;min-width:30px}.hc{gap:4px}}
+@media(min-width:821px) and (max-width:1000px){.hc select[data-s^=sort]{flex:0 1 auto;min-width:30px}.hc{gap:4px}
+  /* the Radio box has four buttons after its list: a little tighter here, so the station's name keeps its room */
+  .card.compact .mrow.radio{gap:4px}.card.compact .radio .ib{padding:3px 3px}}
 @media(min-width:821px) and (max-width:1100px){.card.compact .mrow.menurow{gap:2px;justify-content:space-between}.card.compact .menurow .ib{padding:3px 2px;position:relative}
   /* the number on an icon (to-dos, today's events, missed notifications) sits on its corner here instead of beside it, so it takes no room */
   .card.compact .menurow .ib>span{position:absolute;top:-5px;right:-4px;min-width:13px;padding:0 3px;font-size:9px;line-height:13px;border-radius:99px;background:var(--ac);color:var(--acfg);text-align:center;font-weight:700;pointer-events:none}}
