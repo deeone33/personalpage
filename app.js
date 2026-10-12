@@ -1,4 +1,4 @@
-var VERSION = 141;
+var VERSION = 142;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2023,7 +2023,7 @@ function fltFit() {
 // you have not seen. P.reader = { click, cdir, bdir }: what a click on a post opens ("reader" or "one" = the single post),
 // and which way scrolling DOWN goes after a click (cdir) and from the button (bdir): "old" = to older posts, "new" = to newer.
 var RDR = null, RDR_T = { news: "News", tg: "Telegram", rd: "Reddit" };
-function RDS() { var r = P.reader || {}; return { click: r.click === "one" ? "one" : "reader", cdir: r.cdir === "new" ? "new" : "old", bdir: r.bdir === "old" ? "old" : "new" }; }
+function RDS() { var r = P.reader || {}; return { click: r.click === "one" ? "one" : "reader", cdir: r.cdir === "new" ? "new" : "old", bdir: r.bdir === "old" ? "old" : "new", snap: r.snap === "free" ? "free" : "one" }; }
 function rdrBtn(box) {
   return '<button class="ib sm rdrb" data-a="rdropen" data-k="' + box + '" title="Read the posts one after another, from the oldest one you have not seen" aria-label="Read the posts one after another">' +
     '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h9M4 18h9M18 11v8M15 16l3 3 3-3"/></svg></button>';
@@ -2043,7 +2043,7 @@ function rdrMedia(vid, img, th, cls) {
   return vid ? '<video class="mvid" controls playsinline preload="none"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
     : img ? '<img class="mimg' + (cls || "") + '" loading="lazy" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
 }
-function rdrPost(box, it) {
+function rdrPost(box, it, line) {
   var x = it.x, h;
   if (box === "news") {
     var n = x[0];
@@ -2061,7 +2061,7 @@ function rdrPost(box, it) {
       '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + laterBtn("r:" + x.u) + (com && !RDR.com[x.u] ? '<button data-a="rdrcom" data-k="' + esc(x.u) + '">Top comments</button>' : "") + "</p>" +
       (com ? '<div class="rdcw" data-u="' + esc(x.u) + '">' + (RDR.com[x.u] ? '<p class="mut sn">Loading comments…</p>' : "") + "</div>" : "");
   }
-  return '<article class="rdp' + (RDR.nw[it.k] ? " nw" : "") + '" data-u="' + esc(it.k) + '">' + h + "</article>";
+  return '<article class="rdp' + (RDR.nw[it.k] ? " nw" : "") + '" data-u="' + esc(it.k) + '">' + (line || "") + h + "</article>";
 }
 // What stands at the two ends of the list: at the newest end that you are up to date, at the oldest end (Telegram) the
 // button for older posts
@@ -2079,7 +2079,7 @@ function rdrHtml() {
   if (R.dir === "new") { for (i = 0; i < L.length; i++) if (R.nw[L[i].k]) { cut = i; break; } }
   else for (i = L.length - 1; i >= 0; i--) if (R.nw[L[i].k]) { cut = i + 1; break; }
   var line = '<div class="rdrnew" id="rdrNew">' + (R.dir === "new" ? "New" : "Seen before") + "</div>";
-  return '<div class="rdredge" id="rdrTop">' + rdrEdge(true) + "</div>" + L.map(function (it, j) { return (j === cut && j > 0 ? line : "") + rdrPost(R.box, it); }).join("") + '<div class="rdredge" id="rdrEnd">' + rdrEdge(false) + "</div>";
+  return '<div class="rdredge" id="rdrTop">' + rdrEdge(true) + "</div>" + L.map(function (it, j) { return rdrPost(R.box, it, j === cut && j > 0 ? line : ""); }).join("") + '<div class="rdredge" id="rdrEnd">' + rdrEdge(false) + "</div>";
 }
 function rdrEl(key) {
   var ps = document.querySelectorAll("#rdrL .rdp");
@@ -2097,10 +2097,10 @@ function rdrSwitch() {
 function rdrDraw(key, exact) {
   var R = RDR;
   if (R.ro) { R.ro.disconnect(); R.ro = null; }
-  $("mBody").innerHTML = '<div class="rdr" id="rdrL" tabindex="-1">' + rdrHtml() + "</div>";
+  $("mBody").innerHTML = '<div class="rdr' + (RDS().snap === "one" ? " snap" : "") + '" id="rdrL" tabindex="-1">' + rdrHtml() + "</div>";
   rdrSwitch();
-  var L = $("rdrL"), el = rdrEl(key), ln = $("rdrNew");
-  if (el && !exact && ln && ln.nextElementSibling === el) el = ln;   // the "New" line stays in view above the first new post
+  rdrFit();
+  var L = $("rdrL"), el = rdrEl(key);
   L.scrollTop = el && el.previousElementSibling && el.previousElementSibling.id !== "rdrTop" ? el.offsetTop : 0;
   R.last = L.scrollTop;
   L.addEventListener("scroll", rdrOnScroll, { passive: true });
@@ -2151,6 +2151,21 @@ function rdrWatch() {
   });
   Array.prototype.forEach.call(L.querySelectorAll(".rdp"), function (p) { if (p._h == null) { p._h = p.offsetHeight; R.ro.observe(p); } });
 }
+// One post at a time (Settings > News, Telegram & Reddit > Reading posts): every post is at least as tall as the window
+// and the list comes to rest on a post, so two posts are never on screen together. A post taller than the window is
+// scrolled through first. The mouse wheel goes one post (or one screen of a long post) per notch.
+function rdrFit() { var L = $("rdrL"); if (L) L.style.setProperty("--rh", L.clientHeight + "px"); }
+window.addEventListener("resize", rdrFit);
+document.addEventListener("wheel", function (e) {
+  var L = $("rdrL");
+  if (!RDR || !L || !L.classList.contains("snap") || !L.contains(e.target) || e.ctrlKey || !e.deltaY) return;
+  e.preventDefault();
+  var now = Date.now(), gap = now - (RDR.whl || 0), big = Math.abs(e.deltaY) >= 50;
+  RDR.whl = now;
+  // a mouse wheel: one step per notch, at most five a second. A touchpad sends a long stream for one swipe: one step per swipe.
+  if (big ? now - (RDR.wh || 0) < 200 : gap < 140) return;
+  RDR.wh = now; rdrStep(e.deltaY > 0 ? 1 : -1);
+}, { passive: false });
 function rdrOnScroll() { if (RDR && !RDR.raf) RDR.raf = setTimeout(function () { if (RDR) { RDR.raf = 0; rdrScan(); } }, 80); }
 // A post counts as read once it has come into the upper half of the window (or the list has reached its end). A jump of
 // several screens at once (End, the scroll bar) reads only where it lands, not everything it passed.
@@ -2259,11 +2274,12 @@ document.addEventListener("keydown", function (e) {
 });
 function rdrOff() {
   if (RDR) { rdrFlush(); if (RDR.ro) RDR.ro.disconnect(); clearTimeout(RDR.raf); clearTimeout(RDR.t); }
-  RDR = null; SITE = null; rdrSwitch();
+  RDR = null; rdrSwitch();
+  if (SITE && !SITE_KEEP) siteEnd();   // the window of a search of all boxes is going away: the boxes stop searching too
 }
 // Settings > News, Telegram & Reddit > Reading posts
-function setReader() { P.reader = { click: $("rdrClick").value, cdir: $("rdrCdir").value, bdir: $("rdrBdir").value }; persist(); }
-["rdrClick", "rdrCdir", "rdrBdir"].forEach(function (id) { $(id).onchange = setReader; });
+function setReader() { P.reader = { click: $("rdrClick").value, cdir: $("rdrCdir").value, bdir: $("rdrBdir").value, snap: $("rdrSnap").value }; persist(); }
+["rdrClick", "rdrCdir", "rdrBdir", "rdrSnap"].forEach(function (id) { $(id).onchange = setReader; });
 // ---- Search in News, Telegram and Reddit (the ⌕ button at the top of each box) ----
 // Two steps. At once: everything the box has loaded (not only the rows it shows), in the headline or post text and the
 // source name; every word you type must be there, in any order, and accents and capitals do not matter. A moment later the
@@ -2392,7 +2408,9 @@ $("cmdReset").onclick = function () { delete P.cmd; delete P.ssKey; persist(); r
 // "ss <words>" in the search bar (or Shift+Enter on what is typed). A window lists what was found, box by box, and the
 // boxes that have a search of their own (News, Telegram, Reddit, Sports) show the same search at the same time. News,
 // Telegram and Reddit are also searched further back than they have loaded, exactly as their own search does.
-var SITE = null, SITE_T = "Search all boxes", SITE_N = 5;
+var SITE = null, SITE_T = "Search all boxes", SITE_N = 5, SITE_KEEP = false;
+// SLIVE: what the search bar is searching all boxes for while you are still typing it (no window yet)
+var SLIVE = "";
 function sRow(act, key, main, sub, right, href, nw) {
   var m = href ? '<a class="lnk" ' + (nw === false ? "" : 'target="_blank" rel="noopener noreferrer" ') + 'href="' + esc(href) + '">' + main + "</a>" : '<button class="lnk" data-a="' + act + '" data-k="' + esc(key) + '">' + main + "</button>";
   return '<div class="row"><span>' + m + (sub ? " <small>" + esc(sub) + "</small>" : "") + '</span><span class="r mut">' + (right || "") + "</span></div>";
@@ -2449,18 +2467,36 @@ function siteHtml() {
     }).join("");
 }
 // the boxes that have a search of their own run the same search, and their fields show it
-function siteApply() {
-  var q = SITE.q, lo = q.toLowerCase();
+function siteBoxes(q, now) {
+  var lo = q.toLowerCase();
   NQ = lo; NFILT = true; FQ.tg = q; FON.tg = true; FQ.rd = q; FON.rd = true; SPQ = lo; SPFIND = true;
   render();
   [["newsQ", lo], ["tgQ", q], ["rdQ", q], ["spQ", lo]].forEach(function (p) { if ($(p[0])) $(p[0]).value = p[1]; });
-  ["news", "tg", "rd"].forEach(findOlder);
+  ["news", "tg", "rd"].forEach(now ? findOlder : findSoon);
   fetchSports();
+}
+function siteApply() { siteBoxes(SITE.q, true); }
+// the boxes stop searching: their fields close and their search buttons are no longer lit
+function siteReset() {
+  SLIVE = "";
+  ["news", "tg", "rd"].forEach(function (b) { clearTimeout(FQT[b]); });
+  NQ = ""; NFILT = false; FQ.tg = ""; FON.tg = false; FQ.rd = ""; FON.rd = false; SPQ = ""; SPFIND = false;
+  render();
+}
+function siteEnd() { SITE = null; siteReset(); }
+// While you type "ss …" in the search bar the boxes follow letter by letter; taking the words away again (or Esc) ends it.
+function siteLive(q) {
+  if (SITE) return;
+  q = String(q || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (q === SLIVE) return;
+  if (!q) { siteReset(); return; }
+  SLIVE = q; siteBoxes(q, false);
 }
 function openSite(q) {
   q = String(q || "").replace(/\s+/g, " ").trim().slice(0, 80);
   if (!q) return;
-  openModal(SITE_T, "");
+  SITE_KEEP = true; openModal(SITE_T, ""); SITE_KEEP = false;
+  clearTimeout(searchTimers.ssLive); SLIVE = "";
   SITE = { q: q, open: {} };
   $("mBody").innerHTML = '<div class="site"><input type="search" id="siteQ" value="' + esc(q) + '" placeholder="Search all boxes…" aria-label="Search all boxes"><div id="siteRes"></div></div>';
   siteApply();
@@ -2472,7 +2508,7 @@ function siteSync() {
   var h = siteHtml();
   if (el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); }
 }
-function siteClear() { NQ = ""; NFILT = false; FQ.tg = ""; FON.tg = false; FQ.rd = ""; FON.rd = false; SPQ = ""; SPFIND = false; render(); siteSync(); }
+function siteClear() { siteReset(); siteSync(); }
 function siteAct(a, k) {
   if (a === "sitemore") { if (SITE) { SITE.open[k] = !SITE.open[k]; siteSync(); } return; }
   if (a === "siteclear") { siteClear(); return; }
@@ -5607,7 +5643,7 @@ function openHelp() {
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
     '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
-    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button.</p>' +
+    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window is scrolled through first), so two posts are never on screen together. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling.</p>' +
     '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
     '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
@@ -7918,6 +7954,7 @@ function srchShow() {
   box.hidden = !a;
   if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.site ? "Enter to search" : a.help ? "Enter to open" : a.wait ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
   if (tr) trTimer = setTimeout(function () { trRun(tr); }, 500);   // wait until you stop typing
+  if (sq || SLIVE) debounced("ssLive", function () { siteLive(siteAsk($("srchIn").value)); });
 }
 // "help" in the search bar: everything the bar can do, in one small window
 function searchHelpHtml() {
@@ -7929,7 +7966,7 @@ function searchHelpHtml() {
     row("reuters.com", "A site name opens the site.") +
     row("!yt lofi", "Search one site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Maps, <code>!news</code> Google News, <code>!tv</code> TradingView, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. The <code>!</code> word can also go last.") +
     "<tr><th colspan=\"2\">Search this page</th></tr>" +
-    row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, videos, streams, notes, calendar, bookmarks, read later, mail and settings. A window lists what was found, and News, Telegram, Reddit and Sports show the same search in their own box." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
+    row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, videos, streams, notes, calendar, bookmarks, read later, mail and settings. The boxes with a search of their own (News, Telegram, Reddit and Sports) follow while you type, letter by letter; Enter opens a window that lists everything found, box by box. Taking the words away, Esc, or closing that window ends the search in the boxes too." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
     "<tr><th colspan=\"2\">Answers (Enter copies the answer)</th></tr>" +
     row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
     row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
@@ -7982,7 +8019,11 @@ $("srch").addEventListener("submit", function (e) {
   if (P.srchNew) window.open(u, "_blank", "noopener"); else location.href = u;
 });
 $("srchIn").addEventListener("keydown", function (e) {
-  if (e.key === "Escape") { e.target.blur(); return; }
+  if (e.key === "Escape") {
+    // Esc also ends a search of all boxes that was being typed
+    if (SLIVE || siteAsk(e.target.value)) { clearTimeout(searchTimers.ssLive); e.target.value = ""; SRCHANS = null; $("srchAns").hidden = true; if (SLIVE) siteReset(); }
+    e.target.blur(); return;
+  }
   // Shift+Enter (or Alt+Enter, Settings > Search bar): search all boxes for what is typed, without the command word
   if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && ((ssKey() === "shift" && e.shiftKey && !e.altKey) || (ssKey() === "alt" && e.altKey && !e.shiftKey))) {
     e.preventDefault();
@@ -8008,7 +8049,7 @@ function loadExtraForm() {
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   renderSumSet();
   renderLangs(); renderRadioList(); renderSdForm();
-  var rds = RDS(); $("rdrClick").value = rds.click; $("rdrCdir").value = rds.cdir; $("rdrBdir").value = rds.bdir;
+  var rds = RDS(); $("rdrClick").value = rds.click; $("rdrCdir").value = rds.cdir; $("rdrBdir").value = rds.bdir; $("rdrSnap").value = rds.snap;
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;

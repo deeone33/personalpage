@@ -1330,7 +1330,7 @@ body.noshadow #srchAns{box-shadow:none}
 .rdp h3{margin:12px 0 4px}
 .rdrsrc{margin-top:10px}
 .rdrsrc summary{cursor:pointer;color:var(--mut);font-size:13px}
-.rdrnew{display:flex;align-items:center;gap:10px;padding:6px 0;color:var(--ac);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.rdrnew{display:flex;align-items:center;gap:10px;padding:0 0 10px;color:var(--ac);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
 .rdrnew::before,.rdrnew::after{content:"";flex:1;height:1px;background:var(--ac);opacity:.5}
 .rdredge{padding:14px 0;text-align:center;color:var(--mut);font-size:13px}
 .rdredge:empty{display:none}
@@ -1350,16 +1350,18 @@ body.noshadow #srchAns{box-shadow:none}
 [data-id=news] .hc,[data-id=telegram] .hc,[data-id=reddit] .hc{margin-left:auto}
 @container bh (max-width:340px){
   .hc{gap:4px}
-  .hc .ib.sm{padding:2px 5px}
-  .hc select{width:50px;min-width:0;padding-left:5px}
+  .hc .ib.sm{padding:2px 6px}
+  .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0;justify-content:center}
+  .hc select{width:58px;min-width:0;padding-left:5px}
 }
+@container bh (max-width:310px){.hc .pill .nwl{display:none}}
+/* only while the count of new posts is there as well does the sort list give up room */
 @container bh (max-width:270px){
-  .hc{gap:3px}
-  .hc .pill .nwl{display:none}
-  .hc .ib.sm{padding:2px 4px}
-  .hc select{width:44px}
+  .hc .pill{padding-left:6px;padding-right:6px}
+  .hc:has(.pill){gap:3px}
+  .hc:has(.pill) select{width:40px}
 }
-@container bh (max-width:246px){.hc select{width:36px}}
+@container bh (max-width:246px){.hc select{width:50px}.hc:has(.pill) select{width:30px}}
 @container bh (max-width:236px){.hc{flex-wrap:wrap;justify-content:flex-end;row-gap:4px}}
 /* Settings, Reading posts: on a phone the two long questions get the full width, with their list under them */
 @media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir){flex-wrap:wrap}#rdrCdir,#rdrBdir{margin-left:auto}}
@@ -1396,3 +1398,12 @@ body.noshadow #srchAns{box-shadow:none}
 .twdall{display:block;margin:4px 0 0 auto;font-size:12px}
 .twdall[hidden]{display:none}
 @media(max-width:520px){.twdcats{max-height:82px}}
+/* Reader, one post at a time: each post fills the window and the list rests on a post */
+.rdr.snap{scroll-snap-type:y mandatory}
+.rdr.snap .rdp{min-height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always}
+.rdr.snap #rdrTop{scroll-snap-align:start}
+.rdr.snap #rdrEnd{scroll-snap-align:end}
+/* News, Telegram, Reddit: the buttons at the top are one height, and the icon buttons one width */
+[data-id=news] .hc .ib.sm,[data-id=telegram] .hc .ib.sm,[data-id=reddit] .hc .ib.sm{height:22px;box-sizing:border-box;justify-content:center;line-height:1}
+[data-id=news] .hc .ib.sm:not([data-a=filtmenu]),[data-id=telegram] .hc .ib.sm:not([data-a=filtmenu]),[data-id=reddit] .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0}
+[data-id=reddit] .hc select{height:22px}
