@@ -1,4 +1,4 @@
-var VERSION = 137;
+var VERSION = 138;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -816,6 +816,7 @@ function render() {
   var openFilt = {};
   ["filtNews", "filtRd", "filttg"].forEach(function (id) { var m = $(id); if (m && !m.hidden) openFilt[id] = m.scrollTop; });
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { scrolls[n.dataset.list] = n.scrollTop; });
+  fltNote();
   $("grid").querySelectorAll("input[id]").forEach(function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
   if (actId) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
   $("grid").innerHTML = orderIds().map(function (id) { return id !== "live" && boxOff(id) ? "" : T[id] || ""; }).join("");
@@ -828,6 +829,7 @@ function render() {
   refreshBrief();
   $("pv").hidden = !PREVIEW;
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
+  fltFit();
   packGrid();
   placeEmbeds();
   Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
@@ -1988,6 +1990,30 @@ function icsExport() {
   icsMsg("Downloaded " + list.length + " event" + (list.length === 1 ? "" : "s") + ". Import the file in your other calendar.");
 }
 
+// ---- A box keeps its size while its search field is open ----
+// The boxes are packed by their heights, so a box that grows by the height of a search field can send the boxes under it
+// to other places. While the field of News, Sports or TV shows is open, the list under it is therefore made shorter by
+// exactly the field's height (and held at that height, also when a search finds little or nothing).
+var FLT_BOX = [["news", "newsQ"], ["sports", "spQ"], ["tv", "tvQ"]], FLT_H = {};
+// before a redraw: how tall each of these lists is while its field is closed
+function fltNote() {
+  FLT_BOX.forEach(function (p) {
+    if ($(p[1])) return;
+    var l = document.querySelector('#grid .list[data-list="' + p[0] + '"]');
+    FLT_H[p[0]] = l ? l.offsetHeight : 0;
+  });
+}
+// after a redraw: with the field open, the list (or the "nothing found" line in its place) takes what is left of that height
+function fltFit() {
+  FLT_BOX.forEach(function (p) {
+    var inp = $(p[1]), H = FLT_H[p[0]];
+    if (!inp || !H) return;
+    var card = inp.closest(".card"), l = card && card.querySelector(".list[data-list]"), em = card && card.querySelector(".empty");
+    var h = Math.max(48, H - inp.offsetHeight - (parseFloat(getComputedStyle(inp).marginBottom) || 0));
+    if (l) { l.style.height = h + "px"; l.style.maxHeight = h + "px"; }
+    else if (em) { em.style.boxSizing = "border-box"; em.style.height = h + "px"; em.style.margin = "0"; em.style.overflow = "hidden"; }
+  });
+}
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
