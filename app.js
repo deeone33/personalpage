@@ -1,4 +1,4 @@
-var VERSION = 129;
+var VERSION = 130;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1683,8 +1683,32 @@ function setBoxOff(id, off) {
 }
 
 // ---- Details window ----
-function openModal(title, html) { $("mTitle").textContent = title; $("mBody").innerHTML = html; $("modal").hidden = false; }
-function closeModal() { $("modal").hidden = true; $("mBody").innerHTML = ""; }
+// What opened a window decides what happens to the focus when it closes:
+//  - opened with the mouse or a tap: the row lets go of the focus, so no outline is left around it (also not after Esc);
+//  - opened with the keyboard (Tab to a row, then Enter): the focus goes back to that row, so you carry on where you were.
+// The page is redrawn while a window is open, so the row is remembered by what it opens, not as the element itself.
+var KEYNAV = false, MOPEN = null;
+document.addEventListener("keydown", function (e) { if (e.key === "Tab" || e.key === "Enter" || e.key === " " || /^Arrow/.test(e.key)) KEYNAV = true; }, true);
+document.addEventListener("pointerdown", function () { KEYNAV = false; }, true);
+function openModal(title, html) {
+  if ($("modal").hidden) {
+    var el = document.activeElement, inWin = el && el.closest && (el.closest("#modal") || el.closest("#panel"));
+    MOPEN = el && el !== document.body && !inWin ? { key: KEYNAV, el: el, a: el.getAttribute("data-a"), k: el.getAttribute("data-k") } : null;
+  }
+  $("mTitle").textContent = title; $("mBody").innerHTML = html; $("modal").hidden = false;
+}
+function closeModal() {
+  var was = !$("modal").hidden, o = MOPEN;
+  $("modal").hidden = true; $("mBody").innerHTML = "";
+  MOPEN = null;
+  if (!was || !$("panel").hidden) return;
+  var act = document.activeElement, typing = act && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName);
+  if (o && o.key) {
+    var back = o.el && document.contains(o.el) ? o.el : null;
+    if (!back && o.a) { var all = document.querySelectorAll('#app [data-a="' + o.a + '"]'); for (var i = 0; i < all.length; i++) if (all[i].getAttribute("data-k") === o.k) { back = all[i]; break; } }
+    if (back) { try { back.focus({ preventScroll: true }); } catch (e) {} }
+  } else if (act && act !== document.body && !typing && act.blur) act.blur();
+}
 $("mClose").onclick = closeModal;
 $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
 document.addEventListener("keydown", function (e) {

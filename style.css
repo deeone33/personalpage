@@ -92,6 +92,8 @@ button,input[type=color]{font:inherit;font-size:13px;color:var(--fg);background:
 button:hover{border-color:var(--ac)}
 button:active{transform:translateY(1px)}
 button:focus-visible,input:focus-visible,select:focus-visible,[role=button]:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+/* inside a list the rows cut off anything drawn outside them, so there the keyboard outline is drawn inside the row */
+#grid .row button:focus-visible,#grid .row a:focus-visible,#grid .row [role=button]:focus-visible,#grid .sprow button:focus-visible,.mbox .row button:focus-visible,#dock .row button:focus-visible{outline-offset:-2px;border-radius:6px}
 input[type=color]{padding:0;width:38px;height:30px}
 input[type=range]{accent-color:var(--ac);width:130px}
 input[type=checkbox]{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:16px;height:16px;margin:0;border:1.5px solid var(--mut);border-radius:5px;background:none;cursor:pointer;vertical-align:middle;transition:background .15s,border-color .15s}
