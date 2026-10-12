@@ -286,7 +286,7 @@
       <div class="add"><input type="text" id="radQ" placeholder="Station name, city or genre, e.g. BBC Radio 1, Stockholm, jazz" aria-label="Search for a radio station" autocomplete="off"><button data-a="radgo">Search</button></div>
       <div id="radRes"></div>
       <div id="radMsg" class="sn" role="status"></div>
-      <div class="mut sn">▶ plays a station so you can hear it first; Add puts it in your list under “My stations”. You can also paste a stream address (https://…) here. For your own stations the box does not show which song is playing.</div>
+      <div class="mut sn">▶ plays a station so you can hear it first; Add puts it in your list under “My stations”. You can also paste a stream address (https://…) here. A station you already have is not added twice. The song that is playing shows for your own stations too, when the station sends it.</div>
     </div>
     <div id="radList"></div>
     <span><button data-a="radreset">Back to the starting stations</button></span>
@@ -298,13 +298,13 @@
       <b>First inbox</b>
       <input type="text" id="mn0" placeholder="Name, e.g. Personal">
       <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt0" placeholder="Token" autocomplete="off">
+      <input type="text" class="secret" id="mt0" placeholder="Token" autocomplete="off" spellcheck="false">
     </div>
     <div class="sub">
       <b>Second inbox</b>
       <input type="text" id="mn1" placeholder="Name, e.g. Work">
       <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt1" placeholder="Token" autocomplete="off">
+      <input type="text" class="secret" id="mt1" placeholder="Token" autocomplete="off" spellcheck="false">
     </div>
     <span><button id="mailSave">Save Gmail accounts</button></span>
     <div id="mailMsg" class="mut" role="status"></div>
@@ -401,9 +401,12 @@
 
   <section class="setgrp" data-cat="Account" data-sec="Password">
     <div id="pwSignedIn">
-      <label>New password <input type="password" id="pwNew" placeholder="8+ characters" autocomplete="new-password"></label>
-      <label>Type it again <input type="password" id="pwNew2" placeholder="Same password once more" autocomplete="new-password"></label>
-      <button id="pwSave">Update password</button>
+      <form class="nosub">
+      <input type="text" id="pwUser" name="username" autocomplete="username" class="vis-hidden" tabindex="-1" aria-hidden="true">
+      <label>New password <input type="password" id="pwNew" name="new-password" placeholder="8+ characters" autocomplete="new-password"></label>
+      <label>Type it again <input type="password" id="pwNew2" name="new-password-again" placeholder="Same password once more" autocomplete="new-password"></label>
+      <button type="button" id="pwSave">Update password</button>
+      </form>
       <div id="pwMsg" class="mut sn" role="status"></div>
     </div>
     <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>

@@ -1,4 +1,4 @@
-var VERSION = 126;
+var VERSION = 129;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1387,7 +1387,10 @@ function tvDayName(ts) {
 }
 function tvTime(ts) { return new Date(ts).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); }
 function tvRow(id, name, ep, net, star) {
-  return '<div class="row tvrow"><span><button class="lnk" data-a="tvopen" data-k="' + esc(String(id)) + '"><b>' + esc(name) + "</b> <small>" + esc([tvCode(ep), ep && ep.n && !/^Episode \d+$/.test(ep.n) ? ep.n : "", net].filter(Boolean).join(" · ")) + "</small></button></span>" +
+  // one line per show: its name and the episode number. The episode's title and the channel are in the tooltip and in the
+  // show's window, so the box stays easy to scan.
+  var more = [ep && ep.n && !/^(Episode \d+|TBA)$/.test(ep.n) ? ep.n : "", net].filter(Boolean).join(" · ");
+  return '<div class="row tvrow"><span><button class="lnk tv1" data-a="tvopen" data-k="' + esc(String(id)) + '" title="' + esc(name + (more ? " · " + more : "")) + '"><b>' + esc(name) + "</b>" + (tvCode(ep) ? " <small>" + esc(tvCode(ep)) + "</small>" : "") + "</button></span>" +
     '<span class="r">' + (star ? '<i class="fv">★</i>' : "") + '<span class="mut">' + (ep ? tvTime(ep.ts) : "") + "</span></span></div>";
 }
 function tvBody() {
@@ -1518,8 +1521,7 @@ function radFind() {
   Promise.all([rbGet(base + "name=" + encodeURIComponent(q)).catch(function () { return null; }), rbGet(base + "tag=" + encodeURIComponent(q.toLowerCase())).catch(function () { return null; })]).then(function (r) {
     if (RBQ !== q || !$("radRes")) return;
     if (!r[0] && !r[1]) { box.innerHTML = '<p class="mut sn">The station catalogue is not answering right now. Try again in a moment.</p>'; return; }
-    var seen = {}, have = {};
-    radAll().forEach(function (s) { have[s[3]] = 1; });
+    var seen = {};
     RBRES = (r[0] || []).concat(r[1] || []).filter(function (s) {
       var u = String(s.url_resolved || s.url || "");
       // what a browser can play: a plain https stream (not a playlist that needs a player of its own)
@@ -1527,18 +1529,47 @@ function radFind() {
       seen[s.stationuuid] = 1;
       return true;
     }).sort(function (a, b) { return (+b.clickcount || 0) - (+a.clickcount || 0); }).slice(0, 15).map(function (s) {
-      return { id: "u_" + String(s.stationuuid).replace(/[^\w-]/g, "").slice(0, 36), n: String(s.name).trim().slice(0, 60), u: String(s.url_resolved || s.url), c: String(s.country || s.countrycode || "").slice(0, 30), tags: String(s.tags || "").split(",").filter(Boolean).slice(0, 3).join(", ").slice(0, 60), kb: +s.bitrate || 0, have: !!have[String(s.url_resolved || s.url)] };
+      return { id: "u_" + String(s.stationuuid).replace(/[^\w-]/g, "").slice(0, 36), n: String(s.name).trim().slice(0, 60), u: String(s.url_resolved || s.url), c: String(s.country || s.countrycode || "").slice(0, 30), tags: String(s.tags || "").split(",").filter(Boolean).slice(0, 3).join(", ").slice(0, 60), kb: +s.bitrate || 0 };
     });
     box.innerHTML = RBRES.length ? RBRES.map(function (s, i) {
-      return '<div class="row"><span><span class="bnm rbn">' + esc(s.n) + '</span> <small class="mut">' + esc([s.c, s.tags, s.kb ? s.kb + " kbit" : ""].filter(Boolean).join(" · ")) + "</small></span>" + (s.have || radMine().some(function (m) { return m[0] === s.id; }) ? '<span class="mut sn">✓ added</span>' : '<span class="radb"><button data-a="radtry" data-k="' + i + '" title="Listen to it first">▶</button><button data-a="radadd" data-k="' + i + '">Add</button></span>') + "</div>";
+      return '<div class="row"><span><span class="bnm rbn">' + esc(s.n) + '</span> <small class="mut">' + esc([s.c, s.tags, s.kb ? s.kb + " kbit" : ""].filter(Boolean).join(" · ")) + "</small></span>" + radHaveHtml(s, i) + "</div>";
     }).join("") : '<p class="mut sn">No station found for “' + esc(q) + "”. Try a shorter name, a city or a genre such as jazz.</p>";
   });
+}
+// Is this station already in the list (yours or the built-in one)? The same stream address is; so is the same station sent
+// from another of its servers: the same stream name at the end of the address, a name that starts the same, and the same
+// country ("Retro FM Estonia" on a second server is Retro FM; "Retro FM Moldova" is not).
+function radKey(u) { try { var p = new URL(u); return p.hostname.toLowerCase() + p.pathname.toLowerCase().replace(/\/+$/, ""); } catch (e) { return String(u).toLowerCase(); } }
+function radSeg(u) { try { return (new URL(u).pathname.split("/").filter(Boolean).pop() || "").toLowerCase().replace(/\.(mp3|aac|ogg|m4a)$/, ""); } catch (e) { return ""; } }
+function radFlat(n) { return String(n || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+var RAD_LANGC = { french: "fra", danish: "den", dutch: "net", english: "" };
+function radTwin(u, name, country, id) {
+  var key = radKey(u), seg = radSeg(u), nm = radFlat(name), c = String(country || "").toLowerCase();
+  return radAll().filter(function (r) {
+    if (r[0] === id || radKey(r[3]) === key) return true;
+    var rn = radFlat(r[1]), lang = String(r[4] || "").toLowerCase().replace(/[^a-z ]/g, ""), root = RAD_LANGC[lang] != null ? RAD_LANGC[lang] : lang.slice(0, 3);
+    return !!rn && !!nm && seg.length >= 3 && radSeg(r[3]) === seg && (nm.indexOf(rn) === 0 || rn.indexOf(nm) === 0) && (!c || !root || c.indexOf(root) >= 0);
+  })[0] || null;
+}
+// what stands at the end of a search result: listen and add, or that you have it already
+function radHaveHtml(s, i) {
+  var tw = radTwin(s.u, s.n, s.c, s.id);
+  if (!tw) return '<span class="radb"><button data-a="radtry" data-k="' + i + '" title="Listen to it first">▶</button><button data-a="radadd" data-k="' + i + '">Add</button></span>';
+  if (radioIds().some(function (r) { return r[0] === tw[0]; })) return '<span class="mut sn">✓ in your list' + (tw[1] !== s.n ? " as " + esc(tw[1]) : "") + "</span>";
+  return '<span class="radb"><span class="mut sn">already listed as ' + esc(tw[1]) + '</span><button data-a="radtick" data-k="' + esc(tw[0]) + '">Tick it</button></span>';
 }
 function radAddMine(st) {
   P.radio = P.radio || {};
   var mine = radMine();
   if (mine.length >= 25) { radMsg("You have 25 stations of your own, which is the most. Remove one first."); return false; }
-  if (mine.some(function (m) { return m[0] === st[0] || m[3] === st[3]; })) { radMsg("You already have that station."); return false; }
+  // the same station is never listed twice: not a second time among your own, and not next to its twin in the built-in list
+  var tw = radTwin(st[3], st[1], st[4], st[0]);
+  if (tw) {
+    if (radioIds().some(function (r) { return r[0] === tw[0]; })) { radMsg("You already have that station" + (tw[1] !== st[1] ? " (it is in your list as " + tw[1] + ")" : "") + "."); return false; }
+    radioToggle(tw[0], true); renderRadioList();
+    radMsg(tw[1] + " was already in the list of stations; it is ticked now and in the Radio box.");
+    return true;
+  }
   mine.push(st);
   P.radio.mine = mine;
   // a station you add is ticked straight away
@@ -1550,6 +1581,7 @@ function radAddMine(st) {
 var RADTRY = null;
 function radAct(a, k) {
   if (a === "radgo") { radFind(); return; }
+  if (a === "radtick") { var tk1 = radAll().filter(function (r) { return r[0] === k; })[0]; if (tk1) { radioToggle(k, true); renderRadioList(); radMsg(tk1[1] + " is ticked now and in the Radio box."); radFind(); } return; }
   if (a === "radadd") { var s = RBRES[+k]; if (s && radAddMine([s.id, s.n, "My stations", s.u, s.c || "—"])) radFind(); return; }
   if (a === "radaddurl") {
     var u = safeUrl(RBQ);
@@ -1580,6 +1612,29 @@ function radAct(a, k) {
 }
 function radTryStop() { if (RADTRY) { RADTRY.pause(); RADTRY.removeAttribute("src"); RADTRY.load(); RADTRY = null; } }
 
+// ---- Telling the browser which fields are NOT a login ----
+// A browser guesses what every text field is for. With password fields on the same page it takes ordinary fields (a search,
+// a city, a station name) for a username or an email address and offers to save a password or make an email alias in each.
+// So: every field that is not part of signing in is marked "do not fill in", for the browser and for the common password
+// managers; the sign-in and new-password fields sit in forms of their own; and codes that are not passwords (the Gmail
+// token) are ordinary fields that only look masked. Fields come and go as the page redraws, so new ones are marked as they appear.
+var NF_SKIP = { acctEmail: 1, acctPass: 1, acctPass2: 1, pwNew: 1, pwNew2: 1, pwUser: 1 }, nfWait = 0;
+function noFill() {
+  nfWait = 0;
+  Array.prototype.forEach.call(document.querySelectorAll("input:not([data-nf]), textarea:not([data-nf])"), function (el) {
+    el.setAttribute("data-nf", "1");
+    var t = (el.getAttribute("type") || "text").toLowerCase();
+    if (NF_SKIP[el.id] || /^(checkbox|radio|file|color|range|hidden|button|submit|password|email)$/.test(t)) return;   // an email field (feedback, sign-in) may be filled in
+    el.setAttribute("autocomplete", "off");
+    el.setAttribute("data-1p-ignore", ""); el.setAttribute("data-lpignore", "true"); el.setAttribute("data-bwignore", ""); el.setAttribute("data-form-type", "other");
+  });
+}
+noFill();
+if (window.MutationObserver) new MutationObserver(function () { if (!nfWait) nfWait = setTimeout(noFill, 0); }).observe(document.body, { childList: true, subtree: true });
+// the forms around the sign-in fields are never sent anywhere: signing in is done by the buttons
+document.addEventListener("submit", function (e) { if (e.target && e.target.classList && e.target.classList.contains("nosub")) e.preventDefault(); });
+// the change-password form names the account it is for, so a password manager updates the right entry
+document.addEventListener("focusin", function (e) { if ((e.target.id === "pwNew" || e.target.id === "pwNew2") && $("pwUser")) $("pwUser").value = USER ? USER.email : ""; });
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -3548,7 +3603,6 @@ function radHist(id) { return Array.isArray(RADH[id]) ? RADH[id] : []; }
 function radioNow(force) {
   var st = radioCur();
   if (!st || !sb || !USER) return Promise.resolve();
-  if (/^u_/.test(st[0])) { RNP.id = st[0]; RNP.raw = ""; RNP.err = ""; RNP.at = Date.now(); return Promise.resolve(); }   // a station of your own: its song text is not read
   if (!force && RNP.id === st[0] && Date.now() - RNP.at < 20000) return Promise.resolve();
   if (RNP.id !== st[0]) { RNP.raw = null; RNP.err = ""; }
   RNP.id = st[0]; RNP.at = Date.now();
@@ -3952,7 +4006,7 @@ document.addEventListener("click", function (e) {
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
   if (a === "sumshow" || a === "sumpick" || a === "summv") { sumAct(a, k); return; }
   if (/^tv(open|filt|fav|del)$/.test(a)) { tvAct(a, k); return; }
-  if (/^rad(go|add|addurl|try|del)$/.test(a)) { radAct(a, k); return; }
+  if (/^rad(go|add|addurl|try|del|tick)$/.test(a)) { radAct(a, k); return; }
   if (a === "bmimpgo") { bmImpGo(); return; }
   if (a === "bmimpno") { BMIMP = null; bmImpDraw(); bmImpMsg(""); return; }
   if (/^ics(impgo|impno|reload|del)$/.test(a)) { icsAct(a, k); return; }
@@ -4146,11 +4200,12 @@ function openAuth(tab) {
   var up = AUTHTAB === "up", seg = function (k, l) { return '<button data-a="authtab" data-k="' + k + '"' + (AUTHTAB === k ? ' class="on"' : "") + ">" + l + "</button>"; };
   openModal("Account", '<div class="auth"><div class="seg">' + seg("in", "Sign in") + seg("up", "Create account") + "</div>" +
     '<p class="mut sn">' + (up ? "A free account saves your boxes, sources, notes and layout, and brings them to any device. All it needs is an email address and a password you choose here; the email is only used to sign you in and to send the confirmation and password-reset emails." : "Sign in to load your own setup.") + "</p>" +
-    '<label>Email<input type="email" id="acctEmail" autocomplete="email" placeholder="you@example.com"></label>' +
-    '<label>Password<input type="password" id="acctPass" autocomplete="' + (up ? "new-password" : "current-password") + '"' + (up ? ' placeholder="At least 8 characters"' : "") + "></label>" +
+    // a real form around the sign-in fields tells the browser exactly which fields are the login (and that the others on the page are not)
+    '<form class="nosub"><label>Email<input type="email" id="acctEmail" name="email" autocomplete="' + (up ? "email" : "username") + '" placeholder="you@example.com"></label>' +
+    '<label>Password<input type="password" id="acctPass" name="password" autocomplete="' + (up ? "new-password" : "current-password") + '"' + (up ? ' placeholder="At least 8 characters"' : "") + "></label>" +
     (up ? '<label>Repeat password<input type="password" id="acctPass2" autocomplete="new-password"></label>' : "") +
     '<div id="acctMsg" class="sn" role="status">' + esc(ACCTMSG) + "</div>" +
-    '<button class="pri" data-a="' + (up ? "signup" : "signin") + '">' + (up ? "Create account" : "Sign in") + "</button>" +
+    '<button type="button" class="pri" data-a="' + (up ? "signup" : "signin") + '">' + (up ? "Create account" : "Sign in") + "</button></form>" +
     (up ? '<p class="mut sn"><b>What happens next:</b> 1) you get an email with a confirmation link (look in spam if it is not there within a minute), 2) click the link, 3) come back here and sign in. A short guide then helps you pick your boxes and set them up; every step in it can be skipped.</p>'
         : '<button class="lnk2" data-a="forgotpw">Forgot password?</button>') + "</div>");
   $("acctEmail").value = keep;
@@ -4517,7 +4572,7 @@ function openHelp() {
     '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
     '</ol>';
 
-  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. For your own stations the box does not show which song is playing. A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
+  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. A station that is already in the list, also when the catalogue has it under another address, is not added a second time: it is ticked instead. The song that is playing shows for your own stations too, whenever the station sends it along with the music (most do; some only send their own name or nothing). A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
   html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p>';
 
@@ -4531,7 +4586,7 @@ function openHelp() {
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
-    '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
+    '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for the episode&rsquo;s title and the channel, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
     '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
   html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
@@ -4572,7 +4627,7 @@ function openHelp() {
 }
 function acctHtml() {
   if (USER) return '<div class="menu acctpop" role="menu"><div class="mut sn">' + esc(USER.email) + '</div><button role="menuitem" data-a="signout">Sign out</button></div>';
-  return '<div class="menu acctpop" role="menu"><input type="text" id="acctEmail" placeholder="Email" autocomplete="email"><input type="password" id="acctPass" placeholder="Password (8+ characters)" autocomplete="current-password"><div class="acts"><button data-a="signin">Sign in</button><button data-a="signup">Create</button></div><button class="lnk2" data-a="forgotpw">Forgot password?</button>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
+  return '<div class="menu acctpop" role="menu"><form class="nosub"><input type="text" id="acctEmail" name="email" placeholder="Email" autocomplete="username"><input type="password" id="acctPass" name="password" placeholder="Password (8+ characters)" autocomplete="current-password"><div class="acts"><button type="button" data-a="signin">Sign in</button><button type="button" data-a="signup">Create</button></div></form><button class="lnk2" data-a="forgotpw">Forgot password?</button>' + (ACCTMSG ? '<div class="mut sn">' + esc(ACCTMSG) + "</div>" : "") + "</div>";
 }
 
 // ---- Notifications: small cards in the bottom-right corner ----
@@ -6415,7 +6470,7 @@ function wizPage(id) {
       "<li>Google asks for permission. Press <b>Authorize access</b>, pick your account, then <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. Google shows this warning for every script that has not been through its review for public apps. Yours is private: you wrote (pasted) it, and you are the only one using it, so the warning is expected." + mock("Google hasn’t verified this app", mkl(75) + '<span class="mkrow">' + mkb("Advanced", 1) + mkb("Back to safety") + '</span><span class="mknote">then: Go to your project (unsafe) → Allow</span>') + "</li>" +
       "<li>Copy the <b>Web app URL</b> (it ends in <code>/exec</code>). Open it once in a new tab: the page shows a <b>token</b>, a long code between quotation marks. Copy the token too (without the quotation marks); it is shown only this one time. Treat it like a password.</li>" +
       "<li>Fill in the three fields and press Save:</li></ol>" +
-      '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="password" id="wzT" placeholder="Token" autocomplete="off" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
+      '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="text" class="secret" id="wzT" placeholder="Token" autocomplete="off" spellcheck="false" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
       '<div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + '</div><p class="mut sn">A second inbox can be added the same way later, in Settings → Mail. The full written steps are in Help → Mail.</p>';
   }
   return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its title; W / T / H change width, text size and list length.</li>" +

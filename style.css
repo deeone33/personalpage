@@ -345,8 +345,14 @@ button.pill{cursor:pointer;line-height:1.5}
 .calcn{border:1px solid var(--line);border-radius:99px;padding:0 6px;font-size:.8em;color:var(--mut)}
 #icsMsg:empty,#bmImpMsg:empty{display:none}
 #icsMsg,#bmImpMsg{margin-top:6px}
+/* a form around sign-in fields exists for the browser's sake only and takes no part in the layout; a code that is not a
+   password (the Gmail token) is an ordinary field shown as dots */
+.nosub{display:contents}
+input.secret{-webkit-text-security:disc;text-security:disc}
 /* TV shows box and window, and the radio station search */
 .tvrow .lnk{text-align:left}
+.tvrow>span:first-child{min-width:0;flex:1 1 0}
+.tvrow .tv1{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tvrow .lnk small{color:var(--mut)}
 .tvrow .r{flex:none;gap:4px}
 .tvwin{display:flex;gap:14px;align-items:flex-start}
@@ -357,7 +363,9 @@ button.pill{cursor:pointer;line-height:1.5}
 #radRes .row{padding:4px 0;gap:8px}
 #radRes .row>span:first-child{min-width:0;overflow-wrap:anywhere}
 .rbn{white-space:normal}
-.radb{display:flex;gap:4px;flex:none}
+#radRes .row{flex-wrap:wrap}
+#radRes .row>span:first-child{flex:1 1 150px}
+.radb{display:flex;gap:4px 6px;flex:0 1 auto;align-items:center;flex-wrap:wrap;justify-content:flex-end;margin-left:auto;min-width:0}
 .radb button{padding:2px 9px;font-size:12px}
 .radx{padding:0 6px;font-size:11px;margin-left:6px}
 #radMsg:empty{display:none}
