@@ -1316,7 +1316,7 @@ body.noshadow #srchAns{box-shadow:none}
 #langNote:empty{display:none}
 
 /* Reader: the posts of News, Telegram or Reddit one under another. The window keeps one height and the list scrolls inside it. */
-.mbox:has(.rdr){display:flex;flex-direction:column;width:min(680px,100%);height:90vh;overflow:hidden;padding-bottom:0}
+.mbox:has(.rdr){display:flex;flex-direction:column;width:min(680px,100%);height:var(--rdrh,60vh);overflow:hidden;padding-bottom:0}
 .mbox:has(.rdr) #mBody{flex:1;min-height:0;display:flex}
 .rdr{flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;overscroll-behavior:contain;position:relative;outline:0;margin:0 -18px;padding:0 18px}
 .rdp{padding:14px 0 14px 12px;border-bottom:1px solid var(--line);box-shadow:inset 3px 0 0 transparent;overflow-wrap:anywhere}
@@ -1343,26 +1343,6 @@ body.noshadow #srchAns{box-shadow:none}
   .rdr{margin:0 -14px;padding:0 14px}
 }
 
-/* News, Telegram and Reddit have up to six controls at the top. They go by the width of their own box (which you set
-   yourself, and which is narrow on a phone): closer together first, then the count of new posts as the number alone.
-   What still does not fit beside the title moves to a line of its own under it, at the right. */
-[data-id=news] .th,[data-id=telegram] .th,[data-id=reddit] .th{container-type:inline-size;container-name:bh;position:relative;z-index:2;flex-wrap:wrap}
-[data-id=news] .hc,[data-id=telegram] .hc,[data-id=reddit] .hc{margin-left:auto}
-@container bh (max-width:340px){
-  .hc{gap:4px}
-  .hc .ib.sm{padding:2px 6px}
-  .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0;justify-content:center}
-  .hc select{width:58px;min-width:0;padding-left:5px}
-}
-@container bh (max-width:310px){.hc .pill .nwl{display:none}}
-/* only while the count of new posts is there as well does the sort list give up room */
-@container bh (max-width:270px){
-  .hc .pill{padding-left:6px;padding-right:6px}
-  .hc:has(.pill){gap:3px}
-  .hc:has(.pill) select{width:40px}
-}
-@container bh (max-width:246px){.hc select{width:50px}.hc:has(.pill) select{width:30px}}
-@container bh (max-width:236px){.hc{flex-wrap:wrap;justify-content:flex-end;row-gap:4px}}
 /* Settings, Reading posts: on a phone the two long questions get the full width, with their list under them */
 @media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir){flex-wrap:wrap}#rdrCdir,#rdrBdir{margin-left:auto}}
 
@@ -1403,7 +1383,23 @@ body.noshadow #srchAns{box-shadow:none}
 .rdr.snap .rdp{min-height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always}
 .rdr.snap #rdrTop{scroll-snap-align:start}
 .rdr.snap #rdrEnd{scroll-snap-align:end}
-/* News, Telegram, Reddit: the buttons at the top are one height, and the icon buttons one width */
-[data-id=news] .hc .ib.sm,[data-id=telegram] .hc .ib.sm,[data-id=reddit] .hc .ib.sm{height:22px;box-sizing:border-box;justify-content:center;line-height:1}
-[data-id=news] .hc .ib.sm:not([data-a=filtmenu]),[data-id=telegram] .hc .ib.sm:not([data-a=filtmenu]),[data-id=reddit] .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0}
-[data-id=reddit] .hc select{height:22px}
+/* The top line of every box: the title on the left, the controls on the right, always on ONE line and always the same
+   height. When a box is too narrow for them, fitHeads() in app.js makes them fit, the same way in every box: first the
+   word controls (lists, Sources) get narrower, then the count of new posts loses its word, then the gaps and icon buttons
+   tighten, and last the title gives way. Nothing ever moves to a second line, so a box never changes height over it. */
+#grid .card:not([data-id^=embed])>.th{flex-wrap:nowrap}
+#grid .card:not([data-id^=embed])>.th>h3{flex:none;min-width:0}
+#grid .card:not([data-id^=embed])>.th>.hc{flex:none;flex-wrap:nowrap;margin-left:auto}
+#grid .th .hc .ib.sm{height:22px;box-sizing:border-box;justify-content:center;line-height:1;flex:none}
+#grid .th .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0}
+#grid .th .hc select{height:22px;flex:none}
+#grid .th .hc .cut{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;padding-right:4px;min-width:0}
+#grid .th .hc select.cut{padding-left:4px;padding-right:0}
+#grid .th.fitp .hc .pill .nwl{display:none}
+#grid .th.fitp .hc .pill{padding-left:6px;padding-right:6px}
+#grid .th.fit2 .hc{gap:3px}
+#grid .th.fit2 .hc .ib.sm:not([data-a=filtmenu]){width:20px}
+#grid .th>h3.cut{overflow:hidden}
+#grid .th .hc .pill{height:22px;box-sizing:border-box;display:inline-flex;align-items:center;flex:none;white-space:nowrap}
+#grid .th.fit3 .hc{gap:2px}
+#grid .th.fit3 .hc .ib.sm:not([data-a=filtmenu]){width:18px}
