@@ -816,7 +816,14 @@ body.dockslim #dockGrip{display:none}
 .mbox:has(.wiz){overflow-x:hidden}
 .wizgrid .wizbox{min-width:0}
 .wizmail input{min-width:0;max-width:100%;box-sizing:border-box}
-@media(max-width:350px){.wiznav{flex-wrap:wrap}.wizdots{flex-basis:100%;order:-1}.wizgrid{grid-template-columns:1fr}}
+.wizdots{min-width:0;flex-wrap:wrap}
+/* a narrow window: the row of dots (one per step; a full guide has eleven) gets a line of its own above the buttons */
+@media(max-width:560px){.wiznav{flex-wrap:wrap}.wizdots{flex-basis:100%;order:-1}.wiznav .pri{margin-left:auto}}
+@media(max-width:350px){.wizgrid{grid-template-columns:1fr}}
+/* a desktop window that is only just wide enough for columns (821 to 1000px): the narrow boxes need their head buttons
+   and the menu icons a little tighter to fit */
+@media(min-width:821px) and (max-width:1000px){.hc select[data-s^=sort]{flex:0 1 auto;min-width:30px}.hc{gap:4px}}
+@media(min-width:821px) and (max-width:1100px){.card.compact .mrow.menurow{gap:2px;justify-content:space-between}.card.compact .menurow .ib{padding:3px 2px}}
 /* drawn pictures of the screens */
 .mock{margin:8px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);font-size:12.5px;max-width:420px}
 .mockbar{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--card);border-bottom:1px solid var(--line);color:var(--mut);font-size:11px}
