@@ -1,4 +1,4 @@
-var VERSION = 131;
+var VERSION = 132;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -765,7 +765,7 @@ function render() {
       if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
       return SS === "up" ? b - a : SS === "down" ? a - b : Math.abs(b) - Math.abs(a);
     });
-  var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>";
+  var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>" + mkBtn();
   var IC = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
   T.menu = tile("menu", "", '<div class="mrow menurow">' +
     '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
@@ -1635,6 +1635,171 @@ if (window.MutationObserver) new MutationObserver(function () { if (!nfWait) nfW
 document.addEventListener("submit", function (e) { if (e.target && e.target.classList && e.target.classList.contains("nosub")) e.preventDefault(); });
 // the change-password form names the account it is for, so a password manager updates the right entry
 document.addEventListener("focusin", function (e) { if ((e.target.id === "pwNew" || e.target.id === "pwNew2") && $("pwUser")) $("pwUser").value = USER ? USER.email : ""; });
+// ---- Market hours (the small clock button in the Stocks box) ----
+// Which exchanges your stocks trade on, whether each is open right now, and how long until it closes or opens.
+// Each market: its name, time zone and trading hours as minutes after midnight there (a second pair = it shuts for lunch).
+// `w` instead of `s` = hours that differ per weekday (0 = Sunday): currencies and futures trade around the clock from
+// Sunday evening to Friday evening, New York time. `h` = which public holidays it keeps (mkHols).
+var MK = {
+  us: { n: "US markets", x: "NYSE, Nasdaq", tz: "America/New_York", s: [[570, 960]], h: "us" },
+  de: { n: "Germany", x: "Xetra, Frankfurt", tz: "Europe/Berlin", s: [[540, 1050]], h: "de" },
+  se: { n: "Stockholm", x: "Nasdaq Stockholm", tz: "Europe/Stockholm", s: [[540, 1050]], h: "se" },
+  fi: { n: "Helsinki", x: "Nasdaq Helsinki", tz: "Europe/Helsinki", s: [[600, 1110]], h: "fi" },
+  dk: { n: "Copenhagen", x: "Nasdaq Copenhagen", tz: "Europe/Copenhagen", s: [[540, 1020]], h: "dk" },
+  no: { n: "Oslo", x: "Oslo Børs", tz: "Europe/Oslo", s: [[540, 985]], h: "no" },
+  bt: { n: "Baltic", x: "Tallinn, Riga, Vilnius", tz: "Europe/Tallinn", s: [[600, 960]], h: "eu" },
+  is: { n: "Iceland", x: "Nasdaq Iceland", tz: "Atlantic/Reykjavik", s: [[570, 930]], h: "eu" },
+  uk: { n: "London", x: "London Stock Exchange", tz: "Europe/London", s: [[480, 990]], h: "uk" },
+  eu: { n: "Euronext", x: "Paris, Amsterdam, Brussels, Lisbon, Dublin", tz: "Europe/Paris", s: [[540, 1050]], h: "eu" },
+  it: { n: "Milan", x: "Borsa Italiana", tz: "Europe/Rome", s: [[540, 1050]], h: "de" },
+  es: { n: "Madrid", x: "BME", tz: "Europe/Madrid", s: [[540, 1050]], h: "eu" },
+  ch: { n: "Zurich", x: "SIX Swiss Exchange", tz: "Europe/Zurich", s: [[540, 1040]], h: "de" },
+  at: { n: "Vienna", x: "Wiener Börse", tz: "Europe/Vienna", s: [[540, 1050]], h: "de" },
+  pl: { n: "Warsaw", x: "GPW", tz: "Europe/Warsaw", s: [[540, 1025]], h: "eu" },
+  ca: { n: "Toronto", x: "TSX", tz: "America/Toronto", s: [[570, 960]], h: "ca" },
+  au: { n: "Sydney", x: "ASX", tz: "Australia/Sydney", s: [[600, 960]], h: "" },
+  hk: { n: "Hong Kong", x: "HKEX", tz: "Asia/Hong_Kong", s: [[570, 720], [780, 960]], h: "" },
+  jp: { n: "Tokyo", x: "Tokyo Stock Exchange", tz: "Asia/Tokyo", s: [[540, 690], [750, 930]], h: "" },
+  kr: { n: "Seoul", x: "Korea Exchange", tz: "Asia/Seoul", s: [[540, 930]], h: "" },
+  "in": { n: "India", x: "NSE, BSE", tz: "Asia/Kolkata", s: [[555, 930]], h: "" },
+  cn: { n: "China", x: "Shanghai, Shenzhen", tz: "Asia/Shanghai", s: [[570, 690], [780, 900]], h: "" },
+  br: { n: "São Paulo", x: "B3", tz: "America/Sao_Paulo", s: [[600, 1020]], h: "" },
+  mx: { n: "Mexico", x: "BMV", tz: "America/Mexico_City", s: [[510, 900]], h: "" },
+  fut: { n: "Oil, gold & futures", x: "trade almost around the clock, Sunday evening to Friday evening", tz: "America/New_York", w: [[[1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020]], []] },
+  fx: { n: "Currencies", x: "trade around the clock, Sunday evening to Friday evening", tz: "America/New_York", w: [[[1020, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1020]], []] },
+  crypto: { n: "Crypto", x: "never closes", always: 1 }
+};
+// the exchange in front of a symbol (NASDAQ:NVDA), as TradingView names them -> market
+var MK_PRE = { NASDAQ: "us", NYSE: "us", AMEX: "us", ARCA: "us", BATS: "us", CBOE: "us", OTC: "us", SP: "us", DJ: "us", XETR: "de", FWB: "de", SWB: "de", TRADEGATE: "de", GETTEX: "de", OMXSTO: "se", OMXHEX: "fi", OMXCOP: "dk", OSL: "no",
+  OMXTSE: "bt", OMXRSE: "bt", OMXVSE: "bt", OMXICE: "is", LSE: "uk", LSIN: "uk", AQUIS: "uk", EURONEXT: "eu", MIL: "it", BME: "es", SIX: "ch", VIE: "at", GPW: "pl", TSX: "ca", TSXV: "ca", NEO: "ca", CSE: "ca", ASX: "au", HKEX: "hk", TSE: "jp",
+  KRX: "kr", NSE: "in", BSE: "in", SSE: "cn", SZSE: "cn", BMFBOVESPA: "br", BMV: "mx", BINANCE: "crypto", COINBASE: "crypto", KRAKEN: "crypto", BITSTAMP: "crypto", BYBIT: "crypto", OKX: "crypto", KUCOIN: "crypto", CRYPTO: "crypto", CRYPTOCAP: "crypto",
+  NYMEX: "fut", COMEX: "fut", CME: "fut", CBOT: "fut", ICEEUR: "fut", ICEUS: "fut", FX: "fx", FX_IDC: "fx", OANDA: "fx", FOREXCOM: "fx", SAXO: "fx" };
+// symbols without an exchange that the price service knows by name
+var MK_SYM = { SAAB_B: "se", RHM: "de", VOW3: "de", P911: "de", "4HO": "de", LDO: "it", SPX: "us", DJI: "us", NASDAQ: "us" };
+var MK_FIAT = /^(USD|EUR|GBP|JPY|CHF|SEK|NOK|DKK|PLN|CZK|HUF|RUB|TRY|CAD|AUD|NZD|CNY|CNH|HKD|SGD|INR|KRW|MXN|BRL|ZAR|ILS|AED|SAR|THB|UAH)$/;
+var MK_METAL = /^(XAU|XAG|XPT|XPD|BCO|WTI|UKOIL|USOIL|GOLD|SILVER|BRENT|NATGAS|COPPER)/;
+function stMarket(id) {
+  id = String(id || "").toUpperCase();
+  var pre = id.indexOf(":") > 0 ? id.split(":")[0] : "", s = tk(id);
+  if (MK_METAL.test(s) || /=F$/.test(s)) return "fut";
+  if (/=X$/.test(s)) return "fx";
+  if (pre && MK_PRE[pre] && MK_PRE[pre] !== "fx") return MK_PRE[pre] === "us" && /^(GOLD|SILVER|USOIL|UKOIL)$/.test(s) ? "fut" : MK_PRE[pre];
+  var pair = /^([A-Z0-9]{2,7}?)[-/]?(USDT?|USDC|EUR|GBP)$/.exec(s);
+  if (/^[A-Z]{6}$/.test(s) && MK_FIAT.test(s.slice(0, 3)) && MK_FIAT.test(s.slice(3))) return "fx";
+  if (pre && MK_PRE[pre] === "fx") return "fx";
+  if (MK_SYM[s]) return MK_SYM[s];
+  var suf = /\.([A-Z]{1,2})$/.exec(s);
+  if (suf && TV_EX[suf[1]] && MK_PRE[TV_EX[suf[1]]]) return MK_PRE[TV_EX[suf[1]]];
+  if (suf && /^(HM|MU|BE|DU|SG)$/.test(suf[1])) return "de";
+  if (suf && suf[1] === "NE") return "ca";
+  if (/-USD$/.test(s) || (pair && !suf && !/^\^/.test(s) && (pre || /USDT?$|USDC$/.test(s)) && !MK_FIAT.test(pair[1]))) return "crypto";
+  return "us";   // a plain symbol (AAPL, NVDA, ^GSPC): the US markets
+}
+// the main public holidays a market is closed on, per year: { "2026-12-25": 1 }. Shortened days are not in here.
+var MKH = {};
+function mkHols(g, y) {
+  if (!g) return {};
+  if (MKH[g + y]) return MKH[g + y];
+  var o = {}, add = function (d) { o[ymd(d)] = 1; }, fix = function (m, d) { add(sdDate(y, m, d)); }, e = easter(y);
+  // a US holiday on a Saturday is kept on the Friday before, one on a Sunday on the Monday after (not New Year on a Saturday)
+  var us = function (m, d, noFri) { var x = sdDate(y, m, d), wd = x.getDay(); add(wd === 6 ? (noFri ? x : plus(x, -1)) : wd === 0 ? plus(x, 1) : x); };
+  if (g === "us") { us(0, 1, true); add(nthDow(y, 0, 1, 3)); add(nthDow(y, 1, 1, 3)); add(plus(e, -2)); add(lastDow(y, 4, 1)); us(5, 19); us(6, 4); add(nthDow(y, 8, 1, 1)); add(nthDow(y, 10, 4, 4)); us(11, 25); }
+  else if (g === "ca") { fix(0, 1); add(nthDow(y, 1, 1, 3)); add(plus(e, -2)); add(plus(dowOnAfter(y, 4, 18, 1), 0)); fix(6, 1); add(nthDow(y, 7, 1, 1)); add(nthDow(y, 8, 1, 1)); add(nthDow(y, 9, 1, 2)); fix(11, 25); fix(11, 26); }
+  else {
+    fix(0, 1); add(plus(e, -2)); add(plus(e, 1)); fix(11, 25); fix(11, 26);
+    if (g === "uk") { add(nthDow(y, 4, 1, 1)); add(lastDow(y, 4, 1)); add(lastDow(y, 7, 1)); }
+    else if (g !== "dk") fix(4, 1);
+    if (g === "de" || g === "se" || g === "fi" || g === "dk" || g === "no") { fix(11, 24); fix(11, 31); }
+    if (g === "se") { fix(0, 6); add(plus(e, 39)); fix(5, 6); add(dowOnAfter(y, 5, 19, 5)); }
+    if (g === "fi") { fix(0, 6); add(plus(e, 39)); add(dowOnAfter(y, 5, 19, 5)); fix(11, 6); }
+    if (g === "no") { add(plus(e, -3)); add(plus(e, 39)); fix(4, 17); add(plus(e, 50)); }
+    if (g === "dk") { add(plus(e, -3)); add(plus(e, 39)); add(plus(e, 40)); add(plus(e, 50)); fix(5, 5); }
+  }
+  return (MKH[g + y] = o);
+}
+// the date and weekday it is in a time zone right now
+function mkDay(ts, tz) {
+  var p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ts)).forEach(function (x) { p[x.type] = +x.value; });
+  return p;
+}
+// Open or closed, and until when: { open, until (ms; 0 = never changes), brk (closed for a lunch break) }. Kept for half a minute.
+var MKC = {};
+function mkState(key, now) {
+  now = now || Date.now();
+  var m = MK[key], c = MKC[key];
+  if (!m) return { open: false, until: 0 };
+  if (m.always) return { open: true, until: 0 };
+  if (c && Math.abs(now - c.t) < 30000) return c.v;
+  var d0 = mkDay(now, m.tz), iv = [];
+  for (var off = -1; off <= 9; off++) {
+    var day = new Date(Date.UTC(d0.year, d0.month - 1, d0.day + off)), y = day.getUTCFullYear(), mo = day.getUTCMonth() + 1, dd = day.getUTCDate(), dow = day.getUTCDay();
+    var ses = m.w ? m.w[dow] : dow >= 1 && dow <= 5 && !mkHols(m.h, y)[y + "-" + pad2(mo) + "-" + pad2(dd)] ? m.s : [];
+    ses.forEach(function (s) {
+      var a = icsZoned(y, mo, dd, Math.floor(s[0] / 60), s[0] % 60, m.tz).getTime(), b = icsZoned(y, mo, dd, Math.floor(s[1] / 60), s[1] % 60, m.tz).getTime(), last = iv[iv.length - 1];
+      if (last && a <= last[1] + 60000) last[1] = b; else iv.push([a, b, off]);   // midnight to midnight runs on as one stretch
+    });
+  }
+  var v = { open: false, until: 0 };
+  for (var i = 0; i < iv.length; i++) {
+    if (now >= iv[i][0] && now < iv[i][1]) { v = { open: true, until: iv[i][1] }; break; }
+    if (iv[i][0] > now) { v = { open: false, until: iv[i][0], brk: i > 0 && iv[i - 1][2] === iv[i][2] && !m.w }; break; }
+  }
+  MKC[key] = { t: now, v: v };
+  return v;
+}
+function mkLeft(ms) {
+  var min = Math.max(1, Math.round(ms / 60000)), d = Math.floor(min / 1440), h = Math.floor(min % 1440 / 60), mi = min % 60;
+  return d ? d + "d " + h + "h" : h ? h + "h " + (mi < 10 ? "0" : "") + mi + "m" : mi + "m";
+}
+// when it changes, in your own time: "23:00", or "Mon 16:30" if that is not today
+function mkAt(ts) {
+  var k = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); }, hm = new Date(ts).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+  return k(ts) === k(Date.now()) ? hm : new Date(ts).toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short" }) + " " + hm;
+}
+function mkText(key, st) {
+  if (MK[key].always) return "always open";
+  if (!st.until) return st.open ? "open" : "closed";
+  return (st.open ? "closes in " : st.brk ? "lunch break, back in " : "opens in ") + mkLeft(st.until - Date.now());
+}
+// your markets, the one with most of your stocks first: [{ key, ids: [stock ids], st }]
+function mkMine() {
+  var by = {}, out = [];
+  (P.stocks || DATA.stocks).forEach(function (x) { if (!shown("s:" + x.id)) return; var k = stMarket(x.id); (by[k] = by[k] || []).push(x.id); });
+  Object.keys(by).forEach(function (k) { out.push({ key: k, ids: by[k], st: mkState(k) }); });
+  return out.sort(function (a, b) { return b.ids.length - a.ids.length || (a.key < b.key ? -1 : 1); });
+}
+// the button in the head of the Stocks box: a dot for the market most of your stocks are on, and your main markets in its tooltip
+function mkBtn() {
+  var mine = mkMine(), total = mine.reduce(function (n, m) { return n + m.ids.length; }, 0);
+  if (!mine.length) return "";
+  // "main" = every market with at least a fifth of your stocks; at least the biggest one, at most three
+  var main = mine.filter(function (m, i) { return i === 0 || m.ids.length / total >= 0.2; }).slice(0, 3);
+  var tip = main.map(function (m) { return MK[m.key].n + ": " + (MK[m.key].always ? "always open" : (m.st.open ? "OPEN, " : "CLOSED, ") + mkText(m.key, m.st)); }).join("\n") + (mine.length > main.length ? "\n+" + (mine.length - main.length) + " more. Click for all." : "\nClick for the details.");
+  return '<button class="ib sm mkb" data-a="mkopen" title="' + esc(tip) + '" aria-label="Market hours: ' + esc(tip.replace(/\n/g, ". ")) + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><i class="mkd ' + (main[0].st.open ? "on" : "off") + '"></i></button>';
+}
+var MK_T = "Market hours", MK_SEL = "";
+function mkHtml() {
+  var mine = mkMine(), total = mine.reduce(function (n, m) { return n + m.ids.length; }, 0);
+  if (!mine.length) return '<p class="mut">No stocks on your list yet.</p>';
+  return '<div class="mkwin">' + mine.map(function (m) {
+    var M = MK[m.key], st = m.st, open = MK_SEL === m.key, pct = Math.round(m.ids.length / total * 100);
+    return '<div class="mkrow' + (open ? " sel" : "") + '"><button class="mkhead" data-a="mkrow" data-k="' + m.key + '" aria-expanded="' + open + '" title="Show the stocks on this market">' +
+      '<i class="mkd ' + (st.open ? "on" : "off") + '"></i><span class="mkn"><b>' + esc(M.n) + "</b> <small>" + m.ids.length + (m.ids.length === 1 ? " stock" : " stocks") + " · " + pct + "%</small></span>" +
+      '<span class="mks"><b class="' + (st.open ? "mko" : "mkc") + '">' + (st.open ? "Open" : "Closed") + "</b>" + (M.always ? " <small>always</small>" : st.until ? " <small>" + mkText(m.key, st).replace(/^always open$/, "") + "</small>" : "") + "</span>" +
+      '<span class="mkt mut">' + (st.until ? mkAt(st.until) : "") + "</span></button>" +
+      (open ? '<div class="mkmore"><div class="mut sn">' + esc(M.x) + (M.s ? " · trades " + M.s.map(function (s) { return pad2(Math.floor(s[0] / 60)) + ":" + pad2(s[0] % 60) + "–" + pad2(Math.floor(s[1] / 60)) + ":" + pad2(s[1] % 60); }).join(" and ") + " " + esc(M.tz.split("/").pop().replace(/_/g, " ")) + " time, Monday to Friday" : "") + '</div><div class="chips">' +
+        m.ids.map(function (id) { var q = QUOTES[tk(id)], c = q && q.c != null ? q.c : null; return '<button data-a="open" data-k="' + esc("s:" + id) + '"><b>' + esc(tk(id)) + "</b>" + (c != null ? ' <span class="' + (c >= 0 ? "up" : "down") + '">' + (c >= 0 ? "+" : "") + c.toFixed(1) + "%</span>" : "") + "</button>"; }).join("") + "</div></div>" : "") + "</div>";
+  }).join("") + '<p class="mut sn mkfoot">Times are in your own time (' + esc(LOCNAME) + "). Click a market for its stocks. The main public holidays are counted; shortened trading days and some local holidays are not. A symbol without an exchange in its name is taken as a US stock.</p></div>";
+}
+function openMarkets() { openModal(MK_T, mkHtml()); }
+function mkAct(a, k) {
+  if (a === "mkopen") { MK_SEL = ""; openMarkets(); return; }
+  if (a === "mkrow") { MK_SEL = MK_SEL === k ? "" : k; if ($("mTitle").textContent === MK_T) $("mBody").innerHTML = mkHtml(); }
+}
+// the open window counts down by itself
+setInterval(function () { if (!$("modal").hidden && $("mTitle").textContent === MK_T && !document.hidden) $("mBody").innerHTML = mkHtml(); }, 30000);
+
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -4031,6 +4196,7 @@ document.addEventListener("click", function (e) {
   if (a === "sumshow" || a === "sumpick" || a === "summv") { sumAct(a, k); return; }
   if (/^tv(open|filt|fav|del)$/.test(a)) { tvAct(a, k); return; }
   if (/^rad(go|add|addurl|try|del|tick)$/.test(a)) { radAct(a, k); return; }
+  if (a === "mkopen" || a === "mkrow") { mkAct(a, k); return; }
   if (a === "bmimpgo") { bmImpGo(); return; }
   if (a === "bmimpno") { BMIMP = null; bmImpDraw(); bmImpMsg(""); return; }
   if (/^ics(impgo|impno|reload|del)$/.test(a)) { icsAct(a, k); return; }
@@ -4563,7 +4729,7 @@ function openHelp() {
     '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
     '<li>Paste that link into the link field (the same one as for a Google Sheet) and press Import.</li>' +
     '</ol></li></ol>' +
-    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. Star or hide a stock in Edit mode.</p>' +
+    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. Its dot is green when the market most of your stocks are on is open; point at it for your main markets, or click it for all of them: open or closed, how long until each closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto never closes; currencies, oil and gold trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. Star or hide a stock in Edit mode.</p>' +
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
@@ -6464,7 +6630,7 @@ function wizPage(id) {
     '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes.</p>';
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
   if (id === "stocks") return "<p>Type a company name and pick it from the list, or type symbols separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. Tesla, or NVDA, AAPL, BTCUSD") + '<div id="wzRes"></div>' +
-    '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go.</p>';
+    '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go. The small clock button in the Stocks box shows whether the markets your stocks trade on are open, and when they open or close.</p>';
   if (id === "twitch") return "<p>Connect your Twitch account so the box can show which of the channels you follow are live. The page only asks to <b>see who you follow</b>; it cannot chat, follow or change anything.</p>" +
     mock("id.twitch.tv", "<b>OmniTree wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
