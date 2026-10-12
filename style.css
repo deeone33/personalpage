@@ -370,9 +370,9 @@ input.secret{-webkit-text-security:disc;text-security:disc}
 /* market hours: the clock button in the Stocks box, the small box under the mouse and the window. "Open" has the Stocks
    box's up color and "closed" its down color, at the strength set for that box (Settings > Appearance > Signal colors).
    Every row is one line of the same grid, so market, count, share, state, countdown and time each sit in their own column. */
-.mkb{flex:none;display:inline-flex;align-items:center;justify-content:center}
-.mkb.on{color:var(--up)}
-.mkb.off{color:var(--down)}
+.mkclk{flex:none;display:inline-flex;align-items:center;justify-content:center}
+.mkclk.up{color:var(--up)}
+.mkclk.dn{color:var(--down)}
 .mkd{display:block;width:7px;height:7px;border-radius:50%;align-self:center}
 .mkd.on{background:var(--up)}
 .mkd.off{background:var(--down)}
@@ -1314,3 +1314,85 @@ body.noshadow #srchAns{box-shadow:none}
 #langList{display:flex;flex-wrap:wrap;gap:4px 6px}
 .setgrp #langList label.chip{display:inline-flex;justify-content:flex-start;gap:6px;font-size:12.5px;padding:2px 9px 2px 6px;border:1px solid var(--line);border-radius:99px;cursor:pointer}
 #langNote:empty{display:none}
+
+/* Reader: the posts of News, Telegram or Reddit one under another. The window keeps one height and the list scrolls inside it. */
+.mbox:has(.rdr){display:flex;flex-direction:column;width:min(680px,100%);height:90vh;overflow:hidden;padding-bottom:0}
+.mbox:has(.rdr) #mBody{flex:1;min-height:0;display:flex}
+.rdr{flex:1;min-width:0;overflow-y:auto;overflow-anchor:none;overscroll-behavior:contain;position:relative;outline:0;margin:0 -18px;padding:0 18px}
+.rdp{padding:14px 0 14px 12px;border-bottom:1px solid var(--line);box-shadow:inset 3px 0 0 transparent;overflow-wrap:anywhere}
+.rdp.nw{box-shadow:inset 3px 0 0 var(--ac)}
+.rdp .mh{font-size:18px}
+.rdp p{margin:8px 0 0}
+.rdp .mimg,.rdp .mvid{margin:10px 0 0;max-height:70vh}
+.rdp video.mvid{width:100%;background:#000}
+.rdp .rdimg{max-height:260px}
+.rdp .tools{margin:10px 0 0}
+.rdp h3{margin:12px 0 4px}
+.rdrsrc{margin-top:10px}
+.rdrsrc summary{cursor:pointer;color:var(--mut);font-size:13px}
+.rdrnew{display:flex;align-items:center;gap:10px;padding:6px 0;color:var(--ac);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.rdrnew::before,.rdrnew::after{content:"";flex:1;height:1px;background:var(--ac);opacity:.5}
+.rdredge{padding:14px 0;text-align:center;color:var(--mut);font-size:13px}
+.rdredge:empty{display:none}
+.rdredge .pvnote{margin:8px 0 0}
+#rdrSw{margin-left:auto;margin-right:8px;white-space:nowrap}
+.rdrb svg{display:block}
+@media(max-width:600px){
+  #modal:has(.rdr){padding:0}
+  .mbox:has(.rdr){width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;border:0;padding:12px 14px 0}
+  .rdr{margin:0 -14px;padding:0 14px}
+}
+
+/* News, Telegram and Reddit have up to six controls at the top. They go by the width of their own box (which you set
+   yourself, and which is narrow on a phone): closer together first, then the count of new posts as the number alone.
+   What still does not fit beside the title moves to a line of its own under it, at the right. */
+[data-id=news] .th,[data-id=telegram] .th,[data-id=reddit] .th{container-type:inline-size;container-name:bh;position:relative;z-index:2;flex-wrap:wrap}
+[data-id=news] .hc,[data-id=telegram] .hc,[data-id=reddit] .hc{margin-left:auto}
+@container bh (max-width:340px){
+  .hc{gap:4px}
+  .hc .ib.sm{padding:2px 5px}
+  .hc select{width:50px;min-width:0;padding-left:5px}
+}
+@container bh (max-width:270px){
+  .hc{gap:3px}
+  .hc .pill .nwl{display:none}
+  .hc .ib.sm{padding:2px 4px}
+  .hc select{width:44px}
+}
+@container bh (max-width:246px){.hc select{width:36px}}
+@container bh (max-width:236px){.hc{flex-wrap:wrap;justify-content:flex-end;row-gap:4px}}
+/* Settings, Reading posts: on a phone the two long questions get the full width, with their list under them */
+@media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir){flex-wrap:wrap}#rdrCdir,#rdrBdir{margin-left:auto}}
+
+/* Twitch Discover and Search all boxes: two compact windows of one-line rows */
+.mbox:has(.twd){width:min(560px,100%)}
+.mbox:has(.site){width:min(620px,100%)}
+.twdtop{display:flex;gap:8px;margin-bottom:8px}
+.twdtop input{flex:1;min-width:0}
+.twdtop select{flex:none;max-width:42%}
+.twdcats{display:flex;flex-wrap:wrap;gap:5px}
+.twdc{padding:2px 9px;font-size:12px;border-radius:99px}
+.twdc.on{background:var(--ac);border-color:var(--ac);color:var(--acfg);font-weight:600}
+.twd h3,.site h3{margin:12px 0 2px}
+.twdr,.site .row{padding:4px 0;font-size:13.5px}
+.twdr>span:first-child,.site .row>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.twdr .lnk{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.twdr .lnk small{color:var(--mut);margin-left:6px}
+.twdr .lnk .twdt{display:block;margin-left:15px;overflow:hidden;text-overflow:ellipsis}
+.twdr .r,.site .row .r{flex:none;display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12.5px}
+.twdr:hover .lnk,.site .row:hover .lnk{color:var(--ac)}
+.twdf{border:0;background:none;padding:0 2px;font-size:15px;line-height:1;color:var(--mut)}
+.twdf.on{color:var(--ac)}
+.sitemore{display:block;width:100%;margin:6px 0 0;padding:4px 8px;font-size:12px;text-align:center;color:var(--mut);background:none;border:1px dashed var(--line);border-radius:8px}
+.site #siteQ{width:100%}
+.site .sitesum{margin:8px 0 0}
+.site .row small{color:var(--mut)}
+.twdb svg{display:block}
+.empty .lnk2{white-space:nowrap}
+.setgrp input.cmdw{flex:none;width:112px}
+.twdcats{max-height:53px;overflow:hidden}
+.twdcats.all{max-height:none}
+.twdc{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;height:24px;line-height:1}
+.twdall{display:block;margin:4px 0 0 auto;font-size:12px}
+.twdall[hidden]{display:none}
+@media(max-width:520px){.twdcats{max-height:82px}}

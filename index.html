@@ -178,6 +178,18 @@
     <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
     <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
     <div class="mut sn">The bar also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>. Enter copies the answer. Type <code>help</code> in it to see everything it can do.</div>
+    <div class="sub" data-kw="prefix prefixes command word words site search all boxes ss note todo translate tr help shortcut shift alt enter"><b>Command words</b>
+      <div class="mut sn">A word at the start of what you type tells the bar what to do with the rest, for example <code>ss ferry</code> searches every box on the page. Change a word here: letters and digits, up to 12.</div>
+      <label>Search all boxes <input type="text" id="cmdSs" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for searching all boxes"></label>
+      <label>Save a note <input type="text" id="cmdNote" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a note"></label>
+      <label>Save a to-do <input type="text" id="cmdTodo" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a to-do"></label>
+      <label>Translate <input type="text" id="cmdTr" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for translating"></label>
+      <label>Show what the bar can do <input type="text" id="cmdHelp" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for the help of the search bar"></label>
+      <label>Search all boxes without the word <select id="ssKeySel"><option value="shift">Shift+Enter</option><option value="alt">Alt+Enter</option><option value="off">Off</option></select></label>
+      <div id="cmdMsg" class="mut sn" role="status"></div>
+      <span><button id="cmdReset">Back to the standard words</button></span>
+      <div class="mut sn">The single keys that work when you are not typing (for example <code>Q</code> to search all boxes and <code>D</code> for Discover on Twitch) are under Keyboard shortcuts.</div>
+    </div>
   </section>
 
   <section class="setgrp" data-cat="Look" data-sec="Keyboard shortcuts" id="keysSec">
@@ -223,6 +235,12 @@
       <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
       <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
       <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
+    </div>
+    <div class="sub" data-kw="reader read scroll scrolling posts catch up window click older newer direction"><b>Reading posts</b>
+      <label>Clicking a post opens <select id="rdrClick"><option value="reader">Reader</option><option value="one">Single post</option></select></label>
+      <label>After clicking a post, scrolling down goes to <select id="rdrCdir"><option value="old">Older posts</option><option value="new">Newer posts</option></select></label>
+      <label>From the catch-up button, scrolling down goes to <select id="rdrBdir"><option value="new">Newer posts</option><option value="old">Older posts</option></select></label>
+      <div class="mut sn">The reader shows the posts of a box one under another, each in full, to scroll through. The catch-up button is the small list button at the top of News, Telegram and Reddit: it opens the reader at the oldest post you have not seen.</div>
     </div>
     <span><button id="srcReset">Back to default sources</button></span>
   </section>

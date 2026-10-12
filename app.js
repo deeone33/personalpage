@@ -1,4 +1,4 @@
-var VERSION = 138;
+var VERSION = 141;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -670,8 +670,8 @@ function render() {
     // articles. Another source reporting a story that is already in your list does not mark it as new again.
     var gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !isRead(x.u); }); };
     nNew = NG.filter(gNew).length;
-    var vis = NQ ? NG.filter(function (g) { return g.some(function (n) { return (n.t + " " + n.s).toLowerCase().indexOf(NQ) >= 0; }); }) : NG, lastB = "";
-    nb = (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Filter headlines…" aria-label="Filter headlines">' : "") + (vis.length ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
+    var vis = newsShown(), lastB = "", nNote = foundNote("news");
+    nb = (NFILT || NQ ? '<input type="search" id="newsQ" class="flt" placeholder="Search headlines…" aria-label="Search headlines">' : "") + (vis.length || nNote ? lst("news", vis.slice(0, cntOf("news")).map(function (g) {
       // n = the story's latest headline; t0 = when it was first reported, which is where it stays in the list
       var n = g[0], srcs = g.src || g.map(function (x) { return x.s; }), t0 = g.t0 || n.ts, b = g.fav ? "★ Favorite sources" : bucket(t0);
       // The time label sits on the divider line above the first headline of each period, so it takes no extra row
@@ -679,18 +679,18 @@ function render() {
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, nw = gNew(g), rd = !nw && g.some(function (x) { return isRead(x.u); });
       var cls = (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : "") + '<span class="mut">' + ago(t0) + "</span>", "a:" + n.u, cls, bk);   // the time is always the last thing on the row
-    }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : ""), 6) : '<div class="empty">' + (NQ ? "No headline matches that filter." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
+    }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : "") + nNote, 6) : '<div class="empty">' + (NQ ? "No headline matches that search." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
     }).join(""), 6) + '<div class="empty">' + (NERR ? "The news could not be loaded. Press ! above for the details." : "Sample headlines. Sign in to load your sources.") + "</div>";
   }
   // the button pops in only when it appears or its number goes up, not on every redraw of the page
-  var newBtn = function (n, box) { var pop = n > (NEWPN[box] || 0); NEWPN[box] = n; return n ? '<button class="pill ac' + (pop ? " newp" : "") + '" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + " new</button>" : ""; };
+  var newBtn = function (n, box) { var pop = n > (NEWPN[box] || 0); NEWPN[box] = n; return n ? '<button class="pill ac' + (pop ? " newp" : "") + '" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : ""; };
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
-  var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Filter headlines" aria-label="Filter headlines">⌕</button>' : "";
-  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + fltBtn + ctlN);
+  var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Search headlines" aria-label="Search headlines">⌕</button>' : "";
+  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + (NEWS.length ? rdrBtn("news") : "") + fltBtn + ctlN);
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
@@ -698,11 +698,12 @@ function render() {
   var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !isRead(g.u); }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
-  T.telegram = tile("telegram", "Telegram", tp.length ? lst("telegram", tp.slice(0, cntOf("tg")).map(function (g) {
+  var tq = tgShown(), tNote = foundNote("tg"), tIn = FON.tg || FQ.tg ? '<input type="search" id="tgQ" class="flt" placeholder="Search posts…" aria-label="Search the Telegram posts">' : "";
+  T.telegram = tile("telegram", "Telegram", tIn + (tq.length || tNote ? lst("telegram", tq.slice(0, cntOf("tg")).map(function (g) {
     var cls = (isNewItem(g, "tg") && !isRead(g.u) ? " new" : "") + (isRead(g.u) ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join("") + (PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>", 0, newBtn(tNew, "tg") + ctlG);
+  }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + (tp.length ? rdrBtn("tg") + fBtn("tg") : "") + ctlG);
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -721,8 +722,8 @@ function render() {
   T.twitch = tile("twitch", "Twitch", (twv.length || offRows ? lst("twitch", twv.map(function (x) {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0, " favr");
-  }).join("") + offRows) : '<div class="empty">Nobody you follow is live.</div>') +
-    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT);
+  }).join("") + offRows) : '<div class="empty">Nobody you follow is live.' + (TWC ? ' <button class="lnk2" data-a="twdopen">Discover streams</button>' : "") + "</div>") +
+    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, twdBtn() + ctlT);
 
   var yb;
   if ((P.yt && P.yt.ch && P.yt.ch.length) || PREVIEW) {
@@ -746,14 +747,15 @@ function render() {
   var rSubs = rdSrc(), RS = rdSort();
   var rp = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); });
   if (RS === "new") rp = rp.slice().sort(function (a, b) { return b.ts - a.ts; });
+  var rq = rdShown(), rNote = foundNote("rd");
   var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !isRead(x.u); }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
     (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
-  T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (rp.length ? lst("reddit", rp.slice(0, 60).map(function (x) {
+  T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (FON.rd || FQ.rd ? '<input type="search" id="rdQ" class="flt" placeholder="Search posts…" aria-label="Search the Reddit posts">' : "") + (rq.length || rNote ? lst("reddit", rq.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
-  }).join(""), 6) : RDERR ? "" : '<div class="empty">' + (!rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR);
+  }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + (rp.length ? rdrBtn("rd") + fBtn("rd") : "") + ctlR);
 
   T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
@@ -832,6 +834,8 @@ function render() {
   fltFit();
   packGrid();
   placeEmbeds();
+  rdrSync();
+  siteSync();
   Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
   grid0.style.minHeight = "";
   if (sy0 > 0) {
@@ -1788,7 +1792,7 @@ function mkBtn() {
   var main = mkMain();
   if (!main.length) return "";
   var say = main.map(function (m) { return MK[m.key].n + " " + (m.st.open ? "open" : "closed") + ", " + mkWhen(m.st).join(" "); }).join(". ");
-  return '<button class="ib sm mkb ' + (main[0].st.open ? "on" : "off") + '" data-a="mkopen" aria-label="Market hours. ' + esc(say) + '"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>';
+  return '<button class="ib sm mkclk ' + (main[0].st.open ? "up" : "dn") + '" data-a="mkopen" aria-label="Market hours. ' + esc(say) + '"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>';
 }
 // one market as the cells of a row; every row has the same cells, so they line up in columns
 function mkCells(m, full) {
@@ -1810,13 +1814,13 @@ function mkPeek(el) {
   p.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + "px"; p.style.top = Math.round(Math.max(8, y)) + "px";
 }
 document.addEventListener("mouseover", function (e) {
-  var b = e.target.closest && e.target.closest("#grid .mkb");
+  var b = e.target.closest && e.target.closest("#grid .mkclk");
   if (!b || peekKey === "mk") return;
   clearTimeout(peekT); peekKey = "mk";
   peekT = setTimeout(function () { if (peekKey === "mk" && document.contains(b)) mkPeek(b); }, 250);
 });
 document.addEventListener("mouseout", function (e) {
-  var b = e.target.closest && e.target.closest("#grid .mkb");
+  var b = e.target.closest && e.target.closest("#grid .mkclk");
   if (b && !(e.relatedTarget && b.contains(e.relatedTarget)) && peekKey === "mk") hidePeek();
 });
 var MK_T = "Market hours", MK_SEL = "";
@@ -1992,9 +1996,9 @@ function icsExport() {
 
 // ---- A box keeps its size while its search field is open ----
 // The boxes are packed by their heights, so a box that grows by the height of a search field can send the boxes under it
-// to other places. While the field of News, Sports or TV shows is open, the list under it is therefore made shorter by
+// to other places. While the field of News, Telegram, Reddit, Sports or TV shows is open, the list under it is therefore made shorter by
 // exactly the field's height (and held at that height, also when a search finds little or nothing).
-var FLT_BOX = [["news", "newsQ"], ["sports", "spQ"], ["tv", "tvQ"]], FLT_H = {};
+var FLT_BOX = [["news", "newsQ"], ["telegram", "tgQ"], ["reddit", "rdQ"], ["sports", "spQ"], ["tv", "tvQ"]], FLT_H = {};
 // before a redraw: how tall each of these lists is while its field is closed
 function fltNote() {
   FLT_BOX.forEach(function (p) {
@@ -2014,6 +2018,601 @@ function fltFit() {
     else if (em) { em.style.boxSizing = "border-box"; em.style.height = h + "px"; em.style.margin = "0"; em.style.overflow = "hidden"; }
   });
 }
+// ---- Reader: the posts of News, Telegram or Reddit one under another, each one in full, to scroll through ----
+// Two ways in: a click on a post opens it at that post, and the button at the top of the box opens it at the oldest post
+// you have not seen. P.reader = { click, cdir, bdir }: what a click on a post opens ("reader" or "one" = the single post),
+// and which way scrolling DOWN goes after a click (cdir) and from the button (bdir): "old" = to older posts, "new" = to newer.
+var RDR = null, RDR_T = { news: "News", tg: "Telegram", rd: "Reddit" };
+function RDS() { var r = P.reader || {}; return { click: r.click === "one" ? "one" : "reader", cdir: r.cdir === "new" ? "new" : "old", bdir: r.bdir === "old" ? "old" : "new" }; }
+function rdrBtn(box) {
+  return '<button class="ib sm rdrb" data-a="rdropen" data-k="' + box + '" title="Read the posts one after another, from the oldest one you have not seen" aria-label="Read the posts one after another">' +
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h9M4 18h9M18 11v8M15 16l3 3 3-3"/></svg></button>';
+}
+// the posts of a box in the order the box lists them (all = also what a search in the box leaves out)
+function rdrItems(box, all) {
+  if (box === "news") {
+    var gs = all ? newsGroups() : newsShown();
+    return gs.slice(0, 300).map(function (g) { return { k: g[0].u, us: g.map(function (x) { return x.u; }), ts: g.t0 || g[0].ts, nw: g.every(function (x) { return isNewItem(x, "news") && !isRead(x.u); }), x: g }; });
+  }
+  var l = box === "tg" ? (all ? tgVisible() : tgShown()) : rdShown(all);
+  return l.slice(0, 300).map(function (x) { return { k: x.u, us: [x.u], ts: x.ts, nw: isNewItem(x, box) && !isRead(x.u), x: x }; });
+}
+// Pictures load as you get near them, and a video loads nothing until it is in view or you press play
+function rdrMedia(vid, img, th, cls) {
+  vid = safeUrl(vid); th = safeUrl(th); img = safeUrl(img) || th;
+  return vid ? '<video class="mvid" controls playsinline preload="none"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
+    : img ? '<img class="mimg' + (cls || "") + '" loading="lazy" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
+}
+function rdrPost(box, it) {
+  var x = it.x, h;
+  if (box === "news") {
+    var n = x[0];
+    h = '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" + rdrMedia("", n.img) + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
+      (PREVIEW ? "" : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") +
+      (x.length > 1 ? '<details class="rdrsrc"><summary>' + x.length + " sources report this</summary>" + x.map(function (a) {
+        var au = safeUrl(a.u);
+        return '<div class="mi">' + (au ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(au) + '">' + esc(a.t) + "</a>" : esc(a.t)) + '<small class="mut">' + esc(a.s) + " · " + when(a.ts) + "</small></div>";
+      }).join("") + "</details>" : "");
+  } else if (box === "tg") {
+    h = '<div class="mut">' + esc(x.s) + " · " + when(x.ts) + "</div>" + rdrMedia(x.vid, x.img, x.th) + '<p class="nt">' + esc(x.tx || x.t) + '</p><p class="tools">' + linkBtn(x.u, "Open on Telegram") + laterBtn("m:" + x.u) + "</p>";
+  } else {
+    var com = !PREVIEW && rdComN();
+    h = '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" + rdrMedia("", x.img, "", " rdimg") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
+      '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + laterBtn("r:" + x.u) + (com && !RDR.com[x.u] ? '<button data-a="rdrcom" data-k="' + esc(x.u) + '">Top comments</button>' : "") + "</p>" +
+      (com ? '<div class="rdcw" data-u="' + esc(x.u) + '">' + (RDR.com[x.u] ? '<p class="mut sn">Loading comments…</p>' : "") + "</div>" : "");
+  }
+  return '<article class="rdp' + (RDR.nw[it.k] ? " nw" : "") + '" data-u="' + esc(it.k) + '">' + h + "</article>";
+}
+// What stands at the two ends of the list: at the newest end that you are up to date, at the oldest end (Telegram) the
+// button for older posts
+function rdrEdge(top) {
+  var R = RDR, oldEnd = top ? R.dir === "new" : R.dir === "old", h = "";
+  if (!oldEnd) h = top ? "" : "You’re up to date.";
+  else if (R.box === "tg" && !PREVIEW && USER && tgOldBusy) h = "Loading older posts…";
+  else if (R.box === "tg" && !PREVIEW && USER && tgCanOlder()) h = '<button data-a="rdrolder">Load older posts</button>';
+  else h = top ? "" : R.box === "tg" ? "No older posts." : "That is everything in this box.";
+  return h + (PREVIEW && !top ? previewNote() : "");
+}
+function rdrHtml() {
+  var R = RDR, L = R.list, cut = -1, i;
+  // one line between what you have seen and what you have not
+  if (R.dir === "new") { for (i = 0; i < L.length; i++) if (R.nw[L[i].k]) { cut = i; break; } }
+  else for (i = L.length - 1; i >= 0; i--) if (R.nw[L[i].k]) { cut = i + 1; break; }
+  var line = '<div class="rdrnew" id="rdrNew">' + (R.dir === "new" ? "New" : "Seen before") + "</div>";
+  return '<div class="rdredge" id="rdrTop">' + rdrEdge(true) + "</div>" + L.map(function (it, j) { return (j === cut && j > 0 ? line : "") + rdrPost(R.box, it); }).join("") + '<div class="rdredge" id="rdrEnd">' + rdrEdge(false) + "</div>";
+}
+function rdrEl(key) {
+  var ps = document.querySelectorAll("#rdrL .rdp");
+  for (var i = 0; i < ps.length; i++) if (ps[i].dataset.u === key) return ps[i];
+  return null;
+}
+// the button beside Close that says which way the list runs, and turns it around
+function rdrSwitch() {
+  var b = $("rdrSw");
+  if (!RDR) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement("button"); b.id = "rdrSw"; b.setAttribute("data-a", "rdrflip"); $("mClose").parentNode.insertBefore(b, $("mClose")); }
+  var nw = RDR.dir === "new", say = "Scrolling down goes to " + (nw ? "newer" : "older") + " posts. Press to turn the list around.";
+  b.textContent = nw ? "↓ Newer" : "↓ Older"; b.title = say; b.setAttribute("aria-label", say);
+}
+function rdrDraw(key, exact) {
+  var R = RDR;
+  if (R.ro) { R.ro.disconnect(); R.ro = null; }
+  $("mBody").innerHTML = '<div class="rdr" id="rdrL" tabindex="-1">' + rdrHtml() + "</div>";
+  rdrSwitch();
+  var L = $("rdrL"), el = rdrEl(key), ln = $("rdrNew");
+  if (el && !exact && ln && ln.nextElementSibling === el) el = ln;   // the "New" line stays in view above the first new post
+  L.scrollTop = el && el.previousElementSibling && el.previousElementSibling.id !== "rdrTop" ? el.offsetTop : 0;
+  R.last = L.scrollTop;
+  L.addEventListener("scroll", rdrOnScroll, { passive: true });
+  rdrWatch();
+  Object.keys(R.com).forEach(function (u) { loadRdComments(u); });
+  try { L.focus({ preventScroll: true }); } catch (e) {}
+  rdrScan();
+}
+function openReader(box, u, btn) {
+  var S = RDS(), all = false, base = rdrItems(box), at = -1;
+  var find = function () { at = -1; base.forEach(function (x, i) { if (x.us.indexOf(u) >= 0) at = i; }); };
+  if (!btn) { find(); if (at < 0 && boxQ(box)) { all = true; base = rdrItems(box, true); find(); } }
+  if (!base.length || (!btn && at < 0)) return false;
+  var dir = btn ? S.bdir : S.cdir, key = btn ? "" : base[at].k, nw = {}, have = {};
+  if (btn) base = base.slice().sort(function (a, b) { return b.ts - a.ts; });
+  if (dir === "new") base = base.slice().reverse();
+  base.forEach(function (x) { if (x.nw) nw[x.k] = 1; x.us.forEach(function (q) { have[q] = 1; }); });
+  if (btn) {
+    // towards newer posts: start at the oldest one not seen (at the newest when all are seen). Towards older: at the newest.
+    var un = base.filter(function (x) { return x.nw; });
+    key = dir === "new" ? (un.length ? un[0] : base[base.length - 1]).k : base[0].k;
+  }
+  openModal(RDR_T[box], "");
+  RDR = { box: box, dir: dir, all: all, list: base, nw: nw, have: have, last: 0, q: {}, com: {}, ro: null, raf: 0, t: 0 };
+  if (!btn && box === "rd" && !PREVIEW && rdComN()) RDR.com[key] = 1;   // the post you clicked shows its comments at once, as its own window does
+  rdrDraw(key);
+  rdrRead([key]);
+  return true;
+}
+function rdrFlip() {
+  var R = RDR, L = $("rdrL");
+  if (!R || !L) return;
+  var cur = "", ps = L.querySelectorAll(".rdp");
+  for (var i = 0; i < ps.length; i++) if (ps[i].offsetTop + ps[i].offsetHeight > L.scrollTop + 1) { cur = ps[i].dataset.u; break; }
+  R.dir = R.dir === "new" ? "old" : "new"; R.list.reverse();
+  rdrDraw(cur, true);
+}
+// Posts above the one you are reading change height when their pictures arrive. The list is moved by the same amount, so
+// what you are reading stays where it is.
+function rdrWatch() {
+  var R = RDR, L = $("rdrL");
+  if (!R || !L || !window.ResizeObserver) return;
+  if (!R.ro) R.ro = new ResizeObserver(function (es) {
+    var L2 = $("rdrL"), d = 0;
+    if (!RDR || !L2) return;
+    es.forEach(function (e) { var p = e.target, h = p.offsetHeight, was = p._h; p._h = h; if (was != null && was !== h && p.offsetTop + was <= L2.scrollTop + d + 1) d += h - was; });
+    if (d) { L2.scrollTop += d; RDR.last += d; }
+  });
+  Array.prototype.forEach.call(L.querySelectorAll(".rdp"), function (p) { if (p._h == null) { p._h = p.offsetHeight; R.ro.observe(p); } });
+}
+function rdrOnScroll() { if (RDR && !RDR.raf) RDR.raf = setTimeout(function () { if (RDR) { RDR.raf = 0; rdrScan(); } }, 80); }
+// A post counts as read once it has come into the upper half of the window (or the list has reached its end). A jump of
+// several screens at once (End, the scroll bar) reads only where it lands, not everything it passed.
+function rdrScan() {
+  var R = RDR, L = $("rdrL");
+  if (!R || !L) return;
+  var top = L.scrollTop, ch = L.clientHeight, far = Math.abs(top - R.last) > ch * 3, lo = far ? top : Math.min(top, R.last), hi = (far ? top : Math.max(top, R.last)) + ch / 2, got = [];
+  if (top + ch >= L.scrollHeight - 4) hi = top + ch;
+  R.last = top;
+  var ps = L.querySelectorAll(".rdp");
+  for (var i = 0; i < ps.length; i++) {
+    var p = ps[i], y = p.offsetTop, b = y + p.offsetHeight, v = p.querySelector("video");
+    if (y < hi && b > lo && !p._rd) { p._rd = 1; got.push(p.dataset.u); }
+    if (!v) continue;
+    if (b > top && y < top + ch) { if (v.preload === "none" && !v.getAttribute("poster")) { v.preload = "metadata"; try { v.load(); } catch (e) {} } }
+    else if (!v.paused) v.pause();   // a video you scrolled away from stops playing
+  }
+  if (got.length) rdrRead(got);
+}
+function rdrRead(keys) {
+  var R = RDR;
+  if (!R) return;
+  keys.forEach(function (k) { var it = R.list.filter(function (x) { return x.k === k; })[0]; (it ? it.us : [k]).forEach(function (u) { if (!isRead(u)) R.q[u] = 1; }); });
+  clearTimeout(R.t);
+  R.t = setTimeout(rdrFlush, 500);
+}
+// what was read is written down in one go once the scrolling pauses, not post by post
+function rdrFlush() {
+  var R = RDR;
+  if (!R) return;
+  clearTimeout(R.t);
+  var us = Object.keys(R.q), now = Date.now(), sr = sy().read;
+  R.q = {};
+  if (!us.length) return;
+  us.forEach(function (u) { READ[u] = now; sr[hs(u)] = now; });
+  syCap(sr, 300);
+  var k = Object.keys(READ);
+  if (k.length > 400) k.sort(function (a, b) { return READ[a] - READ[b]; }).slice(0, k.length - 400).forEach(function (x) { delete READ[x]; });
+  save("sp_nread", READ);
+  rdrSeenLine(R.box);
+  persist(); render();
+}
+// Only the last few hundred opened posts are remembered one by one. So that a long read does not push older ones out of
+// that memory (and make them count as new again), "seen up to here" of the box moves along: up to the oldest post that is
+// still new, or to now when none is left.
+function rdrSeenLine(box) {
+  if (PREVIEW) return;
+  var f = function (x) { return FIRST[x.u] || x.ts || 0; }, un = [], rd = [];
+  if (box === "news") newsGroups().forEach(function (g) { var nw = g.every(function (x) { return isNewItem(x, "news") && !isRead(x.u); }); g.forEach(function (x) { (nw ? un : rd).push(x); }); });
+  else (box === "tg" ? tgVisible() : RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); })).forEach(function (x) { (isNewItem(x, box) && !isRead(x.u) ? un : rd).push(x); });
+  if (!un.length) { if (rd.some(function (x) { return isNewItem(x, box); })) markSeen(box); return; }
+  var first = Math.min.apply(null, un.map(f)), t = 0;
+  rd.forEach(function (x) { var v = f(x); if (v < first && v > t) t = v; });
+  if (t > (NSEEN[box] || 0)) markSeen(box, t);
+}
+// Called at every redraw of the page: posts that arrived (or older ones that were loaded) while the reader is open join
+// the list at the end they belong to, without moving what you are reading.
+function rdrSync() {
+  var R = RDR, L = $("rdrL");
+  if (!R || !L) return;
+  var fresh = rdrItems(R.box, R.all).filter(function (x) { return !x.us.some(function (u) { return R.have[u]; }); });
+  if (fresh.length && R.list.length) {
+    var minT = Math.min.apply(null, R.list.map(function (x) { return x.ts; })), up = R.dir === "new" ? 1 : -1;
+    fresh.sort(function (a, b) { return (a.ts - b.ts) * up; });
+    var older = fresh.filter(function (x) { return x.ts < minT; }), newer = fresh.filter(function (x) { return x.ts >= minT; });
+    fresh.forEach(function (x) { if (x.nw) R.nw[x.k] = 1; x.us.forEach(function (q) { R.have[q] = 1; }); });
+    var html = function (l) { return l.map(function (it) { return rdrPost(R.box, it); }).join(""); };
+    var atTop = R.dir === "new" ? older : newer, atEnd = R.dir === "new" ? newer : older;
+    if (atEnd.length) { $("rdrEnd").insertAdjacentHTML("beforebegin", html(atEnd)); R.list = R.list.concat(atEnd); }
+    if (atTop.length) {
+      var h0 = L.scrollHeight;
+      $("rdrTop").insertAdjacentHTML("afterend", html(atTop)); R.list = atTop.concat(R.list);
+      var d = L.scrollHeight - h0; L.scrollTop += d; R.last += d;
+    }
+    rdrWatch();
+  }
+  var set = function (id, h) { var el = $(id); if (el && el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); } };
+  set("rdrTop", rdrEdge(true)); set("rdrEnd", rdrEdge(false));
+}
+// Reddit comments under a post in the reader, when you ask for them
+function rdrCom(u) {
+  if (!RDR) return;
+  RDR.com[u] = 1;
+  Array.prototype.forEach.call(document.querySelectorAll('#rdrL [data-a="rdrcom"]'), function (b) { if (b.dataset.k === u) b.remove(); });
+  Array.prototype.forEach.call(document.querySelectorAll("#rdrL .rdcw"), function (b) { if (b.dataset.u === u && !b.innerHTML) b.innerHTML = '<p class="mut sn">Loading comments…</p>'; });
+  loadRdComments(u);
+}
+// ↓ and ↑ (or J and K) go one post on or back. A post taller than the window is read in steps first.
+function rdrStep(d) {
+  var L = $("rdrL");
+  if (!L) return;
+  var ps = L.querySelectorAll(".rdp"), top = L.scrollTop, st = L.clientHeight * 0.85, i, y;
+  if (d > 0) {
+    for (i = 0; i < ps.length; i++) { y = ps[i].offsetTop; if (y > top + 40) { L.scrollTop = y > top + st ? top + st : y; return; } }
+    L.scrollTop = L.scrollHeight;
+  } else {
+    for (i = ps.length - 1; i >= 0; i--) { y = ps[i].offsetTop; if (y < top - 40) { L.scrollTop = y < top - st ? top - st : y; return; } }
+    L.scrollTop = 0;
+  }
+}
+document.addEventListener("keydown", function (e) {
+  if (!RDR || $("modal").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  var t = e.target, k = e.key, dn = k === "ArrowDown" || k === "j" || k === "J", up = k === "ArrowUp" || k === "k" || k === "K";
+  if ((!dn && !up) || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|VIDEO)$/.test(t.tagName)))) return;
+  e.preventDefault(); rdrStep(dn ? 1 : -1);
+});
+function rdrOff() {
+  if (RDR) { rdrFlush(); if (RDR.ro) RDR.ro.disconnect(); clearTimeout(RDR.raf); clearTimeout(RDR.t); }
+  RDR = null; SITE = null; rdrSwitch();
+}
+// Settings > News, Telegram & Reddit > Reading posts
+function setReader() { P.reader = { click: $("rdrClick").value, cdir: $("rdrCdir").value, bdir: $("rdrBdir").value }; persist(); }
+["rdrClick", "rdrCdir", "rdrBdir"].forEach(function (id) { $(id).onchange = setReader; });
+// ---- Search in News, Telegram and Reddit (the ⌕ button at the top of each box) ----
+// Two steps. At once: everything the box has loaded (not only the rows it shows), in the headline or post text and the
+// source name; every word you type must be there, in any order, and accents and capitals do not matter. A moment later the
+// feeds function looks further back than the box reaches (News: the last 30 days on your own news sites; Telegram: the
+// whole history of your channels; Reddit: the last year of your subreddits) and what it finds joins the list, newest first.
+var FQ = { tg: "", rd: "" }, FON = { tg: false, rd: false }, FQT = {};
+var FOUND = { news: { q: "", items: [], busy: false, err: "" }, tg: { q: "", items: [], busy: false, err: "" }, rd: { q: "", items: [], busy: false, err: "" } };
+function sFold(s) { s = String(s || "").toLowerCase(); try { s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {} return s; }
+function sWords(q) { return sFold(q).split(/\s+/).filter(Boolean); }
+function sHit(w, text) { var t = sFold(text); return w.every(function (x) { return t.indexOf(x) >= 0; }); }
+function boxQ(box) { return box === "news" ? NQ : FQ[box] || ""; }
+function foundFor(box) { var f = FOUND[box]; return f.q && f.q === boxQ(box) ? f.items : []; }
+function tgAll() { return TGP.concat(FOUND.tg.items); }
+function rdAll() { return RD.concat(FOUND.rd.items); }
+function fBtn(box) { return '<button class="ib sm' + (FON[box] || FQ[box] ? " on" : "") + '" data-a="bfilt" data-k="' + box + '" title="Search the posts" aria-label="Search the posts">⌕</button>'; }
+// the line at the end of a list while the search further back is running, or when it could not be done
+function foundNote(box) {
+  var q = boxQ(box), f = FOUND[box];
+  if (!q || q.length < 3 || PREVIEW || !sb || !USER) return "";
+  if (f.q !== q || f.busy) return '<div class="more mut">Searching further back…</div>';
+  return f.err ? '<div class="more mut">Could not search further back: ' + esc(String(f.err).slice(0, 140)) + "</div>" : "";
+}
+// what each box lists: as usual, or (with a search typed) the matches among what is loaded plus what was found further back
+function newsShown() {
+  var gs = newsGroups();
+  if (!NQ) return gs;
+  var w = sWords(NQ), haveU = {}, haveT = {}, mute = wordList(NW().mute);
+  gs = gs.filter(function (g) { return g.some(function (n) { return sHit(w, n.t + " " + n.s + " " + (n.d || "")); }); });
+  gs.forEach(function (g) { g.forEach(function (n) { haveU[n.u] = 1; haveT[sFold(n.t)] = 1; }); });
+  var more = foundFor("news").filter(function (n) { var t = sFold(n.t); if (haveU[n.u] || haveT[t] || (mute.length && hasWord(n.t, mute))) return false; haveT[t] = 1; return true; }).map(function (n) { return [n]; });
+  return gs.concat(more).sort(function (a, b) { return (b.t0 || b[0].ts) - (a.t0 || a[0].ts); });
+}
+function tgShown() {
+  var l = tgVisible(), q = FQ.tg;
+  if (!q) return l;
+  var w = sWords(q), have = {}, mute = wordList(NW().mute);
+  l = l.filter(function (g) { return sHit(w, g.s + " " + (g.tx || g.t)); });
+  l.forEach(function (g) { have[g.u] = 1; });
+  return l.concat(foundFor("tg").filter(function (g) { if (have[g.u] || !shown("g:" + g.s) || (mute.length && hasWord(g.tx || g.t, mute))) return false; have[g.u] = 1; return true; })).sort(function (a, b) { return b.ts - a.ts; });
+}
+function rdShown(all) {
+  var l = RD.filter(function (x) { return shown("r:" + x.s.toLowerCase()); }), q = all ? "" : FQ.rd;
+  if (!q) return rdSort() === "new" ? l.slice().sort(function (a, b) { return b.ts - a.ts; }) : l;
+  var w = sWords(q), have = {};
+  l = l.filter(function (x) { return sHit(w, x.t + " " + x.s + " " + (x.d || "")); });
+  l.forEach(function (x) { have[x.u] = 1; });
+  return l.concat(foundFor("rd").filter(function (x) { if (have[x.u] || !shown("r:" + String(x.s).toLowerCase())) return false; have[x.u] = 1; return true; })).sort(function (a, b) { return b.ts - a.ts; });
+}
+// the websites of your news sources, for the search further back (a source set up as a site search names its site itself)
+function newsSites() {
+  var out = [];
+  newsSrc().forEach(function (x) {
+    if (!shown("n:" + x.name)) return;
+    var d = "", us = x.urls || [];
+    us.forEach(function (u) { var m = /site(?::|%3A)([a-z0-9.-]+\.[a-z]{2,})/i.exec(u); if (m && !d) d = m[1]; });
+    if (!d) us.some(function (u) { try { var h = new URL(u).hostname; if (!/(google|bing|yahoo|gdeltproject)\./.test(h)) d = h.replace(/^(www|rss|feeds?|rssfeeds|api|news)\./i, ""); } catch (e) {} return !!d; });
+    d = d.toLowerCase();
+    if (d === "bbci.co.uk") d = "bbc.com";
+    if (d && out.indexOf(d) < 0) out.push(d);
+  });
+  return out.slice(0, 15);
+}
+function findOlder(box) {
+  var q = boxQ(box), f = FOUND[box];
+  clearTimeout(FQT[box]);
+  if (!q || q.length < 3 || PREVIEW || !sb || !USER) return;
+  if (f.q === q && (f.busy || f.done)) return;
+  f.q = q; f.items = []; f.busy = true; f.done = false; f.err = "";
+  render();
+  var ask = { box: box, q: q };
+  if (box === "news") { ask.sites = newsSites(); ask.langs = langList().slice(0, 2); }
+  else if (box === "tg") ask.src = tgSrc().filter(function (n) { return shown("g:" + n); });
+  else ask.src = rdSrc().filter(function (n) { return shown("r:" + n.toLowerCase()); });
+  var end = function (items, err) {
+    if (f.q !== q) return;   // you typed on in the meantime: that search has its own answer coming
+    f.busy = false; f.done = true; f.err = err || ""; f.items = items || [];
+    render();
+  };
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { find: ask } }).then(function (r) {
+    var v = r.data && r.data.find;
+    if (r.error) end([], r.error.message);
+    else if (!v) end([], "it needs the updated feeds function (redeploy super-function in Supabase)");
+    else end(cleanLinks(unentAll((v.items || []).filter(function (x) { return x && x.u && x.t && x.ts; }), ["t", "tx", "d"])), v.err);
+  }).catch(function (e) { end([], String((e && e.message) || e)); });
+}
+function findSoon(box) { clearTimeout(FQT[box]); FQT[box] = setTimeout(function () { findOlder(box); }, 500); }
+// Enter searches further back at once, without waiting for the typing to pause
+document.addEventListener("keydown", function (e) {
+  var id = e.target && e.target.id, box = id === "newsQ" ? "news" : id === "tgQ" ? "tg" : id === "rdQ" ? "rd" : "";
+  if (!box || e.key !== "Enter") return;
+  e.preventDefault();
+  var v = e.target.value.trim().slice(0, 80);
+  if (box === "news") NQ = v.toLowerCase(); else FQ[box] = v;
+  clearTimeout(searchTimers[id]);
+  render(); findOlder(box);
+});
+// ---- Command words of the search bar (Settings > Search bar): the word a line starts with to search all boxes, save a
+// note or a to-do, translate, or open the bar's own help. P.cmd = { ss, note, todo, tr, help }, each letters and digits.
+// P.ssKey: the key that, held with Enter, searches all boxes without the word ("shift", "alt" or "off"). ----
+var CMD_DEF = { ss: "ss", note: "note", todo: "todo", tr: "tr", help: "help" };
+var CMD_IDS = [["cmdSs", "ss"], ["cmdNote", "note"], ["cmdTodo", "todo"], ["cmdTr", "tr"], ["cmdHelp", "help"]];
+function cmdW(k) { var v = P.cmd && P.cmd[k]; return typeof v === "string" && /^[a-z0-9]{1,12}$/.test(v) ? v : CMD_DEF[k]; }
+function ssKey() { return P.ssKey === "alt" || P.ssKey === "off" ? P.ssKey : "shift"; }
+function ssKeyName() { return ssKey() === "alt" ? "Alt+Enter" : ssKey() === "off" ? "" : "Shift+Enter"; }
+function siteAsk(q) { var m = new RegExp("^" + cmdW("ss") + "\\s+(\\S.*)$", "i").exec(String(q || "").trim()); return m ? m[1].trim().slice(0, 80) : ""; }
+function renderCmd() {
+  if (!$("cmdSs")) return;
+  CMD_IDS.forEach(function (c) { $(c[0]).value = cmdW(c[1]); });
+  $("ssKeySel").value = ssKey();
+}
+function cmdSet(id, key) {
+  var v = $(id).value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12) || CMD_DEF[key], clash = "";
+  CMD_IDS.forEach(function (c) { if (c[1] !== key && cmdW(c[1]) === v) clash = c[1]; });
+  if (v === "translate" && key !== "tr") clash = "tr";
+  if (clash) { $("cmdMsg").textContent = "“" + v + "” is already the word for another command. Choose a different one."; renderCmd(); return; }
+  P.cmd = Object.assign({}, P.cmd || {}); P.cmd[key] = v;
+  if (v === CMD_DEF[key]) delete P.cmd[key];
+  persist(); renderCmd(); renderKeys();
+  $("cmdMsg").textContent = "Saved. Type “" + v + (key === "help" ? "”" : " …”") + " in the search bar.";
+}
+CMD_IDS.forEach(function (c) { $(c[0]).onchange = function () { cmdSet(c[0], c[1]); }; });
+$("ssKeySel").onchange = function () { P.ssKey = this.value; persist(); $("cmdMsg").textContent = "Saved."; };
+$("cmdReset").onclick = function () { delete P.cmd; delete P.ssKey; persist(); renderCmd(); renderKeys(); $("cmdMsg").textContent = "Back to the standard words."; };
+
+// ---- Search all boxes: one question, asked of everything on the page ----
+// "ss <words>" in the search bar (or Shift+Enter on what is typed). A window lists what was found, box by box, and the
+// boxes that have a search of their own (News, Telegram, Reddit, Sports) show the same search at the same time. News,
+// Telegram and Reddit are also searched further back than they have loaded, exactly as their own search does.
+var SITE = null, SITE_T = "Search all boxes", SITE_N = 5;
+function sRow(act, key, main, sub, right, href, nw) {
+  var m = href ? '<a class="lnk" ' + (nw === false ? "" : 'target="_blank" rel="noopener noreferrer" ') + 'href="' + esc(href) + '">' + main + "</a>" : '<button class="lnk" data-a="' + act + '" data-k="' + esc(key) + '">' + main + "</button>";
+  return '<div class="row"><span>' + m + (sub ? " <small>" + esc(sub) + "</small>" : "") + '</span><span class="r mut">' + (right || "") + "</span></div>";
+}
+function siteGroups(q) {
+  var w = sWords(q), G = [], hit = function (t) { return sHit(w, t); }, cut = function (t, n) { t = String(t || "").replace(/\s+/g, " ").trim(); return esc(t.length > n ? t.slice(0, n - 1) + "…" : t); };
+  var add = function (id, name, rows, note) { if (rows.length || note) G.push({ id: id, name: name, rows: rows, note: note || "" }); };
+  if (!w.length) return G;
+  if (!boxOff("news")) add("news", "News", newsShown().map(function (g) { var n = g[0]; return sRow("open", "a:" + n.u, cut(n.t, 160), (g.src || g.map(function (x) { return x.s; })).slice(0, 2).join(" · "), ago(g.t0 || n.ts)); }), foundNote("news"));
+  if (!boxOff("telegram")) add("tg", "Telegram", tgShown().map(function (g) { return sRow("open", "m:" + g.u, cut(g.tx || g.t, 160), g.s, ago(g.ts)); }), foundNote("tg"));
+  if (!boxOff("reddit")) add("rd", "Reddit", rdShown().map(function (x) { return sRow("open", "r:" + x.u, cut(x.t, 160), "r/" + x.s, ago(x.ts)); }), foundNote("rd"));
+  if (!boxOff("sports")) add("sports", "Sports", (SPQ ? spEvents() : []).map(function (e) {
+    var t = e.kind === "team" && e.home && e.away ? e.home.n + (e.state === "pre" ? " – " : " " + (e.home.s != null ? e.home.s : "") + "–" + (e.away.s != null ? e.away.s : "") + " ") + e.away.n : e.title;
+    return sRow("open", "p:" + e.id, cut(t, 120), e.lg, spWhen(e, true).replace(/<[^>]+>/g, ""));
+  }));
+  if (!boxOff("stocks")) add("stocks", "Stocks", (P.stocks || DATA.stocks).filter(function (x) { return shown("s:" + x.id) && hit(x.id + " " + tk(x.id) + " " + (x.name || "")); }).map(function (x) {
+    var qt = QUOTES[tk(x.id)];
+    return sRow("open", "s:" + x.id, esc(tk(x.id)), x.name || "", qt && qt.c != null ? (qt.c >= 0 ? "+" : "") + qt.c.toFixed(2) + "%" : "");
+  }));
+  if (!boxOff("tv")) add("tv", "TV shows", tvShows().filter(function (s) { return hit(s.n); }).map(function (s) { return sRow("tvopen", String(s.id), cut(s.n, 120), "", ""); }));
+  if (!boxOff("youtube")) add("yt", "YouTube", (YTV || []).filter(function (v) { return shown("y:" + v.n) && hit(v.t + " " + v.n); }).map(function (v) { return sRow("open", "v:" + v.id, cut(v.t, 140), v.n, ago(v.ts)); }));
+  if (!boxOff("twitch")) add("tw", "Twitch", (TWC ? TW || [] : []).filter(function (x) { return hit((x.name || "") + " " + x.id + " " + (x.sub || "") + " " + (x.title || "")); }).map(function (x) { return sRow("open", "t:" + x.id, cut(x.name || x.id, 60), x.sub || "", (+x.v || 0).toLocaleString("en-GB") + " watching"); }));
+  add("notes", "Notes and to-dos", (P.notes || []).filter(function (n) { return hit(n.t); }).map(function (n) { return sRow("opennotes", "", cut(n.t, 160), n.todo ? (n.done ? "to-do, done" : "to-do") : "note", ""); }));
+  var seenEv = {};
+  add("cal", "Calendar", (P.cal || []).concat(icsEvs()).filter(function (e) { var k = e.t + "|" + e.d; if (!e.t || !e.d || seenEv[k] || !hit(e.t)) return false; seenEv[k] = 1; return true; }).sort(function (a, b) { return String(b.d).localeCompare(String(a.d)); })
+    .map(function (e) { return sRow("sitecal", e.d, cut(e.t, 140), e.rep ? REPS[e.rep] || "" : "", dayLabel(e.d) + " " + String(e.d).slice(0, 4)); }));
+  var links = [];
+  bm().items.forEach(function (x) { if (x.kids) x.kids.forEach(function (k) { links.push({ t: k.t, u: k.u, f: x.t }); }); else links.push({ t: x.t, u: x.u, f: "" }); });
+  add("bm", "Bookmarks", links.filter(function (x) { return safeUrl(x.u) && hit((x.t || "") + " " + x.u); }).map(function (x) { return sRow("", "", cut(x.t || x.u, 100), x.f, "", safeUrl(x.u), bm().nw); }));
+  add("later", "Read later", laterList().filter(function (x) { return hit((x.t || "") + " " + (x.s || "")); }).map(function (x) { return sRow("lateropen", x.id, cut(x.t, 160), x.s, ""); }));
+  var mails = [];
+  (MAIL || []).forEach(function (m, i) { if (m && !m.error) (m.items || []).forEach(function (x) { if (hit((x.from || "") + " " + (x.subject || "") + " " + (x.snippet || ""))) mails.push(sRow("mail", String(i), cut(x.subject || "(no subject)", 120), String(x.from || "").replace(/<.*>/, "").replace(/"/g, "").trim(), ago(x.ts))); }); });
+  add("mail", "Mail", mails);
+  var secs = [];
+  Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, i) {
+    if (g.dataset.admin && !isAdmin()) return;
+    var kw = Array.prototype.map.call(g.querySelectorAll("[data-kw]"), function (el) { return el.dataset.kw; }).join(" ");
+    var words = Array.prototype.map.call(g.querySelectorAll("label, .sub > b"), function (el) { return el.textContent; }).join(" ");
+    if (secs.length < 8 && hit(g.dataset.sec + " " + words + " " + kw)) secs.push(sRow("sitesec", String(i), esc(g.dataset.sec), hit(g.dataset.sec) ? "" : "mentions it", ""));
+  });
+  add("set", "Settings", secs);
+  return G;
+}
+function siteHtml() {
+  var S = SITE, G = siteGroups(S.q), n = 0, web = safeUrl(searchUrl(S.q));
+  G.forEach(function (g) { n += g.rows.length; });
+  var inBox = NQ || FQ.tg || FQ.rd || SPQ;
+  return '<p class="mut sn sitesum">' + (n ? n + (n === 1 ? " hit in " : " hits in ") + G.filter(function (g) { return g.rows.length; }).length + (G.filter(function (g) { return g.rows.length; }).length === 1 ? " place" : " places") + "." : "Nothing on the page matches.") +
+    (inBox ? ' <button class="lnk2" data-a="siteclear">Clear the search in the boxes</button>' : "") + (web ? ' <a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + esc(web) + '">Search the web instead</a>' : "") + "</p>" +
+    G.map(function (g) {
+      var all = S.open[g.id], rows = all ? g.rows.slice(0, 80) : g.rows.slice(0, SITE_N);
+      return "<h3>" + g.name + (g.rows.length ? ' <span class="mut">' + g.rows.length + "</span>" : "") + "</h3>" + rows.join("") +
+        (g.rows.length > SITE_N ? '<button class="sitemore" data-a="sitemore" data-k="' + g.id + '">' + (all ? "Show fewer" : "Show all " + g.rows.length) + "</button>" : "") + g.note.replace('class="more mut"', 'class="mut sn"');
+    }).join("");
+}
+// the boxes that have a search of their own run the same search, and their fields show it
+function siteApply() {
+  var q = SITE.q, lo = q.toLowerCase();
+  NQ = lo; NFILT = true; FQ.tg = q; FON.tg = true; FQ.rd = q; FON.rd = true; SPQ = lo; SPFIND = true;
+  render();
+  [["newsQ", lo], ["tgQ", q], ["rdQ", q], ["spQ", lo]].forEach(function (p) { if ($(p[0])) $(p[0]).value = p[1]; });
+  ["news", "tg", "rd"].forEach(findOlder);
+  fetchSports();
+}
+function openSite(q) {
+  q = String(q || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!q) return;
+  openModal(SITE_T, "");
+  SITE = { q: q, open: {} };
+  $("mBody").innerHTML = '<div class="site"><input type="search" id="siteQ" value="' + esc(q) + '" placeholder="Search all boxes…" aria-label="Search all boxes"><div id="siteRes"></div></div>';
+  siteApply();
+  siteSync();
+}
+function siteSync() {
+  var el = $("siteRes");
+  if (!SITE || !el) return;
+  var h = siteHtml();
+  if (el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); }
+}
+function siteClear() { NQ = ""; NFILT = false; FQ.tg = ""; FON.tg = false; FQ.rd = ""; FON.rd = false; SPQ = ""; SPFIND = false; render(); siteSync(); }
+function siteAct(a, k) {
+  if (a === "sitemore") { if (SITE) { SITE.open[k] = !SITE.open[k]; siteSync(); } return; }
+  if (a === "siteclear") { siteClear(); return; }
+  if (a === "sitecal") { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); return; }
+  if (a === "sitesec") { closeModal(); $("panel").hidden = false; setSec(+k); return; }
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "siteQ") return;
+  debounced("siteQ", function () { if (!SITE || !$("siteQ")) return; var v = $("siteQ").value.replace(/\s+/g, " ").trim().slice(0, 80); if (!v) { siteClear(); SITE.q = ""; siteSync(); return; } SITE.q = v; SITE.open = {}; siteApply(); siteSync(); });
+});
+
+// ---- Twitch Discover: live streams and channels you do not follow (the compass button at the top of the Twitch box) ----
+// Read straight from Twitch with the connection the box already has: the biggest streams right now, the biggest
+// categories, the streams of one category ten at a time, and a search for a channel or a game. Every answer is kept for a
+// minute, and nothing is asked before the window is opened. ☆ puts a channel on your own list: it then shows in the box
+// when it is live (and among your ★ streamers when it is not), without following it on Twitch.
+var TWD_T = "Discover on Twitch", TWDC = {}, TWDS = {};
+var TWD = { cat: "", catName: "", q: "", list: [], cur: "", more: false, busy: false, err: "", cats: [], catCur: "", fcats: [], n: 0 };
+var TWD_LANGS = [["", "Any language"], ["en", "English"], ["sv", "Swedish"], ["no", "Norwegian"], ["da", "Danish"], ["fi", "Finnish"], ["et", "Estonian"], ["de", "German"], ["fr", "French"], ["es", "Spanish"], ["it", "Italian"], ["pt", "Portuguese"], ["nl", "Dutch"], ["pl", "Polish"], ["tr", "Turkish"], ["ru", "Russian"], ["uk", "Ukrainian"], ["ja", "Japanese"], ["ko", "Korean"], ["zh", "Chinese"], ["ar", "Arabic"]];
+function twdLang() { var l = P.twd && P.twd.lang; return TWD_LANGS.some(function (x) { return x[0] === l; }) ? l : ""; }
+function twdBtn() {
+  return '<button class="ib sm twdb" data-a="twdopen" title="Discover: live streams and channels you do not follow" aria-label="Discover on Twitch"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
+}
+function twdGet(path) {
+  var c = TWDC[path];
+  if (c && Date.now() - c.t < 60000) return Promise.resolve(c.v);
+  return twGet(path, twToken()).then(function (j) {
+    TWDC[path] = { t: Date.now(), v: j };
+    var ks = Object.keys(TWDC);
+    if (ks.length > 80) ks.sort(function (a, b) { return TWDC[a].t - TWDC[b].t; }).slice(0, ks.length - 80).forEach(function (k) { delete TWDC[k]; });
+    return j;
+  });
+}
+function twdStream(x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, title: x.title, th: x.thumbnail_url, st: Date.parse(x.started_at), live: 1 }; }
+function twdOpen() { return !$("modal").hidden && $("mTitle").textContent === TWD_T; }
+function twdRow(x) {
+  var fav = !!P.fav["t:" + x.id], off = x.live === false, vv = x.v == null ? "" : x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : String(x.v);
+  return '<div class="row twdr' + (off ? " twoff" : "") + '"><span><button class="lnk" data-a="twdwatch" data-k="' + esc(x.id) + '"><span class="dot' + (off ? " off" : "") + '"></span>' + esc(x.name || x.id) + (x.sub && !(TWD.cat && !TWD.q) ? " <small>" + esc(x.sub) + "</small>" : "") +
+    (x.title ? '<small class="twdt">' + esc(x.title) + "</small>" : "") + '</button></span><span class="r"><span class="mut">' + (off ? "offline" : vv) + '</span><button class="twdf' + (fav ? " on" : "") + '" data-a="twdfav" data-k="' + esc(x.id) + '" title="' + (fav ? "On your list. Click to take it off" : "Put this channel on your list: it shows in the Twitch box when it is live") + '" aria-label="' + (fav ? "Take off your list" : "Put on your list") + '">' + (fav ? "★" : "☆") + "</button></span></div>";
+}
+function twdCatsHtml() {
+  var chip = function (id, name, on) { return '<button class="twdc' + (on ? " on" : "") + '" data-a="twdcat" data-k="' + esc(id) + '">' + esc(name) + "</button>"; };
+  if (TWD.q) return TWD.fcats.map(function (c) { return chip(c.id, c.name, false); }).join("");
+  var cats = TWD.cats.slice();
+  if (TWD.cat && !cats.some(function (c) { return c.id === TWD.cat; })) cats.unshift({ id: TWD.cat, name: TWD.catName });
+  return chip("", "Top live", !TWD.cat) + cats.map(function (c) { return chip(c.id, c.name, c.id === TWD.cat); }).join("") + (TWD.catCur && TWD.cats.length < 100 ? '<button class="twdc mut" data-a="twdmorecat">More categories…</button>' : "");
+}
+function twdListHtml() {
+  var head = TWD.q ? "Channels matching “" + esc(TWD.q) + "”" : TWD.cat ? esc(TWD.catName) : "Top live now";
+  return "<h3>" + head + "</h3>" + TWD.list.map(twdRow).join("") +
+    (TWD.busy ? '<p class="mut sn">Loading…</p>' : TWD.err ? '<p class="mut sn">Twitch did not answer: ' + esc(TWD.err) + "</p>" : !TWD.list.length ? '<p class="mut sn">' + (TWD.q ? "No channel found." : "Nobody is live here" + (twdLang() ? " in this language" : "") + " right now.") + "</p>" : TWD.more ? '<button class="sitemore" data-a="twdmore">Show 10 more</button>' : "");
+}
+function twdHtml() {
+  if (!window.TWITCH_CLIENT_ID || !twToken()) return '<div class="twd"><p>Discover shows the biggest live streams and lets you search for any channel or game, also ones you do not follow. It reads them from Twitch with your own Twitch connection, so connect your Twitch account first.</p>' + (window.TWITCH_CLIENT_ID && !PREVIEW ? '<p class="tools"><button class="pri" data-a="twConnect">Connect Twitch</button></p>' : PREVIEW ? previewNote() : "") + "</div>";
+  return '<div class="twd"><div class="twdtop"><input type="search" id="twdQ" placeholder="Search a channel or a game…" aria-label="Search a channel or a game" value="' + esc(TWD.q) + '"><select id="twdLang" aria-label="Language of the streams">' + opts(TWD_LANGS, twdLang()) + '</select></div><div id="twdCats" class="twdcats' + (TWD.all ? " all" : "") + '">' + twdCatsHtml() + '</div><button class="lnk2 twdall" id="twdAll" data-a="twdall">' + twdAllTxt() + '</button><div id="twdList">' + twdListHtml() + "</div></div>";
+}
+// the categories take two lines until you ask for all of them
+function twdAllTxt() { return TWD.all ? "Fewer categories ▴" : "All categories ▾"; }
+function twdDraw() {
+  if (!twdOpen() || !$("twdList")) return;
+  $("twdCats").innerHTML = twdCatsHtml(); $("twdCats").classList.toggle("all", !!TWD.all); $("twdList").innerHTML = twdListHtml();
+  $("twdAll").textContent = twdAllTxt(); $("twdAll").hidden = !!TWD.q;
+}
+function twdFail(e) { if (e && e.message === "expired") { twDisconnect(); if (twdOpen()) $("mBody").innerHTML = twdHtml(); return; } TWD.busy = false; TWD.err = String((e && e.message) || e || "no answer").slice(0, 120); twdDraw(); }
+function twdCats() {
+  twdGet("games/top?first=20" + (TWD.catCur ? "&after=" + encodeURIComponent(TWD.catCur) : "")).then(function (j) {
+    var have = {};
+    TWD.cats.forEach(function (c) { have[c.id] = 1; });
+    (j.data || []).forEach(function (g) { if (!have[g.id]) { have[g.id] = 1; TWD.cats.push({ id: String(g.id), name: String(g.name) }); } });
+    TWD.catCur = (j.pagination && j.pagination.cursor) || "";
+    twdDraw();
+  }).catch(function () {});
+}
+function twdLoad(reset) {
+  var n = ++TWD.n, q = TWD.q, lang = twdLang();
+  if (reset) { TWD.list = []; TWD.cur = ""; TWD.more = false; }
+  TWD.busy = true; TWD.err = ""; twdDraw();
+  var late = function () { return n !== TWD.n; }, done = function () { TWD.busy = false; TWD.list.forEach(function (x) { TWDS[x.id] = x; }); twdDraw(); };
+  if (q) {
+    var eq = encodeURIComponent(q);
+    Promise.all([twdGet("search/channels?first=12&query=" + eq), twdGet("search/categories?first=6&query=" + eq).catch(function () { return { data: [] }; })]).then(function (r) {
+      if (late()) return;
+      TWD.fcats = (r[1].data || []).map(function (g) { return { id: String(g.id), name: String(g.name) }; });
+      TWD.list = (r[0].data || []).map(function (c) { return { id: c.broadcaster_login, name: c.display_name, sub: c.game_name, title: c.is_live ? c.title : "", live: !!c.is_live, st: Date.parse(c.started_at) || 0 }; })
+        .sort(function (a, b) { return (b.live ? 1 : 0) - (a.live ? 1 : 0); });
+      var on = TWD.list.filter(function (x) { return x.live; });
+      if (!on.length) { done(); return; }
+      // the search does not say how many are watching: one more question for the channels that are live
+      return twdGet("streams?first=100&" + on.map(function (x) { return "user_login=" + encodeURIComponent(x.id); }).join("&")).then(function (s) {
+        if (late()) return;
+        var by = {};
+        (s.data || []).forEach(function (x) { by[x.user_login] = x; });
+        TWD.list.forEach(function (x) { if (by[x.id]) { x.v = by[x.id].viewer_count; x.th = by[x.id].thumbnail_url; } });
+        TWD.list.sort(function (a, b) { return (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.v || 0) - (a.v || 0); });
+        done();
+      }).catch(function () { if (!late()) done(); });
+    }).catch(function (e) { if (!late()) twdFail(e); });
+    return;
+  }
+  twdGet("streams?first=10" + (TWD.cat ? "&game_id=" + encodeURIComponent(TWD.cat) : "") + (lang ? "&language=" + lang : "") + (TWD.cur ? "&after=" + encodeURIComponent(TWD.cur) : "")).then(function (j) {
+    if (late()) return;
+    var have = {}, rows = (j.data || []).map(twdStream);
+    TWD.list.forEach(function (x) { have[x.id] = 1; });
+    TWD.list = TWD.list.concat(rows.filter(function (x) { return !have[x.id]; }));
+    TWD.cur = (j.pagination && j.pagination.cursor) || "";
+    TWD.more = !!TWD.cur && rows.length >= 10 && TWD.list.length < 100;
+    done();
+  }).catch(function (e) { if (!late()) twdFail(e); });
+}
+function openDiscover() {
+  openModal(TWD_T, twdHtml());
+  if (!window.TWITCH_CLIENT_ID || !twToken()) return;
+  if (!TWD.cats.length) twdCats();
+  twdLoad(true);
+}
+function twdAct(a, k) {
+  if (a === "twdopen") { openDiscover(); return; }
+  if (a === "twdmore") { twdLoad(false); return; }
+  if (a === "twdmorecat") { twdCats(); return; }
+  if (a === "twdall") { TWD.all = !TWD.all; twdDraw(); return; }
+  if (a === "twdcat") {
+    var c = TWD.cats.concat(TWD.fcats).filter(function (x) { return x.id === k; })[0];
+    TWD.cat = k || ""; TWD.catName = c ? c.name : ""; TWD.q = ""; TWD.fcats = [];
+    if ($("twdQ")) $("twdQ").value = "";
+    twdLoad(true); return;
+  }
+  if (a === "twdwatch") { watchTwitch(k); return; }
+  if (a === "twdfav") {
+    if (P.fav["t:" + k]) delete P.fav["t:" + k]; else { P.fav["t:" + k] = true; delete P.hidden["t:" + k]; var s = TWDS[k]; if (s) { var o = TWOFF[k] = TWOFF[k] || {}; o.n = s.name || k; save("sp_twoff", TWOFF); } }
+    persist(); twdDraw(); render(); fetchTwitch();
+  }
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "twdQ") return;
+  debounced("twdQ", function () { if (!$("twdQ")) return; var v = $("twdQ").value.replace(/\s+/g, " ").trim().slice(0, 60); if (v === TWD.q) return; TWD.q = v.length >= 2 ? v : ""; TWD.fcats = []; twdLoad(true); });
+});
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "twdLang") return;
+  P.twd = { lang: e.target.value }; persist(); twdLoad(true);
+});
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -2070,6 +2669,7 @@ var KEYNAV = false, MOPEN = null;
 document.addEventListener("keydown", function (e) { if (e.key === "Tab" || e.key === "Enter" || e.key === " " || /^Arrow/.test(e.key)) KEYNAV = true; }, true);
 document.addEventListener("pointerdown", function () { KEYNAV = false; }, true);
 function openModal(title, html) {
+  rdrOff();   // a reader that was open notes what was read, and gives up its button beside Close
   if ($("modal").hidden) {
     var el = document.activeElement, inWin = el && el.closest && (el.closest("#modal") || el.closest("#panel"));
     MOPEN = el && el !== document.body && !inWin ? { key: KEYNAV, el: el, a: el.getAttribute("data-a"), k: el.getAttribute("data-k") } : null;
@@ -2078,6 +2678,7 @@ function openModal(title, html) {
 }
 function closeModal() {
   var was = !$("modal").hidden, o = MOPEN;
+  rdrOff();
   $("modal").hidden = true; $("mBody").innerHTML = "";
   MOPEN = null;
   if (!was || !$("panel").hidden) return;
@@ -2129,8 +2730,16 @@ function fetchTwitch() {
   (TWUID ? Promise.resolve(TWUID) : twGet("users", tok).then(function (u) { TWUID = u.data[0].id; return TWUID; }))
     .then(function (uid) { return twGet("streams/followed?first=100&user_id=" + uid, tok); })
     .then(function (j) {
+      // the channels on your own list (★, also ones you do not follow on Twitch) that are live join the followed ones
+      var tw = (j.data || []).map(twdStream), have = {};
+      tw.forEach(function (x) { have[x.id] = 1; });
+      var extra = twFavs().filter(function (l) { return !have[l]; });
+      if (!extra.length) return tw;
+      return twGet("streams?first=100&" + extra.map(function (l) { return "user_login=" + encodeURIComponent(l); }).join("&"), tok).then(function (s) { (s.data || []).forEach(function (x) { if (!have[x.user_login]) { have[x.user_login] = 1; tw.push(twdStream(x)); } }); return tw; }).catch(function (e) { if (e && e.message === "expired") throw e; return tw; });
+    })
+    .then(function (tw) {
       TWC = true;
-      TW = (j.data || []).map(function (x) { return { id: x.user_login, name: x.user_name, sub: x.game_name, v: x.viewer_count, live: 1, title: x.title, th: x.thumbnail_url, st: Date.parse(x.started_at) }; });
+      TW = tw;
       if (LIVEPREV) TW.forEach(function (x) {
         if (!LIVEPREV[x.id] && P.fav["t:" + x.id]) toast("live", (x.name || x.id) + " is live", (x.sub ? x.sub + " · " : "") + (x.title || ""), { a: "tw", k: x.id });
       });
@@ -2189,10 +2798,10 @@ function twChat(login) { window.open("https://www.twitch.tv/popout/" + encodeURI
 function twEmbedSrc(login) { return "https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=true"; }
 function watchTwitch(login) { if (P.twPop) twPop(login); else openTwitch(login); }
 function openTwitch(login) {
-  var s = (TW || []).filter(function (x) { return x.id === login; })[0];
+  var s = (TW || []).filter(function (x) { return x.id === login; })[0] || TWDS[login];
   openModal((s && s.name) || login, (s && s.title ? '<p class="mut sn">' + esc(s.title) + (s.sub ? " · " + esc(s.sub) : "") + "</p>" : "") +
     '<div class="tw"><iframe allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc(twEmbedSrc(login)) + '"></iframe></div>' +
-    '<p class="tools"><button class="pri" data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised">Pop out (no ads with Turbo/sub)</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button><button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch") + "</p>" +
+    '<p class="tools"><button class="pri" data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised">Pop out (no ads with Turbo/sub)</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button><button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch") + '<button data-a="twdopen">Discover</button></p>' +
     '<p class="mut sn">Seeing ads in this embedded player even with Turbo or a sub? Your browser is hiding your Twitch login from embeds. Use Pop out, or allow third-party cookies for <code>[*.]twitch.tv</code> (Help → Twitch).</p>');
 }
 
@@ -2871,7 +3480,7 @@ var XL = { sv: {}, en: {} };
   "agreement:deal refugees:refugee soldiers:soldier troops:soldier drones:drone missiles:missile tariffs:tariff " +
   "two:2 three:3 four:4 five:5 seven:7 eight:8 nine:9 ten:10 eleven:11 twelve:12 twenty:20 hundred:100 hundreds:100 thousand:1000 thousands:1000"]
 ].forEach(function (d) { d[1].split(" ").forEach(function (p) { var kv = p.split(":"); XL[d[0]][kv[0]] = kv[1]; }); });
-function fold(w) { return w.normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+function fold(w) { return w.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 // Words that say what KIND of thing happened. Sharing one of these counts for more than sharing an ordinary word.
 var EVW = {};
 "kill injure attack earthquake hurricane storm flood fire wildfire explosion shooting arrest protest ceasefire election verdict charge hostage summit sanctions".split(" ").forEach(function (w) { EVW[w] = 1; });
@@ -3077,8 +3686,9 @@ function fetchReddit() {
     render();
   }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
 }
-function openReddit(u) {
-  var x = RD.filter(function (p) { return p.u === u; })[0];
+function openReddit(u, one) {
+  if (!one && RDS().click === "reader" && openReader("rd", u)) return;
+  var x = rdAll().filter(function (p) { return p.u === u; })[0];
   if (!x) return;
   markReadUrl(u);
   var img = safeUrl(x.img);
@@ -3095,7 +3705,9 @@ function rdComN() { var n = P.rdCom; return n === 0 ? 0 : [3, 5, 10, 20].indexOf
 function loadRdComments(u) {
   var show = function (v) {
     var box = $("rdCom");
-    if (!box || box.dataset.u !== u) return;
+    // in the reader the comments go under their own post
+    if (!box || box.dataset.u !== u) { box = null; Array.prototype.forEach.call(document.querySelectorAll("#rdrL .rdcw"), function (b) { if (b.dataset.u === u) box = b; }); }
+    if (!box) return;
     box.innerHTML = v.items.length ? "<h3>Top comments</h3>" + v.items.slice(0, rdComN()).map(function (c) {
       return '<div class="rdc"><div class="mut"><b>' + esc(c.by) + "</b> · " + ago(c.ts) + ' ago</div><p class="nt">' + esc(unent(c.t)) + "</p></div>";
     }).join("") : '<p class="mut sn">' + (v.err ? "Comments unavailable: " + esc(v.err) : "No comments yet.") + "</p>";
@@ -3137,9 +3749,10 @@ $("srcReset").onclick = function () { delete P.news; delete P.tg; delete P.rd; s
 
 // ---- Details windows for news, Telegram and Gmail ----
 function when(ts) { return new Date(ts).toLocaleString("en-GB", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" }); }
-function openNews(u) {
+function openNews(u, one) {
+  if (!one && RDS().click === "reader" && openReader("news", u)) return;
   var g = NG.filter(function (x) { return x.some(function (n) { return n.u === u; }); })[0];
-  var n = g ? g.filter(function (x) { return x.u === u; })[0] : NEWS.filter(function (x) { return x.u === u; })[0];
+  var n = g ? g.filter(function (x) { return x.u === u; })[0] : NEWS.concat(FOUND.news.items).filter(function (x) { return x.u === u; })[0];
   if (!n) return;
   g = g || [n];
   g.forEach(function (x) { markReadUrl(x.u); });
@@ -3153,8 +3766,9 @@ function openNews(u) {
     (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") + more);
   render();
 }
-function openTG(u) {
-  var g = TGP.filter(function (x) { return x.u === u; })[0];
+function openTG(u, one) {
+  if (!one && RDS().click === "reader" && openReader("tg", u)) return;
+  var g = tgAll().filter(function (x) { return x.u === u; })[0];
   if (!g) return;
   markReadUrl(g.u);
   var vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th;
@@ -3558,9 +4172,9 @@ function laterBtn(id) { var on = isLater(id); return '<button class="laterb' + (
 // what is known about an item right now, from the box it is in
 function laterInfo(id) {
   var k = id.charAt(0), v = id.slice(2), x;
-  if (k === "a") { x = NEWS.concat(NEWSALL).filter(function (n) { return n.u === v; })[0]; return x ? { t: x.t, s: x.s, u: x.u } : null; }
-  if (k === "m") { x = TGP.filter(function (g) { return g.u === v; })[0]; return x ? { t: String(x.tx || x.t || ""), s: x.s, u: x.u } : null; }
-  if (k === "r") { x = RD.filter(function (p) { return p.u === v; })[0]; return x ? { t: x.t, s: "r/" + x.s, u: x.u } : null; }
+  if (k === "a") { x = NEWS.concat(NEWSALL, FOUND.news.items).filter(function (n) { return n.u === v; })[0]; return x ? { t: x.t, s: x.s, u: x.u } : null; }
+  if (k === "m") { x = tgAll().filter(function (g) { return g.u === v; })[0]; return x ? { t: String(x.tx || x.t || ""), s: x.s, u: x.u } : null; }
+  if (k === "r") { x = rdAll().filter(function (p) { return p.u === v; })[0]; return x ? { t: x.t, s: "r/" + x.s, u: x.u } : null; }
   if (k === "v") { x = (YTV || []).filter(function (y) { return y.id === v; })[0]; return { t: x ? x.t : "Video", s: x ? x.n || "YouTube" : "YouTube", u: "https://www.youtube.com/watch?v=" + encodeURIComponent(v) }; }
   return null;
 }
@@ -4554,10 +5168,17 @@ document.addEventListener("click", function (e) {
   if (a === "mailall") { showAllMail(+k); return; }
   if (a === "mail") { openMail(+k); return; }
   if (a === "spfilt") { SPFIND = !(SPFIND || SPQ); if (!SPFIND) SPQ = ""; render(); var sq = $("spQ"); if (sq) { sq.value = ""; sq.focus(); } return; }
+  if (a === "bfilt") { FON[k] = !(FON[k] || FQ[k]); if (!FON[k]) FQ[k] = ""; render(); var bq = $(k === "tg" ? "tgQ" : "rdQ"); if (bq) { bq.value = ""; bq.focus(); } return; }
   if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
   if (a === "twpop") { twPop(k); return; }
   if (a === "twchat") { twChat(k); return; }
   if (a === "nseen") { markSeen(k); render(); return; }
+  if (/^twd/.test(a)) { twdAct(a, k); return; }
+  if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
+  if (a === "rdropen") { openReader(k, "", true); return; }
+  if (a === "rdrflip") { rdrFlip(); return; }
+  if (a === "rdrolder") { loadOlderTG(); return; }
+  if (a === "rdrcom") { rdrCom(k); return; }
   if (a === "refresh") { refreshBox(k); return; }
   if (a === "more") { if (k === "tg" || k === "news") { MORE[k] += 20; render(); if (k === "tg") tgTopUp(); } return; }
   if (a === "actload") { loadActivity(); return; }
@@ -4985,11 +5606,13 @@ function openHelp() {
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
-    '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. The ⌕ button filters the list.</p>' +
+    '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
+    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button.</p>' +
     '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
     '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
   html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Twitch</b> &rarr; press <b>Connect</b>, log in if asked, and approve access. The box then shows who you follow that is live, with game and viewers; sort it or pick one category with the dropdowns. Hover a channel for a preview picture, the stream title and how long it has been live. Click a name to watch inside the page. Streamers you starred (Edit mode) who are offline are listed dimmed under the live ones with when they were last live; switch that off in Settings &rarr; Twitch.</p>' +
+    '<p><b>Discover:</b> the compass button at the top of the box (always there, also while people you follow are live) opens a window for everything you do not follow. It starts with the biggest live streams right now. Pick a category from the chips to see its ten biggest streams, with <b>Show 10 more</b> for the next ten; <b>All categories</b> unfolds the list and <b>More categories</b> loads further ones. Type in the field to search for a channel or a game by name, and choose a language to see only streams in it. Click a stream to watch it the usual way; the player has a <b>Discover</b> button to go back. ☆ puts a channel on your own list without following it on Twitch: it then shows in the Twitch box when it is live, among your ★ streamers when it is not, and you are told when it goes live. Nothing is asked of Twitch until you open the window, and each answer is kept for a minute. Discover needs your Twitch account to be connected.</p>' +
     '<p><b>Chat says &ldquo;log in&rdquo;, or ads even though you have Turbo or a sub?</b> The player and chat inside this page are a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out: you cannot write in chat (the login window opens and closes again by itself) and you get ads. This is a browser setting, not a fault, and <b>Connect</b> in Settings does not change it. Two fixes:</p><ol>' +
     '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Twitch &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
     '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only. Quickest in Chrome and Edge: click the icon at the left end of the address bar while on this page and allow third-party cookies for this site. Or through the settings:<ul>' +
@@ -7000,8 +7623,10 @@ function wizPage(id) {
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
-    "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Type <code>help</code> in it to see everything.</li>" +
+    "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
+    "<li><b>Twitch:</b> the compass button at the top of the box finds live streams and channels you do not follow.</li>" +
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
+    "<li><b>News, Telegram and Reddit:</b> click a post to scroll through all of them in one window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
     "<li><b>Bring your things along:</b> the bookmarks of your browser (Settings → Bookmarks), a Google, Outlook or Apple calendar (Settings → Calendar) and a portfolio file from your broker (Settings → Stocks) can all be imported.</li>" +
     "<li><b>Summary:</b> a small window with what happened while you were away. Choose what is in it and when it opens in Settings → Summary.</li>" +
@@ -7207,8 +7832,8 @@ function calcAnswer(q) {
 var SRCHANS = null;
 // "note buy milk" or "todo call the bank": Enter saves it straight into Notes (Ctrl+Enter still searches the web for it)
 function scratch(q) {
-  var m = /^(note|todo)[:\s]\s*(\S.*)$/i.exec(q.trim());
-  return m ? { save: { todo: m[1].toLowerCase() === "todo", t: m[2].trim().slice(0, 2000) }, show: (m[1].toLowerCase() === "todo" ? "New to-do: " : "New note: ") + m[2].trim() } : null;
+  var m = new RegExp("^(" + cmdW("note") + "|" + cmdW("todo") + ")[:\\s]\\s*(\\S.*)$", "i").exec(q.trim()), td = !!m && m[1].toLowerCase() === cmdW("todo");
+  return m ? { save: { todo: td, t: m[2].trim().slice(0, 2000) }, show: (td ? "New to-do: " : "New note: ") + m[2].trim() } : null;
 }
 // ---- Dates in the search bar: "days until 24 dec", "90 days from today", "week number", "what day is 1 may 2027" ----
 var MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -7261,7 +7886,7 @@ var TR_LANG = { english: "en", swedish: "sv", estonian: "et", russian: "ru", fin
   latvian: "lv", lithuanian: "lt", ukrainian: "uk", turkish: "tr", greek: "el", czech: "cs", hungarian: "hu", romanian: "ro", japanese: "ja", chinese: "zh-CN", korean: "ko", arabic: "ar", hindi: "hi" };
 var trTimer = 0, TRC = {};
 function trAsk(q) {
-  var m = /^(?:tr|translate)\s+(.+)$/i.exec(q.trim());
+  var m = new RegExp("^(?:" + cmdW("tr") + "|translate)\\s+(.+)$", "i").exec(q.trim());
   if (!m) return null;
   var text = m[1].trim(), to = "en", toName = "English", t = /^(.*\S)\s+(?:to|into|in)\s+([a-zA-Z-]{2,12})$/.exec(text);
   if (t) {
@@ -7288,9 +7913,10 @@ function trRun(a) {
 function srchShow() {
   var q = $("srchIn").value, box = $("srchAns"), tr = trAsk(q);
   clearTimeout(trTimer);
-  var a = SRCHANS = scratch(q) || (/^\s*(help|\?)\s*$/i.test(q) ? { show: "What the search bar can do", help: 1 } : null) || (tr ? { show: "Translating to " + tr.toName + "…", wait: 1 } : null) || dateAnswer(q) || calcAnswer(q);
+  var sq = siteAsk(q);
+  var a = SRCHANS = (sq ? { show: "Search all boxes for “" + sq + "”", site: sq } : null) || scratch(q) || (new RegExp("^\\s*(" + cmdW("help") + "|\\?)\\s*$", "i").test(q) ? { show: "What the search bar can do", help: 1 } : null) || (tr ? { show: "Translating to " + tr.toName + "…", wait: 1 } : null) || dateAnswer(q) || calcAnswer(q);
   box.hidden = !a;
-  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.help ? "Enter to open" : a.wait ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
+  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.site ? "Enter to search" : a.help ? "Enter to open" : a.wait ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
   if (tr) trTimer = setTimeout(function () { trRun(tr); }, 500);   // wait until you stop typing
 }
 // "help" in the search bar: everything the bar can do, in one small window
@@ -7302,25 +7928,29 @@ function searchHelpHtml() {
     row("any words", "Search with your search engine (Settings → Search bar). Enter opens it, Ctrl+Enter opens it in a new tab.") +
     row("reuters.com", "A site name opens the site.") +
     row("!yt lofi", "Search one site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Maps, <code>!news</code> Google News, <code>!tv</code> TradingView, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. The <code>!</code> word can also go last.") +
+    "<tr><th colspan=\"2\">Search this page</th></tr>" +
+    row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, videos, streams, notes, calendar, bookmarks, read later, mail and settings. A window lists what was found, and News, Telegram, Reddit and Sports show the same search in their own box." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
     "<tr><th colspan=\"2\">Answers (Enter copies the answer)</th></tr>" +
     row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
     row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
     row("10 km in miles", "Units: length, weight, volume, speed, time, data and temperature (<code>72 f in c</code>).") +
     row("days until 24 dec", "Dates: <code>days since 1 jan 2020</code>, <code>90 days from today</code>, <code>in 3 weeks</code>, <code>2 months before 1 may</code>, <code>between 1 mar and 24 dec</code>, <code>week number</code>, <code>what day is 1 may 2027</code>, <code>today</code>.") +
-    row("tr hello to swedish", "Translate. The language it is written in is worked out for you; without <code>to …</code> it goes to English: <code>tr tere hommikust</code>. Sent to the free MyMemory service.") +
+    row(cmdW("tr") + " hello to swedish", "Translate. The language it is written in is worked out for you; without <code>to …</code> it goes to English: <code>" + cmdW("tr") + " tere hommikust</code>. Sent to the free MyMemory service.") +
     "<tr><th colspan=\"2\">Save</th></tr>" +
-    row("note buy milk", "Saves a note without opening Notes.") +
-    row("todo call the bank", "Saves a to-do.") +
+    row(cmdW("note") + " buy milk", "Saves a note without opening Notes.") +
+    row(cmdW("todo") + " call the bank", "Saves a to-do.") +
     "<tr><th colspan=\"2\">Keys</th></tr>" +
     row("Enter", "Search, or take the answer shown under the bar (copy it, save it). After an answer, Enter again searches for it.") +
     row("Ctrl+Enter", "Always search the web, in a new tab, whatever is typed.") +
+    (ssKeyName() ? row(ssKeyName(), "Search all boxes for what is typed.") : "") +
     row("Esc", "Leave the bar.") +
-    row("help", "This window.") + "</table>";
+    row(cmdW("help"), "This window.") + '</table><p class="mut sn">The words that start a command (' + ["ss", "note", "todo", "tr", "help"].map(function (k) { return "<code>" + cmdW(k) + "</code>"; }).join(", ") + ") and the key for searching all boxes can be changed in Settings → Search bar.</p>";
 }
 function openSearchHelp() { openModal("Search bar", searchHelpHtml()); }
 // Enter (or a click on the answer): the answer goes into the box, selected, and onto the clipboard
 function srchTake() {
   if (!SRCHANS || SRCHANS.wait) return;
+  if (SRCHANS.site) { var sq = SRCHANS.site; SRCHANS = null; $("srchAns").hidden = true; $("srchIn").value = ""; $("srchIn").blur(); openSite(sq); return; }
   if (SRCHANS.help) { SRCHANS = null; $("srchAns").hidden = true; $("srchIn").value = ""; $("srchIn").blur(); openSearchHelp(); return; }
   if (SRCHANS.save) {
     var s = SRCHANS.save;
@@ -7353,6 +7983,13 @@ $("srch").addEventListener("submit", function (e) {
 });
 $("srchIn").addEventListener("keydown", function (e) {
   if (e.key === "Escape") { e.target.blur(); return; }
+  // Shift+Enter (or Alt+Enter, Settings > Search bar): search all boxes for what is typed, without the command word
+  if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && ((ssKey() === "shift" && e.shiftKey && !e.altKey) || (ssKey() === "alt" && e.altKey && !e.shiftKey))) {
+    e.preventDefault();
+    var sv = siteAsk(e.target.value) || e.target.value;
+    SRCHANS = null; $("srchAns").hidden = true; e.target.value = ""; e.target.blur();
+    openSite(sv); return;
+  }
   if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
   e.preventDefault();
   var u = safeUrl(searchUrl(e.target.value));
@@ -7365,11 +8002,13 @@ function loadExtraForm() {
   $("nwMute").value = w.mute || ""; $("nwHi").value = w.hi || "";
   $("twPopOn").checked = !!P.twPop; $("dockChatOn").checked = !!P.dockChat;
   $("engineSel").value = ENGINES[P.engine] ? P.engine : "google"; $("srchNewTab").checked = !!P.srchNew;
+  renderCmd();
   var n = NTF();
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
   renderSumSet();
   renderLangs(); renderRadioList(); renderSdForm();
+  var rds = RDS(); $("rdrClick").value = rds.click; $("rdrCdir").value = rds.cdir; $("rdrBdir").value = rds.bdir;
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
@@ -7413,8 +8052,9 @@ $("srcNamesOn").onchange = function () { P.hideSrc = !this.checked; persist(); r
 $("dockChatOn").onchange = function () { P.dockChat = this.checked; persist(); };
 document.addEventListener("input", function (e) {
   if (e.target.id === "spQ") { debounced("spQ", function () { SPQ = $("spQ") ? $("spQ").value.trim().toLowerCase().slice(0, 60) : ""; render(); fetchSports(); }); return; }
+  if (e.target.id === "tgQ" || e.target.id === "rdQ") { var fid = e.target.id, fb = fid === "tgQ" ? "tg" : "rd"; debounced(fid, function () { FQ[fb] = $(fid) ? $(fid).value.trim().slice(0, 80) : ""; render(); findSoon(fb); }); return; }
   if (e.target.id !== "newsQ") return;
-  debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase() : ""; render(); });
+  debounced("newsQ", function () { NQ = $("newsQ") ? $("newsQ").value.trim().toLowerCase().slice(0, 80) : ""; render(); findSoon("news"); });
 });
 
 // ---- Sign-in activity (Settings > Account): where this account is signed in, and its recent sign-ins ----
@@ -7579,7 +8219,9 @@ var KEY_ACTS = [
   ["weather", "w", "Weather", function () { openWeather(); }],
   ["bell", "a", "Notification history", function () { MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); sy().nseen = Date.now(); persist(); } render(); }],
   ["seen", "x", "Mark everything as seen", function () { markSeen(""); render(); }],
-  ["filter", "f", "Filter the news", function () { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } }],
+  ["filter", "f", "Search the news", function () { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } }],
+  ["site", "q", "Search all boxes", function () { openSearch(); $("srchIn").value = cmdW("ss") + " "; srchShow(); }],
+  ["discover", "d", "Discover on Twitch", function () { openDiscover(); }],
   ["timer", "i", "New timer", function () { audio(); openClock("t"); }],
   ["stopwatch", "o", "Start a stopwatch", function () { audio(); startStopwatch(); }],
   ["undock", "u", "Close the docked players", function () { DOCK.slice().forEach(function (d) { undock(d.uid); }); }],
@@ -7605,8 +8247,8 @@ function renderKeys() {
     return "<label>" + x[2] + ' <button class="kbd' + (cap ? " cap" : "") + (k || cap ? "" : " none") + '" data-a="keyset" data-k="' + x[0] + '">' + (cap ? "Press a key…" : esc(keyLabel(k))) + "</button></label>";
   }).join("");
   var sk = keyOf("search");
-  $("srchIn").placeholder = "Search… (type help for info)";
-  $("srchIn").title = "Type help and press Enter to see everything the search bar can do" + (sk && keysOn() ? ". Shortcut to jump here: " + keyLabel(sk) : "");
+  $("srchIn").placeholder = "Search… (type " + cmdW("help") + " for info)";
+  $("srchIn").title = "Type " + cmdW("help") + " and press Enter to see everything the search bar can do" + (sk && keysOn() ? ". Shortcut to jump here: " + keyLabel(sk) : "");
 }
 function openKeys() {
   var i = -1;
