@@ -35,11 +35,16 @@ header{display:flex;justify-content:space-between;align-items:flex-start;gap:12p
 #hdl.haswc #date,#hdl.haswc #wclk,#hdl.haswc #day{cursor:help}
 #wcPop{position:absolute;left:0;z-index:34;min-width:230px;max-width:min(340px,calc(100vw - 40px));background:var(--solid);border:1px solid var(--line);border-radius:12px;padding:6px 10px;box-shadow:0 18px 40px -12px rgba(0,0,0,.55);font-size:12.5px}
 #wcPop[hidden]{display:none}
-.wcr{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--line);white-space:nowrap}
-.wcr:first-child{border-top:0}
+/* one grid for the whole box, so the city, time, date and difference of every row sit in the same four columns */
+#wcPop:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:baseline;white-space:nowrap}
+.wcr{display:contents}
+.wcr>*{padding:5px 0 5px 12px;border-top:1px solid var(--line);line-height:1.3}
+.wcr>span{padding-left:0}
+.wcr:first-child>*{border-top:0}
 .wcr span{overflow:hidden;text-overflow:ellipsis}
-.wcr b{font-variant-numeric:tabular-nums}
-.wcr small{color:var(--mut);font-size:11px}
+.wcr b{font-variant-numeric:tabular-nums;text-align:right}
+.wcr small{color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums}
+.wcr small:last-child{text-align:right}
 .wcr.me span{color:var(--mut)}
 /* Settings > Clock & alarms */
 .ckprev{padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:var(--bg);min-height:44px;overflow:hidden}
@@ -285,7 +290,9 @@ button.pill{cursor:pointer;line-height:1.5}
 .setwin{display:grid;grid-template-columns:210px 1fr;width:min(880px,100%);height:min(640px,calc(100vh - 32px));background:var(--solid);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,.7);animation:modalin .2s var(--ease)}
 #setNav{display:flex;flex-direction:column;gap:1px;padding:16px 10px;background:var(--bg);border-right:1px solid var(--line);overflow-y:auto}
 .navtitle{font-size:16px;font-weight:800;padding:0 10px 8px}
-.navcat{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);padding:12px 10px 4px}
+/* group headings in the settings list: a soft band with a hairline above, so it is clear where one group ends */
+.navcat{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--fg);background:var(--card);border-top:1px solid var(--line);border-radius:0 0 8px 8px;padding:6px 10px 5px;margin:12px 0 4px}
+#setNavL>.navcat:first-child{margin-top:4px}
 #setNav button{border:0;background:none;text-align:left;padding:6px 10px;border-radius:8px;font-size:13.5px;color:var(--mut)}
 #setNav button:hover{background:var(--card);color:var(--fg)}
 #setNav button.on{background:var(--acsoft);color:var(--fg);font-weight:600}
@@ -296,7 +303,7 @@ button.pill{cursor:pointer;line-height:1.5}
 .ph{display:flex;justify-content:space-between;align-items:center}
 .setgrp{display:none;flex-direction:column;gap:10px;max-width:560px}
 .setgrp.on{display:flex}
-@media(max-width:700px){.setwin{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:calc(100vh - 32px)}#setNav{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.navtitle,.navcat{display:none}#setNav button{white-space:nowrap}}
+@media(max-width:700px){.setwin{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:calc(100vh - 32px)}#setNav{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.navtitle{display:none}.navcat{flex:none;align-self:center;white-space:nowrap;margin:0 2px 0 8px;padding:3px 8px;border:0;border-left:2px solid var(--line);border-radius:0 6px 6px 0;font-size:9.5px}#setNavL>.navcat:first-child{margin:0 2px 0 0}#setNav button{white-space:nowrap}}
 .setgrp h4{margin:0 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ac)}
 .setgrp label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px}
 .setgrp .sub{display:flex;flex-direction:column;gap:6px;padding:10px;margin:2px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}
@@ -338,6 +345,22 @@ button.pill{cursor:pointer;line-height:1.5}
 .calcn{border:1px solid var(--line);border-radius:99px;padding:0 6px;font-size:.8em;color:var(--mut)}
 #icsMsg:empty,#bmImpMsg:empty{display:none}
 #icsMsg,#bmImpMsg{margin-top:6px}
+/* TV shows box and window, and the radio station search */
+.tvrow .lnk{text-align:left}
+.tvrow .lnk small{color:var(--mut)}
+.tvrow .r{flex:none;gap:4px}
+.tvwin{display:flex;gap:14px;align-items:flex-start}
+.tvposter{width:120px;height:auto;border-radius:10px;flex:none}
+.tvinfo{min-width:0;flex:1}
+.tvinfo p{margin:8px 0}
+@media(max-width:520px){.tvwin{flex-direction:column}.tvposter{width:96px}}
+#radRes .row{padding:4px 0;gap:8px}
+#radRes .row>span:first-child{min-width:0;overflow-wrap:anywhere}
+.rbn{white-space:normal}
+.radb{display:flex;gap:4px;flex:none}
+.radb button{padding:2px 9px;font-size:12px}
+.radx{padding:0 6px;font-size:11px;margin-left:6px}
+#radMsg:empty{display:none}
 .stfile{align-items:center;flex-wrap:wrap}
 .stfile .filebtn{flex:none}
 .stfile input.vis-hidden{flex:none!important;width:1px!important;min-width:0!important;padding:0!important;border:0!important}
@@ -470,6 +493,38 @@ body.resizing{user-select:none}
 
 /* ---- Small windows for notes, calendar and the summary ---- */
 .mbox:has(.brief){width:min(460px,100%)}
+.mbox:has(.brief.cards){width:min(820px,100%)}
+/* the summary: its parts, and the three looks you can choose in Settings > Summary */
+.bhead{margin:0 0 8px}
+.bsec+.bsec{margin-top:14px}
+.bsec h3{margin-top:0}
+.bfoot{margin-top:14px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px}
+.brief .bsp{display:inline-flex;align-items:center;gap:6px;text-align:left}
+.brief .row>span:first-child{min-width:0}
+.brief.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;align-items:start}
+.brief.cards .bhead,.brief.cards .bfoot,.brief.cards .bnone{grid-column:1/-1;margin:0}
+.brief.cards .bsec{margin:0;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card);min-width:0}
+.brief.compact .bsec+.bsec{margin-top:8px}
+.brief.compact h3{font-size:10.5px;margin-bottom:2px}
+.brief.compact .row{padding:1px 0;font-size:12px}
+.brief.compact .chips button{padding:1px 7px;font-size:11.5px}
+.brief.compact .bhead{margin-bottom:4px}
+/* Settings > Summary: one row per part */
+.sumrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:5px 0;border-top:1px solid var(--line)}
+.sumrow:first-child{border-top:0}
+.sumrow>label{display:flex;align-items:center;justify-content:flex-start;gap:6px;flex:0 0 200px;min-width:0}
+.sumrow .sumd{flex:1 1 180px;min-width:0}
+.sumrow .bnm{white-space:normal;line-height:1.25}
+.sumrow.off .sumd,.sumrow.off .bnm{opacity:.5}
+.sumb{display:flex;gap:4px;flex:none;margin-left:auto}
+.sumb button{padding:2px 8px;font-size:12px}
+.sumb button.on{border-color:var(--ac);color:var(--ac)}
+.sumb button:disabled{opacity:.3;cursor:default}
+.sumpick{flex-basis:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:2px 0 4px}
+.sumpick label{display:inline-flex;align-items:center;gap:5px;justify-content:flex-start;font-size:13px}
+.sumpick .sumfav{display:flex;margin-bottom:6px}
+.sumpick .sumfav:last-child{margin-bottom:0}
+@media(max-width:560px){.sumrow>label{flex:1 1 0;order:1}.sumb{order:2}.sumrow .sumd{flex-basis:100%;order:3}.sumpick{order:4}}
 .mbox:has(.nt2){width:min(520px,100%)}
 .mbox:has(.calwrap){width:min(640px,100%)}
 

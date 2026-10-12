@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org https://api.tvmaze.com https://*.api.radio-browser.info; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniTree – free start page for news, sports, stocks, Twitch and mail</title>
@@ -45,7 +45,7 @@
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
   <section id="intro">
     <h1>OmniTree: your start page, everything in one tab</h1>
-    <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
+    <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, the TV shows you follow, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
     <p>You decide what is on the page: switch boxes on and off, drag them where you want them, and pick colors and a wallpaper. A free account saves your setup and brings it to every device.</p>
   </section>
   <footer class="mut">OmniTree · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button><span id="ftLinks"> · <a href="about">About</a> · <a href="features">Features</a> · <a href="help">Help page</a> · <a href="privacy">Privacy</a></span></footer>
@@ -58,18 +58,23 @@
    <div class="setbody">
 
   <section class="setgrp" data-cat="Look" data-sec="Appearance">
-    <label>Theme <button id="themeBtn"></button></label>
-    <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
-    <label>Background <input type="color" id="cBg"></label>
-    <label>Boxes <input type="color" id="cCard"></label>
-    <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
-    <label>Text color <input type="color" id="cFg"></label>
-    <label>Muted text <input type="color" id="cMut"></label>
-    <label data-kw="next event upcoming line under the date calendar">Next-event line under the date <span><input type="color" id="cNext"> <button id="cNextReset">Reset</button></span></label>
-    <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
-    <label data-kw="aurora gradient">Glow background <input type="checkbox" id="auroraOn"></label>
-    <label>Shadows behind boxes and logo <input type="checkbox" id="shadowOn"></label>
-    <button id="cReset">Reset colors</button>
+    <div class="mut sn">Colors, text size and effects for the whole page. Each box can also get its own text size: cogwheel → Edit, then T− and T+ on the box.</div>
+    <div class="sub"><b>Theme and colors</b>
+      <label>Theme <button id="themeBtn"></button></label>
+      <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
+      <label>Background <input type="color" id="cBg"></label>
+      <label>Boxes <input type="color" id="cCard"></label>
+      <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
+      <label>Text color <input type="color" id="cFg"></label>
+      <label>Muted text <input type="color" id="cMut"></label>
+      <label data-kw="next event upcoming line under the date calendar">Next-event line under the date <span><input type="color" id="cNext"> <button id="cNextReset">Reset</button></span></label>
+      <span><button id="cReset">Reset colors</button></span>
+    </div>
+    <div class="sub"><b>Text and effects</b>
+      <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
+      <label data-kw="aurora gradient">Glow background <input type="checkbox" id="auroraOn"></label>
+      <label>Shadows behind boxes and logo <input type="checkbox" id="shadowOn"></label>
+    </div>
     <div class="sub" data-kw="red green live dot signal color colour per box opacity">
       <b>Signal colors per box</b>
       <div id="bcList"></div>
@@ -78,6 +83,7 @@
   </section>
 
   <section class="setgrp" data-cat="Look" data-sec="Wallpaper">
+    <div class="mut sn">Your own picture behind the page. It follows your account to your other devices.</div>
     <label>Image <span><label class="filebtn" for="wallFile">Choose image</label><input type="file" id="wallFile" accept="image/*" class="vis-hidden"> <button id="wallClear">Remove</button></span></label>
     <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
     <div class="mut sn">Press Reposition, then drag the screen to move the image. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
@@ -85,213 +91,27 @@
 
   <section class="setgrp" data-cat="Look" data-sec="Layout &amp; boxes">
     <div class="mut sn">Switch whole boxes on or off. A box that is off is not loaded either. To move or resize boxes, close this window and choose Edit in the cogwheel menu.</div>
-    <div class="sub" id="boxList"></div>
-    <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
+    <div class="sub"><b>Boxes on the page</b>
+      <div id="boxList" class="boxlist"></div>
+      <div class="mut sn">Web page boxes have their own section under Content.</div>
+    </div>
     <div class="sub">
       <b>Hidden streamers, sources and stocks</b>
+      <div class="mut sn">Things you hid with Hide in Edit mode. Restore brings one back.</div>
       <div id="hiddenList" class="mut"></div>
     </div>
-    <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
-    <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
-    <button data-a="wizopen">Run the setup guide again</button>
-  </section>
-
-  <section class="setgrp wide" data-cat="Look" data-sec="Bookmarks">
-    <div class="mut sn">A slim row of your own links at the very top of the page. Switched off, it takes no room at all.</div>
-    <label>Show the bookmarks bar <input type="checkbox" id="bmOn"></label>
-    <label>Open links in a new tab <input type="checkbox" id="bmNw"></label>
-    <label>Where the bar starts <select id="bmAl"><option value="l">From the left</option><option value="c">Centered</option><option value="r">From the right</option></select></label>
-    <div class="sub"><b>Add a bookmark</b>
-      <div class="add bmadd"><input type="text" id="bmNewU" placeholder="Address, e.g. youtube.com" aria-label="Address" maxlength="500" autocomplete="off"><input type="text" id="bmNewT" placeholder="Name (optional)" aria-label="Name" maxlength="40" autocomplete="off"><select id="bmNewF" aria-label="Where to put it"></select><button class="pri" data-a="bmadd">Add</button></div>
-      <div id="bmMsg" class="mut sn" role="status"></div>
-      <span><button data-a="bmaddf">+ New folder</button></span>
-      <div class="mut sn">A folder shows as one button on the bar and opens a small list. Put a link into it with the “On the bar / In: …” choice on the link’s row.</div>
+    <div class="sub"><b>Notes and calendar</b>
+      <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
+      <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
     </div>
-    <div class="sub"><b>Import from your browser</b>
-      <div class="mut sn">First save your browser's bookmarks to a file. <b>Chrome, Edge, Brave, Opera:</b> Bookmarks → Bookmark manager → ⋮ → Export bookmarks. <b>Firefox:</b> Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML. <b>Safari:</b> File → Export → Bookmarks. Then choose that file here and tick the folders you want.</div>
-      <span><label class="filebtn" for="bmFile">Choose the bookmarks file</label><input type="file" id="bmFile" accept=".html,.htm,text/html" class="vis-hidden"></span>
-      <div id="bmImpMsg" class="sn" role="status"></div>
-      <div id="bmImp"></div>
-    </div>
-    <div class="sub"><b>Your bookmarks</b>
-      <div class="mut sn">Click the icon to change it. ◀ ▶ move a bookmark left and right on the bar. The small color square colors one bookmark.</div>
-      <div id="bmSet"></div>
-    </div>
-    <label>Color for all bookmarks <span><input type="color" id="bmColAll" aria-label="Color for all bookmarks"> <button data-a="bmcolreset">Reset all colors</button></span></label>
-    <div class="mut sn">“The site’s own icon” is fetched from that site each time the page opens. Pick one of the built-in icons if you would rather not contact the site.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Look" data-sec="Search bar">
-    <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
-    <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
-    <div class="mut sn">The bar also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>. Enter copies the answer.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Look" data-sec="Keyboard shortcuts" id="keysSec">
-    <div class="mut sn">Shortcuts work when you are not typing in a box. To change one, click its key and press the new key. Backspace removes the key, Esc cancels.</div>
-    <label>Keyboard shortcuts <input type="checkbox" id="keysOn"></label>
-    <div class="sub" id="keyList"></div>
-    <button data-a="keyreset">Back to the standard keys</button>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="News, Telegram &amp; Reddit">
-    <div class="sub">
-      <b>News</b>
-      <div id="srcNews"></div>
-      <form id="addNews" class="add"><input type="text" id="newsName" placeholder="Name (optional)"><input type="text" id="newsUrl" placeholder="Feed address or website"><button>Add</button></form>
-    </div>
-    <div class="sub">
-      <b>Telegram</b>
-      <div id="srcTg"></div>
-      <form id="addTg" class="add"><input type="text" id="tgIn" placeholder="Channel name or t.me link"><button>Add</button></form>
-    </div>
-    <div class="sub">
-      <b>Reddit</b>
-      <div id="srcRd"></div>
-      <form id="addRd" class="add"><input type="text" id="rdIn" placeholder="Subreddit, e.g. worldnews"><button>Add</button></form>
-    </div>
-    <div class="sub">
-      <b>Filters</b>
-      <input type="text" id="nwMute" placeholder="Mute words, comma separated (hides headlines)">
-      <input type="text" id="nwHi" placeholder="Highlight words, comma separated">
-    </div>
-    <div class="sub" data-kw="language languages english swedish translate foreign">
-      <b>Languages shown in News</b>
-      <div id="langList"></div>
-      <div id="langNote" class="mut sn"></div>
-      <div class="mut sn">Tick the languages you read; headlines in any other language are left out. Nothing is translated. The same story in Swedish and in English is still combined into one row.</div>
-    </div>
-    <label>Headlines shown <select id="cntNews"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option></select></label>
-    <label>Telegram posts shown <select id="cntTg"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label>
-    <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
-    <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
-    <button id="srcReset">Back to default sources</button>
-    <div id="srcMsg" class="mut" role="status"></div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Stocks">
-    <div class="sub">
-      <form id="addStock" class="add"><input id="stockIn" placeholder="Company name or symbol, e.g. Tesla or NVDA" aria-label="Company name or stock symbol" autocomplete="off"><button>Add</button></form>
-      <div id="stockRes"></div>
-      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Paste a list of symbols, e.g. NVDA, AAPL, BTCUSD (or a TradingView export)" aria-label="Import a list of symbols"></textarea><button>Import</button></form>
-      <form id="linkStock" class="add"><input id="linkIn" placeholder="Link to a Google Sheet or a shared TradingView watchlist" aria-label="Google Sheet or TradingView watchlist link"><button>Import</button></form>
-      <div class="add stfile"><label class="filebtn" for="stFile">Import a file</label><input type="file" id="stFile" accept=".csv,.txt,.tsv,text/csv,text/plain" class="vis-hidden"><span class="mut sn">A CSV export from your broker or portfolio site. Needs a Symbol, Ticker or ISIN column.</span></div>
-      <div id="stMsg" class="sn" role="status"></div>
-      <div id="stImp"></div>
-    </div>
-    <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
-  </section>
-
-  <section class="setgrp wide" data-cat="Content" data-sec="Web page boxes">
-    <div class="mut sn" data-kw="embed iframe website web page box widget dashboard">Show any web page inside a box of its own, for example a dashboard, a live map, a webcam or a shared document. Paste its address and the box appears on your page; move and size it with Edit like any other box (H− and H+ change its height). All three are off until you fill one in.</div>
-    <div id="embSet"></div>
-    <div class="mut sn">Good to know: many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page, and then the box stays empty. Sites that offer an “embed” address do work. The page in the box is that site’s own: it can load its own content and set its own cookies, but it cannot read anything from OmniTree.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Sports">
-    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
-    <div id="spList"></div>
-    <label data-kw="favourite favorite sport ufc view">Favorite sport <select id="spFavSel"></select></label>
-    <div class="mut sn">Your favorite sport gets its own choice in the Sports box (★ and its name): everything in it that is on now, today and coming up. A UFC card that is on shows every fight as its own row.</div>
-    <button data-a="spreset">Back to the starting leagues</button>
-    <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
-    <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Calendar">
-    <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
-    <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
-      <b>Calendars from elsewhere</b>
-      <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
-      <div class="add stfile"><label class="filebtn" for="icsFile">Import an .ics file</label><input type="file" id="icsFile" accept=".ics,.ical,.ifb,text/calendar" class="vis-hidden"><span class="mut sn">Copies the events into your own calendar, once. You can change and delete them afterwards.</span></div>
-      <form id="icsAdd" class="add"><input id="icsUrl" placeholder="Or follow a calendar by its address (.ics)" aria-label="Calendar address" autocomplete="off" maxlength="1000"><button>Follow</button></form>
-      <div class="mut sn">A calendar you follow is read again every half hour and shown next to your own events, without copying them. Up to four. Needs you to be signed in.</div>
-      <div id="icsMsg" class="sn" role="status"></div>
-      <div id="icsImp"></div>
-      <div id="icsList"></div>
-    </div>
-    <div class="sub">
-      <b>Mark these days</b>
-      <div id="sdGroups"></div>
-      <label>Mother's and Father's Day as in <select id="sdMf"></select></label>
-      <label>Payday on day of the month (empty = off) <input type="number" id="sdPay" min="1" max="31" step="1" placeholder="–"></label>
-      <div class="mut sn">A payday that falls on a weekend is shown on the Friday before.</div>
-    </div>
-    <div class="sub">
-      <b>Public holidays (days most people are off work)</b>
-      <div id="sdHol" class="chipwrap"></div>
-    </div>
-    <div class="sub">
-      <b>Remind me</b>
-      <label>When <select id="sdRemDays"><option value="0">On the day</option><option value="1">The day before</option><option value="3">3 days before</option><option value="7">A week before</option></select></label>
-      <div id="sdRem" class="chipwrap"></div>
-      <div class="mut sn">Tick the days you want a notification for. It appears from 08:00 while this page is open, and needs Calendar reminders switched on under Notifications. A day only reminds you if it is also marked above.</div>
+    <div class="sub"><b>Start over</b>
+      <div class="mut sn">The setup guide walks through the boxes, your city and each source again. It changes nothing until you do.</div>
+      <span><button data-a="wizopen">Run the setup guide again</button></span>
     </div>
   </section>
 
-  <section class="setgrp" data-cat="Content" data-sec="Radio">
-    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak. The box has the list, play, stop and a volume button. The radio keeps playing while you use the rest of the page.</div>
-    <div id="radList"></div>
-    <button data-a="radreset">Back to the starting stations</button>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Twitch">
-    <label>Twitch account <button id="twBtn"></button></label>
-    <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
-    <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
-    <label data-kw="favorite favourite starred last live">Show my ★ streamers who are offline <input type="checkbox" id="twOffOn"></label>
-    <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="YouTube">
-    <label>Subscriptions <span><label class="filebtn" for="ytFile">Choose subscriptions.csv</label><input type="file" id="ytFile" accept=".csv,text/csv" class="vis-hidden"></span></label>
-    <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Mail">
-    <div class="mut sn">Step-by-step instructions are in Help → Mail (Gmail).</div>
-    <div class="sub">
-      <b>First inbox</b>
-      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
-      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt0" placeholder="Token" autocomplete="off">
-    </div>
-    <div class="sub">
-      <b>Second inbox</b>
-      <input type="text" id="mn1" placeholder="Name, e.g. Work">
-      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-      <input type="password" id="mt1" placeholder="Token" autocomplete="off">
-    </div>
-    <button id="mailSave">Save Gmail accounts</button>
-    <div id="mailMsg" class="mut" role="status"></div>
-  </section>
-
-  <section class="setgrp nf" data-cat="Alerts" data-sec="Notifications">
-    <div class="mut sn">Small cards in the bottom-right corner. Click one to open it.</div>
-    <label>Big news (same story, several sources) <input type="checkbox" id="nfNews"></label>
-    <label class="in">Sources needed <input type="number" id="nfSrcN" min="2" max="6" step="1"></label>
-    <label>Headlines with your highlight words <input type="checkbox" id="nfWords"></label>
-    <label>Stock moves <input type="checkbox" id="nfStock"></label>
-    <label class="in">Fast move, % within 30 min <input type="number" id="nfPct" min="0.5" max="50" step="0.5"></label>
-    <label class="in">Day move, % <input type="number" id="nfDay" min="1" max="90" step="0.5"></label>
-    <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
-    <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
-    <label>New mail <input type="checkbox" id="nfMail"></label>
-    <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
-    <label>Ping sound <input type="checkbox" id="nfSound"></label>
-    <label>Also as desktop notifications <input type="checkbox" id="nfDesktop"></label>
-    <label>Also send them to my email <input type="checkbox" id="nfEmail"></label>
-    <div class="mut sn">Emails go to your connected Gmail inbox, sent by its own script (Settings → Mail), with everything from a five-minute stretch in one email. This needs the newer script code from Help → Mail, and this page has to be open in a tab. <button data-a="nfmailtest">Send a test email</button></div>
-    <div id="nfMailMsg" class="sn" role="status"></div>
-    <label>Morning summary on first visit of the day <input type="checkbox" id="briefOn"></label>
-    <button data-a="nftest">Show a test notification</button>
-    <div class="sub"><b>Last 5 notifications and why</b>
-      <div class="mut sn">Every notification and alarm on this device, with what caused it and whether it made a sound. Use it when you heard something and saw nothing.</div>
-      <div id="nfLog"></div>
-    </div>
-  </section>
-
-  <section class="setgrp" data-cat="Alerts" data-sec="Clock &amp; alarms">
+  <section class="setgrp" data-cat="Look" data-sec="Date &amp; time">
+    <div class="mut sn" data-kw="clock date time world clocks day name location timezone">What the top-left corner of the page shows, and the time in other cities.</div>
     <div class="sub"><b>Date and time at the top of the page</b>
       <div id="ckPrev" class="ckprev" aria-label="How it looks"></div>
       <div class="mut sn">Tick what you want to see:</div>
@@ -323,7 +143,260 @@
       <div id="wcList"></div>
       <div class="mut sn">The small box shows each city’s time and date, and how many hours it is ahead or behind. On a phone you tap the date instead of pointing at it. On the page, a small ⁺¹ after a time means it is already tomorrow there.</div>
     </div>
-    <label>Alarm volume <input type="range" id="volSlider" min="0" max="100"></label>
+    <div class="mut sn">Timers, countdowns and the stopwatch are the clock icon in the menu box. Their sound is under Notifications.</div>
+  </section>
+
+  <section class="setgrp wide" data-cat="Look" data-sec="Bookmarks">
+    <div class="mut sn">A slim row of your own links at the very top of the page. Switched off, it takes no room at all.</div>
+    <div class="sub"><b>The bar</b>
+      <label>Show the bookmarks bar <input type="checkbox" id="bmOn"></label>
+      <label>Open links in a new tab <input type="checkbox" id="bmNw"></label>
+      <label>Where the bar starts <select id="bmAl"><option value="l">From the left</option><option value="c">Centered</option><option value="r">From the right</option></select></label>
+      <label>Color for all bookmarks <span><input type="color" id="bmColAll" aria-label="Color for all bookmarks"> <button data-a="bmcolreset">Reset all colors</button></span></label>
+    </div>
+    <div class="sub"><b>Add a bookmark</b>
+      <div class="add bmadd"><input type="text" id="bmNewU" placeholder="Address, e.g. youtube.com" aria-label="Address" maxlength="500" autocomplete="off"><input type="text" id="bmNewT" placeholder="Name (optional)" aria-label="Name" maxlength="40" autocomplete="off"><select id="bmNewF" aria-label="Where to put it"></select><button class="pri" data-a="bmadd">Add</button></div>
+      <div id="bmMsg" class="mut sn" role="status"></div>
+      <span><button data-a="bmaddf">+ New folder</button></span>
+      <div class="mut sn">A folder shows as one button on the bar and opens a small list. Put a link into it with the “On the bar / In: …” choice on the link’s row.</div>
+    </div>
+    <div class="sub"><b>Your bookmarks</b>
+      <div class="mut sn">Click the icon to change it. ◀ ▶ move a bookmark left and right on the bar. The small color square colors one bookmark.</div>
+      <div id="bmSet"></div>
+      <div class="mut sn">“The site’s own icon” is fetched from that site each time the page opens. Pick one of the built-in icons if you would rather not contact the site.</div>
+    </div>
+    <div class="sub"><b>Import from your browser</b>
+      <div class="mut sn">First save your browser's bookmarks to a file. <b>Chrome, Edge, Brave, Opera:</b> Bookmarks → Bookmark manager → ⋮ → Export bookmarks. <b>Firefox:</b> Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML. <b>Safari:</b> File → Export → Bookmarks. Then choose that file here and tick the folders you want.</div>
+      <span><label class="filebtn" for="bmFile">Choose the bookmarks file</label><input type="file" id="bmFile" accept=".html,.htm,text/html" class="vis-hidden"></span>
+      <div id="bmImpMsg" class="sn" role="status"></div>
+      <div id="bmImp"></div>
+    </div>
+  </section>
+
+  <section class="setgrp" data-cat="Look" data-sec="Search bar">
+    <div class="mut sn">The search field at the top of the page.</div>
+    <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
+    <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
+    <div class="mut sn">The bar also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>. Enter copies the answer. Type <code>help</code> in it to see everything it can do.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Look" data-sec="Keyboard shortcuts" id="keysSec">
+    <div class="mut sn">Shortcuts work when you are not typing in a box. To change one, click its key and press the new key. Backspace removes the key, Esc cancels.</div>
+    <label>Keyboard shortcuts <input type="checkbox" id="keysOn"></label>
+    <div class="sub" id="keyList"></div>
+    <button data-a="keyreset">Back to the standard keys</button>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="News, Telegram &amp; Reddit">
+    <div class="mut sn">Where the News, Telegram and Reddit boxes get their content, and how much of it they show.</div>
+    <div class="sub">
+      <b>News</b>
+      <div id="srcNews"></div>
+      <form id="addNews" class="add"><input type="text" id="newsName" placeholder="Name (optional)"><input type="text" id="newsUrl" placeholder="Feed address or website"><button>Add</button></form>
+    </div>
+    <div class="sub">
+      <b>Telegram</b>
+      <div id="srcTg"></div>
+      <form id="addTg" class="add"><input type="text" id="tgIn" placeholder="Channel name or t.me link"><button>Add</button></form>
+    </div>
+    <div class="sub">
+      <b>Reddit</b>
+      <div id="srcRd"></div>
+      <form id="addRd" class="add"><input type="text" id="rdIn" placeholder="Subreddit, e.g. worldnews"><button>Add</button></form>
+    </div>
+    <div id="srcMsg" class="mut" role="status"></div>
+    <div class="sub">
+      <b>Words to hide and to highlight</b>
+      <div class="mut sn">For headlines and Telegram posts. Separate words with commas.</div>
+      <input type="text" id="nwMute" placeholder="Mute words, comma separated (hides headlines)">
+      <input type="text" id="nwHi" placeholder="Highlight words, comma separated">
+    </div>
+    <div class="sub" data-kw="language languages english swedish translate foreign">
+      <b>Languages shown in News</b>
+      <div id="langList"></div>
+      <div id="langNote" class="mut sn"></div>
+      <div class="mut sn">Tick the languages you read; headlines in any other language are left out. Nothing is translated. The same story in Swedish and in English is still combined into one row.</div>
+    </div>
+    <div class="sub"><b>How much is shown</b>
+      <label>Headlines shown <select id="cntNews"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="80">80</option></select></label>
+      <label>Telegram posts shown <select id="cntTg"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label>
+      <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
+      <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
+      <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
+    </div>
+    <span><button id="srcReset">Back to default sources</button></span>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Stocks">
+    <div class="mut sn">The stocks, funds, indexes and crypto in the Stocks box. To take one off the list, hide it in Edit mode. Price alerts are under Notifications.</div>
+    <div class="sub"><b>Add one</b>
+      <form id="addStock" class="add"><input id="stockIn" placeholder="Company name or symbol, e.g. Tesla or NVDA" aria-label="Company name or stock symbol" autocomplete="off"><button>Add</button></form>
+      <div id="stockRes"></div>
+    </div>
+    <div class="sub"><b>Add many at once</b>
+      <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Paste a list of symbols, e.g. NVDA, AAPL, BTCUSD (or a TradingView export)" aria-label="Import a list of symbols"></textarea><button>Import</button></form>
+      <form id="linkStock" class="add"><input id="linkIn" placeholder="Link to a Google Sheet or a shared TradingView watchlist" aria-label="Google Sheet or TradingView watchlist link"><button>Import</button></form>
+      <div class="add stfile"><label class="filebtn" for="stFile">Import a file</label><input type="file" id="stFile" accept=".csv,.txt,.tsv,text/csv,text/plain" class="vis-hidden"><span class="mut sn">A CSV export from your broker or portfolio site. Needs a Symbol, Ticker or ISIN column.</span></div>
+    </div>
+    <div id="stMsg" class="sn" role="status"></div>
+    <div id="stImp"></div>
+    <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Sports">
+    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
+    <div id="spList"></div>
+    <span><button data-a="spreset">Back to the starting leagues</button></span>
+    <div class="sub"><b>Favorites</b>
+      <label data-kw="favourite favorite sport ufc view">Favorite sport <select id="spFavSel"></select></label>
+      <div class="mut sn">Your favorite sport gets its own choice in the Sports box (★ and its name): everything in it that is on now, today and coming up. A UFC card that is on shows every fight as its own row.</div>
+      <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
+      <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>
+    </div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="TV shows">
+    <div class="mut sn" data-kw="tv television series shows episodes streaming netflix hbo calendar">A box with the next episodes of the shows you follow, the ones that just aired, and what is on today. Press ⌕ in the box and type a name to follow a show; click any row for the show and its episodes.</div>
+    <label>Show the TV shows box <input type="checkbox" id="tvOn" data-a="boxtoggle" data-k="tv"></label>
+    <label>Country for “On today” <select id="tvCc"></select></label>
+    <div class="sub"><b>Shows you follow</b>
+      <div id="tvSet"></div>
+    </div>
+    <div class="mut sn">Times are shown in your own time zone. Show information comes from TVmaze.com.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Twitch">
+    <div class="mut sn">Connect your Twitch account so the box can show which of the channels you follow are live.</div>
+    <label>Twitch account <button id="twBtn"></button></label>
+    <label>Open streams in a pop-out window <input type="checkbox" id="twPopOn"></label>
+    <label>Show chat when docking a Twitch stream <input type="checkbox" id="dockChatOn"></label>
+    <label data-kw="favorite favourite starred last live">Show my ★ streamers who are offline <input type="checkbox" id="twOffOn"></label>
+    <div class="mut sn">Pop-out windows are on twitch.tv itself, so your Turbo / sub is recognised and you get no ads. Embedded players often can't see your login (see Help → Twitch).</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="YouTube">
+    <div class="mut sn">The YouTube box shows the newest videos of the channels you subscribe to. YouTube does not let a page read your subscriptions, so you hand it the list as a file. The steps are in Help → YouTube.</div>
+    <label>Subscriptions <span><label class="filebtn" for="ytFile">Choose subscriptions.csv</label><input type="file" id="ytFile" accept=".csv,text/csv" class="vis-hidden"></span></label>
+    <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Radio">
+    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak. The box has the list, play, stop and a volume button. The radio keeps playing while you use the rest of the page.</div>
+    <div class="sub" data-kw="add own station search find genre radio browser stream address"><b>Add a station of your own</b>
+      <div class="add"><input type="text" id="radQ" placeholder="Station name, city or genre, e.g. BBC Radio 1, Stockholm, jazz" aria-label="Search for a radio station" autocomplete="off"><button data-a="radgo">Search</button></div>
+      <div id="radRes"></div>
+      <div id="radMsg" class="sn" role="status"></div>
+      <div class="mut sn">▶ plays a station so you can hear it first; Add puts it in your list under “My stations”. You can also paste a stream address (https://…) here. For your own stations the box does not show which song is playing.</div>
+    </div>
+    <div id="radList"></div>
+    <span><button data-a="radreset">Back to the starting stations</button></span>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Mail">
+    <div class="mut sn">Shows your unread Gmail without giving this site your Google password. Step-by-step instructions are in Help → Mail (Gmail).</div>
+    <div class="sub">
+      <b>First inbox</b>
+      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
+      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
+      <input type="password" id="mt0" placeholder="Token" autocomplete="off">
+    </div>
+    <div class="sub">
+      <b>Second inbox</b>
+      <input type="text" id="mn1" placeholder="Name, e.g. Work">
+      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
+      <input type="password" id="mt1" placeholder="Token" autocomplete="off">
+    </div>
+    <span><button id="mailSave">Save Gmail accounts</button></span>
+    <div id="mailMsg" class="mut" role="status"></div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Calendar">
+    <div class="mut sn">Your own events are added in the calendar itself (the calendar icon in the menu box). Here you bring in other calendars and choose which days the calendar marks by itself.</div>
+    <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
+      <b>Calendars from elsewhere</b>
+      <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
+      <div class="add stfile"><label class="filebtn" for="icsFile">Import an .ics file</label><input type="file" id="icsFile" accept=".ics,.ical,.ifb,text/calendar" class="vis-hidden"><span class="mut sn">Copies the events into your own calendar, once. You can change and delete them afterwards.</span></div>
+      <form id="icsAdd" class="add"><input id="icsUrl" placeholder="Or follow a calendar by its address (.ics)" aria-label="Calendar address" autocomplete="off" maxlength="1000"><button>Follow</button></form>
+      <div class="mut sn">A calendar you follow is read again every half hour and shown next to your own events, without copying them. Up to four. Needs you to be signed in.</div>
+      <div id="icsMsg" class="sn" role="status"></div>
+      <div id="icsImp"></div>
+      <div id="icsList"></div>
+    </div>
+    <div class="sub">
+      <b>Mark these days</b>
+      <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
+      <div id="sdGroups"></div>
+      <label>Mother's and Father's Day as in <select id="sdMf"></select></label>
+      <label>Payday on day of the month (empty = off) <input type="number" id="sdPay" min="1" max="31" step="1" placeholder="–"></label>
+      <div class="mut sn">A payday that falls on a weekend is shown on the Friday before.</div>
+    </div>
+    <div class="sub">
+      <b>Public holidays (days most people are off work)</b>
+      <div id="sdHol" class="chipwrap"></div>
+    </div>
+    <div class="sub">
+      <b>Remind me of marked days</b>
+      <label>When <select id="sdRemDays"><option value="0">On the day</option><option value="1">The day before</option><option value="3">3 days before</option><option value="7">A week before</option></select></label>
+      <div id="sdRem" class="chipwrap"></div>
+      <div class="mut sn">Tick the days you want a notification for. It appears from 08:00 while this page is open, and needs Calendar reminders switched on under Notifications. A day only reminds you if it is also marked above.</div>
+    </div>
+  </section>
+
+  <section class="setgrp wide" data-cat="Content" data-sec="Web page boxes">
+    <div class="mut sn" data-kw="embed iframe website web page box widget dashboard">Show any web page inside a box of its own, for example a dashboard, a live map, a webcam or a shared document. Paste its address and the box appears on your page; move and size it with Edit like any other box (H− and H+ change its height). All three are off until you fill one in.</div>
+    <div id="embSet"></div>
+    <div class="mut sn">Good to know: many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page, and then the box stays empty. Sites that offer an “embed” address do work. The page in the box is that site’s own: it can load its own content and set its own cookies, but it cannot read anything from OmniTree.</div>
+  </section>
+
+  <section class="setgrp nf" data-cat="Alerts" data-sec="Notifications">
+    <div class="mut sn">Small cards in the bottom-right corner. Click one to open it. The bell in the menu box keeps the latest ones.</div>
+    <div class="sub"><b>Tell me about</b>
+      <label>Big news (same story, several sources) <input type="checkbox" id="nfNews"></label>
+      <label class="in">Sources needed <input type="number" id="nfSrcN" min="2" max="6" step="1"></label>
+      <label>Headlines with your highlight words <input type="checkbox" id="nfWords"></label>
+      <label>Stock moves <input type="checkbox" id="nfStock"></label>
+      <label class="in">Fast move, % within 30 min <input type="number" id="nfPct" min="0.5" max="50" step="0.5"></label>
+      <label class="in">Day move, % <input type="number" id="nfDay" min="1" max="90" step="0.5"></label>
+      <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
+      <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
+      <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
+      <label>New mail <input type="checkbox" id="nfMail"></label>
+    </div>
+    <div class="sub"><b>Sound</b>
+      <label>Ping sound with a notification <input type="checkbox" id="nfSound"></label>
+      <label data-kw="alarm timer countdown volume loudness">Alarm volume (timers, countdowns, alarms) <input type="range" id="volSlider" min="0" max="100"></label>
+    </div>
+    <div class="sub"><b>Also send them</b>
+      <label>As desktop notifications <input type="checkbox" id="nfDesktop"></label>
+      <label>To my email <input type="checkbox" id="nfEmail"></label>
+      <div class="mut sn">Emails go to your connected Gmail inbox, sent by its own script (Settings → Mail), with everything from a five-minute stretch in one email. This needs the newer script code from Help → Mail, and this page has to be open in a tab. <button data-a="nfmailtest">Send a test email</button></div>
+      <div id="nfMailMsg" class="sn" role="status"></div>
+    </div>
+    <span><button data-a="nftest">Show a test notification</button></span>
+    <div class="sub"><b>Last 5 notifications and why</b>
+      <div class="mut sn">Every notification and alarm on this device, with what caused it and whether it made a sound. Use it when you heard something and saw nothing.</div>
+      <div id="nfLog"></div>
+    </div>
+    <div class="mut sn">The summary window has its own section, right below this one.</div>
+  </section>
+
+  <section class="setgrp wide" data-cat="Alerts" data-sec="Summary">
+    <div class="mut sn" data-kw="summary morning brief briefing digest recap away since yesterday">The summary is one small window with what happened lately: news, results, streams, stocks and more. Open it any time with the cogwheel → Summary. Here you choose when it opens by itself, what is in it and how it looks.</div>
+    <div class="sub"><b>When</b>
+      <label>Open it by itself <select id="sumAuto"></select></label>
+      <label id="sumAwayRow">“Away” means at least <select id="sumAway"></select></label>
+      <div class="mut sn">Away = the page was closed or its tab was in the background for that long.</div>
+      <label>It covers <select id="sumSpan"></select></label>
+    </div>
+    <div class="sub"><b>How it looks</b>
+      <label>Layout <select id="sumLook"></select></label>
+      <label>Most items in each part <select id="sumN"></select></label>
+    </div>
+    <div class="sub"><b>What is in it</b>
+      <div class="mut sn">Untick a part to leave it out. ▲ ▼ change the order. <b>Choose…</b> narrows a part down to certain sources, channels or sports. A part with nothing to show is left out by itself.</div>
+      <div id="sumParts"></div>
+    </div>
+    <span><button class="pri" data-a="sumshow">Show the summary now</button></span>
   </section>
 
   <section class="setgrp" data-cat="Account" data-sec="Password">
@@ -344,6 +417,12 @@
     <span><button data-a="actload">Refresh</button> <button data-a="actout">Sign out everywhere else</button></span>
   </section>
 
+  <section class="setgrp" data-cat="Account" data-sec="Backup">
+    <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
+    <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
+    <div id="bkMsg" class="mut sn" role="status"></div>
+  </section>
+
   <section class="setgrp" data-cat="Account" data-sec="Delete account">
     <div id="delSignedIn">
       <div class="mut sn">Deletes your account for good, with everything saved in it: settings, sources, notes, calendar and wallpaper. This cannot be undone. Download a backup first if you might want your setup back. You can create a new account with the same email afterwards.</div>
@@ -359,13 +438,6 @@
     <a class="btn" href="admin.html" target="_blank" rel="noopener">Open the admin overview</a>
     <div class="mut sn">The data comes from your function, which checks that the request is signed in as your confirmed email before it answers. Hiding or showing this entry is cosmetic; it gives nobody access.</div>
   </section>
-
-  <section class="setgrp" data-cat="Account" data-sec="Backup">
-    <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
-    <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
-    <div id="bkMsg" class="mut sn" role="status"></div>
-  </section>
-
    </div>
   </div>
  </div>

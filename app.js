@@ -1,4 +1,4 @@
-var VERSION = 123;
+var VERSION = 126;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -495,8 +495,8 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 
 // embed1-3 are the web page boxes: off until you give one an address (Settings > Web page boxes)
 var EMB_IDS = ["embed1", "embed2", "embed3"];
-var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"].concat(EMB_IDS);
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, embed1: 6, embed2: 6, embed3: 6 };
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv"].concat(EMB_IDS);
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, tv: 4, embed1: 6, embed2: 6, embed3: 6 };
 // The layout a new visitor or a new account starts with: sizes, text sizes, list lengths and order.
 // Top row of small boxes, News and Telegram side by side, then Stocks, Twitch, YouTube and (stacked) Reddit over Sports.
 var DEF_LAYOUT = {
@@ -507,7 +507,7 @@ var DEF_LAYOUT = {
   rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 4, sports: 3 }
 };
 var COMPACT = ["weather", "mail", "live", "menu"];
-var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports"];
+var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv"];
 function LAY() {
   if (!P.layout) P.layout = JSON.parse(JSON.stringify(DEF_LAYOUT));
   var L = P.layout;
@@ -596,7 +596,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet();
+  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -788,6 +788,7 @@ function render() {
   }).join("")) : '<div class="empty">No stocks. Restore them in Settings.</div>'), 0, ctlS);
 
   EMB_IDS.forEach(function (id) { T[id] = embOn(id) ? embTile(id) : ""; });
+  T.tv = boxOff("tv") ? "" : tvTile();
   var pp = pairPct();
   var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
   var menuBox = T.menu.replace('style="--fs:', 'style="flex:' + (100 - pp) + ' 1 0%;--fs:');
@@ -1322,6 +1323,263 @@ document.addEventListener("change", function (e) {
   persist(); render(); renderEmbSet();
 });
 
+// ---- TV shows: new episodes of the shows you follow, and what is on today (data from TVmaze, read straight from the browser) ----
+// P.tv = { on, shows: [{ id, n }], view, cc }. The box is off until you switch it on (Settings > Layout & boxes, or TV shows).
+// Per followed show one small request every six hours (its next and its latest episode), kept on this device in between.
+var TVAPI = "https://api.tvmaze.com/", TVC = load("sp_tvc", {}), TVSCH = { t: 0, key: "", ev: [] }, TVQ = "", TVFIND = false, TVRES = null, TVRESQ = "", tvBusy = 0, TVERR = "", TVSHOW = {};
+var TV_VIEWS = [["mine", "My shows: coming up"], ["recent", "My shows: just aired"], ["today", "On today"]];
+var TV_CC = [["US", "United States"], ["GB", "United Kingdom"], ["SE", "Sweden"], ["NO", "Norway"], ["DK", "Denmark"], ["FI", "Finland"], ["DE", "Germany"], ["NL", "Netherlands"], ["FR", "France"], ["ES", "Spain"], ["IT", "Italy"], ["CA", "Canada"], ["AU", "Australia"], ["JP", "Japan"], ["KR", "South Korea"]];
+function tvp() { if (!P.tv || typeof P.tv !== "object") P.tv = {}; if (!Array.isArray(P.tv.shows)) P.tv.shows = []; return P.tv; }
+function tvShows() { return (P.tv && Array.isArray(P.tv.shows) ? P.tv.shows : []).filter(function (s) { return s && /^\d{1,9}$/.test(String(s.id)); }).slice(0, 60); }
+function tvHas(id) { return tvShows().some(function (s) { return String(s.id) === String(id); }); }
+function tvView() { var v = P.tv && P.tv.view; return TV_VIEWS.some(function (o) { return o[0] === v; }) ? v : "mine"; }
+function tvCc() { var c = P.tv && P.tv.cc; return TV_CC.some(function (o) { return o[0] === c; }) ? c : "US"; }
+function tvGet(path) { return fetch(TVAPI + path).then(function (r) { if (!r.ok) throw new Error("TVmaze answered " + r.status); return r.json(); }); }
+function tvEp(e) { return e && e.airstamp ? { s: +e.season || 0, e: +e.number || 0, n: String(e.name || "").slice(0, 80), ts: Date.parse(e.airstamp) } : null; }
+function tvNet(s) { return String((s.network && s.network.name) || (s.webChannel && s.webChannel.name) || "").slice(0, 40); }
+function tvImg(s) { return safeUrl(((s.image || {}).medium || "").replace(/^http:/, "https:")); }
+function tvCode(e) { return e && e.s >= 1900 ? (e.e ? "Ep " + e.e : "") : e && e.s ? "S" + pad2(e.s) + (e.e ? "E" + pad2(e.e) : "") : e && e.e ? "Ep " + e.e : ""; }
+function fetchTv(force) {
+  if (boxOff("tv")) return;
+  var now = Date.now(), todo = tvShows().filter(function (s) { var c = TVC[s.id]; return force || !c || now - c.t > 21600000; });
+  // four at a time, so a long list stays well inside what the service allows
+  var next = function () {
+    var s = todo.shift();
+    if (!s) { if (!--tvBusy) { save("sp_tvc", TVC); render(); } return; }
+    tvGet("shows/" + s.id + "?embed[]=nextepisode&embed[]=previousepisode").then(function (j) {
+      var em = j._embedded || {};
+      TVC[s.id] = { t: Date.now(), n: String(j.name || s.n || "").slice(0, 80), img: tvImg(j), net: tvNet(j), st: String(j.status || ""), next: tvEp(em.nextepisode), prev: tvEp(em.previousepisode) };
+      TVERR = "";
+    }).catch(function (e) { TVERR = String((e && e.message) || e); if (TVC[s.id]) TVC[s.id].t = Date.now() - 20700000; }).then(next);   // a failed one is tried again in five minutes
+  };
+  if (todo.length && !tvBusy) { for (var i = 0; i < 4; i++) { tvBusy++; next(); } }
+  if (tvView() === "today" || force) fetchTvToday(force);
+}
+// "On today": everything that airs today in the chosen country, on television and on streaming services
+function fetchTvToday(force) {
+  var day = new Date().toLocaleDateString("en-CA", { timeZone: TZ }), key = tvCc() + day;
+  if (!force && TVSCH.key === key && Date.now() - TVSCH.t < 3600000) return;
+  TVSCH.key = key; TVSCH.t = Date.now();
+  var one = function (path) { return tvGet(path).catch(function () { return []; }); };
+  Promise.all([one("schedule?country=" + tvCc() + "&date=" + day), one("schedule/web?country=" + tvCc() + "&date=" + day)]).then(function (r) {
+    if (TVSCH.key !== key) return;
+    var seen = {}, ev = [];
+    r[0].concat(r[1]).forEach(function (e) {
+      var s = e.show || (e._embedded && e._embedded.show), ep = tvEp(e);
+      if (!s || !ep || seen[s.id + ":" + ep.s + ":" + ep.e]) return;
+      seen[s.id + ":" + ep.s + ":" + ep.e] = 1;
+      // daily programmes (news, talk and game shows, soaps numbered by the year) would bury everything else; yours are always kept
+      if ((/^(News|Talk Show|Game Show|Sports)$/.test(String(s.type)) || ep.s >= 1900) && !tvHas(s.id)) return;
+      ev.push({ id: s.id, n: String(s.name || "").slice(0, 80), net: tvNet(s), w: +s.weight || 0, ep: ep });
+    });
+    // the 60 best-known shows of the day (and all of yours), in the order they air
+    ev.sort(function (a, b) { return (tvHas(b.id) ? 1 : 0) - (tvHas(a.id) ? 1 : 0) || b.w - a.w; });
+    TVSCH.ev = ev.slice(0, 60).sort(function (a, b) { return a.ep.ts - b.ep.ts || b.w - a.w; });
+    render();
+  });
+}
+function tvDayName(ts) {
+  var k = function (t) { return new Date(t).toLocaleDateString("en-CA", { timeZone: TZ }); }, d = k(ts), now = Date.now();
+  // another year than this one is said so ("Thu 7 Jan 2027")
+  var o = { timeZone: TZ, weekday: "short", day: "numeric", month: "short" };
+  if (d.slice(0, 4) !== k(now).slice(0, 4)) o.year = "numeric";
+  return d === k(now) ? "Today" : d === k(now + 86400000) ? "Tomorrow" : d === k(now - 86400000) ? "Yesterday" : new Date(ts).toLocaleDateString("en-GB", o);
+}
+function tvTime(ts) { return new Date(ts).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); }
+function tvRow(id, name, ep, net, star) {
+  return '<div class="row tvrow"><span><button class="lnk" data-a="tvopen" data-k="' + esc(String(id)) + '"><b>' + esc(name) + "</b> <small>" + esc([tvCode(ep), ep && ep.n && !/^Episode \d+$/.test(ep.n) ? ep.n : "", net].filter(Boolean).join(" · ")) + "</small></button></span>" +
+    '<span class="r">' + (star ? '<i class="fv">★</i>' : "") + '<span class="mut">' + (ep ? tvTime(ep.ts) : "") + "</span></span></div>";
+}
+function tvBody() {
+  var find = TVFIND || TVQ ? '<input type="search" id="tvQ" class="flt" placeholder="Search a show to follow, e.g. Severance" aria-label="Search TV shows">' : "", view = tvView(), mine = tvShows(), now = Date.now();
+  if (TVQ) {
+    if (TVRESQ !== TVQ || !TVRES) return find + '<div class="empty">Searching…</div>';
+    return find + (TVRES.length ? lst("tv", TVRES.map(function (s) {
+      return '<div class="row tvrow"><span><button class="lnk" data-a="tvopen" data-k="' + s.id + '"><b>' + esc(s.n) + "</b> <small>" + esc([s.y, s.net, s.st === "Ended" ? "ended" : ""].filter(Boolean).join(" · ")) + "</small></button></span>" +
+        '<span class="r"><button class="ib sm' + (tvHas(s.id) ? " on" : "") + '" data-a="tvfav" data-k="' + s.id + "|" + esc(s.n) + '" title="' + (tvHas(s.id) ? "Stop following" : "Follow this show") + '" aria-label="' + (tvHas(s.id) ? "Stop following " : "Follow ") + esc(s.n) + '">' + (tvHas(s.id) ? "★" : "☆") + "</button></span></div>";
+    }).join(""), 8) : '<div class="empty">No show found for “' + esc(TVQ) + "”.</div>");
+  }
+  var rows = [], head = "", html = "";
+  if (view === "today") {
+    if (!TVSCH.ev.length) return find + '<div class="empty">' + (Date.now() - TVSCH.t < 8000 ? "Loading today’s shows…" : "Nothing found for today in " + esc((TV_CC.filter(function (o) { return o[0] === tvCc(); })[0] || ["", ""])[1]) + ". Choose another country in Settings, TV shows.") + "</div>";
+    rows = TVSCH.ev.map(function (e) { return { id: e.id, n: e.n, ep: e.ep, net: e.net, star: tvHas(e.id), hd: e.ep.ts < now - 3600000 ? "Earlier today" : "Coming up today" }; });
+  } else {
+    if (!mine.length) return find + '<div class="empty">No shows yet. Press ⌕ above and type the name of a show to follow it.<br><button data-a="tvfilt">Find a show</button></div>';
+    var got = mine.map(function (s) { return { s: s, c: TVC[s.id] }; }).filter(function (x) { return x.c; });
+    if (view === "mine") rows = got.filter(function (x) { return x.c.next && x.c.next.ts > now - 10800000; }).sort(function (a, b) { return a.c.next.ts - b.c.next.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.next, net: x.c.net, hd: tvDayName(x.c.next.ts) }; });
+    else rows = got.filter(function (x) { return x.c.prev && now - x.c.prev.ts < 45 * 86400000; }).sort(function (a, b) { return b.c.prev.ts - a.c.prev.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.prev, net: x.c.net, hd: tvDayName(x.c.prev.ts) }; });
+    if (!rows.length) return find + '<div class="empty">' + (got.length < mine.length && tvBusy ? "Loading your shows…" : TVERR && !got.length ? "TV shows unavailable: " + esc(TVERR) : view === "mine" ? "None of your " + mine.length + " shows has a new episode announced. Try “just aired”." : "None of your shows aired an episode in the last weeks.") + "</div>";
+  }
+  rows.forEach(function (r) { if (r.hd !== head) { head = r.hd; html += '<div class="spday">' + r.hd + "</div>"; } html += tvRow(r.id, r.n, r.ep, r.net, r.star); });
+  return find + lst("tv", html, 8);
+}
+function tvTile() {
+  return tile("tv", "TV shows", tvBody(), 0, '<select data-s="tvview" aria-label="Which shows">' + opts(TV_VIEWS, tvView()) + '</select><button class="ib sm' + (TVFIND || TVQ ? " on" : "") + '" data-a="tvfilt" title="Search a show to follow" aria-label="Search a show to follow">⌕</button>');
+}
+function tvSearch() {
+  var q = TVQ;
+  if (!q) { TVRES = null; render(); return; }
+  tvGet("search/shows?q=" + encodeURIComponent(q)).then(function (j) {
+    if (TVQ !== q) return;
+    TVRES = (Array.isArray(j) ? j : []).map(function (x) { var s = x.show || {}; return { id: +s.id, n: String(s.name || "").slice(0, 80), y: String(s.premiered || "").slice(0, 4), net: tvNet(s), st: String(s.status || "") }; }).filter(function (s) { return s.id && s.n; }).slice(0, 10);
+    TVRESQ = q; render();
+  }).catch(function () { if (TVQ === q) { TVRES = []; TVRESQ = q; render(); } });
+}
+function tvFollow(id, name) {
+  var T = tvp(), i = -1;
+  T.shows.forEach(function (s, n) { if (String(s.id) === String(id)) i = n; });
+  if (i >= 0) { T.shows.splice(i, 1); delete TVC[id]; save("sp_tvc", TVC); }
+  else if (T.shows.length < 60) T.shows.push({ id: +id, n: String(name || "").slice(0, 80) });
+  else { alert("You follow 60 shows, which is the most the box takes. Remove one first."); return; }
+  persist(); render(); renderTvSet(); fetchTv();
+}
+// the window of one show: what it is, what is coming and what has just been on
+function tvStrip(h) { var d = document.createElement("div"); d.innerHTML = String(h || "").replace(/<[^>]+>/g, " "); return (d.textContent || "").replace(/\s+/g, " ").trim(); }
+function tvShowHtml(j) {
+  var eps = ((j._embedded || {}).episodes || []).map(function (e) { var x = tvEp(e); if (x) x.sum = tvStrip(e.summary).slice(0, 220); return x; }).filter(Boolean), now = Date.now();
+  var up = eps.filter(function (e) { return e.ts > now - 3600000; }).slice(0, 8), past = eps.filter(function (e) { return e.ts <= now - 3600000; }).slice(-6).reverse();
+  var epRow = function (e) { return '<div class="row"><span><b class="ctm">' + tvCode(e) + "</b> " + esc(e.n) + (e.sum ? ' <small class="mut">' + esc(e.sum) + "</small>" : "") + '</span><span class="r mut">' + tvDayName(e.ts) + " " + tvTime(e.ts) + "</span></div>"; };
+  var facts = [String(j.premiered || "").slice(0, 4) + (j.ended ? "–" + String(j.ended).slice(0, 4) : j.premiered ? "–" : ""), tvNet(j), (j.genres || []).slice(0, 3).join(", "), j.status === "Running" ? "" : j.status, j.rating && j.rating.average ? "★ " + j.rating.average : "", j.averageRuntime ? j.averageRuntime + " min" : ""].filter(Boolean);
+  var img = tvImg(j), fav = tvHas(j.id);
+  return '<div class="tvwin">' + (img ? '<img class="tvposter" alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '">' : "") + '<div class="tvinfo"><h2 class="mh">' + esc(j.name || "") + '</h2><div class="mut sn">' + esc(facts.join(" · ")) + "</div><p>" + esc(tvStrip(j.summary).slice(0, 600)) + "</p>" +
+    '<p class="tools"><button class="' + (fav ? "" : "pri") + '" data-a="tvfav" data-k="' + (+j.id) + "|" + esc(j.name || "") + '">' + (fav ? "★ Following · stop" : "☆ Follow this show") + "</button>" + linkBtn(String(j.url || "").replace(/^http:/, "https:"), "More on TVmaze") + (j.officialSite ? linkBtn(String(j.officialSite).replace(/^http:/, "https:"), "Official site") : "") + "</p></div></div>" +
+    (up.length ? "<h3>Coming up</h3>" + up.map(epRow).join("") : '<p class="mut sn">' + (j.status === "Ended" ? "This show has ended." : "No new episode has been announced yet.") + "</p>") +
+    (past.length ? "<h3>Latest episodes</h3>" + past.map(epRow).join("") : "") + '<p class="mut sn">Show information from TVmaze.com.</p>';
+}
+var TVOPEN = "";
+function openTv(id) {
+  id = String(id);
+  if (!/^\d{1,9}$/.test(id)) return;
+  TVOPEN = id;
+  var c = TVSHOW[id], name = (TVC[id] && TVC[id].n) || "TV show";
+  if (c && Date.now() - c.t < 3600000) { openModal("TV shows", tvShowHtml(c.j)); return; }
+  openModal("TV shows", '<p class="mut">Loading ' + esc(name) + "…</p>");
+  tvGet("shows/" + id + "?embed=episodes").then(function (j) {
+    TVSHOW[id] = { t: Date.now(), j: j };
+    if (TVOPEN === id && !$("modal").hidden && $("mTitle").textContent === "TV shows") $("mBody").innerHTML = tvShowHtml(j);
+  }).catch(function () { if (TVOPEN === id && !$("modal").hidden && $("mTitle").textContent === "TV shows") $("mBody").innerHTML = '<p class="mut">Could not load this show right now.</p>'; });
+}
+function tvAct(a, k) {
+  if (a === "tvopen") { openTv(k); return; }
+  if (a === "tvfilt") { TVFIND = !(TVFIND || TVQ); if (!TVFIND) { TVQ = ""; TVRES = null; } render(); var q = $("tvQ"); if (q) { q.value = ""; q.focus(); } return; }
+  if (a === "tvfav") {
+    var p = String(k).split("|");
+    tvFollow(p[0], p.slice(1).join("|"));
+    if (WIZ && $("wzPage") && $("wzPage").dataset.p === "tv") { WIZMSG = "Following " + p.slice(1).join("|") + "."; wizRender(); return; }
+    if (!$("modal").hidden && $("mTitle").textContent === "TV shows" && TVSHOW[TVOPEN]) $("mBody").innerHTML = tvShowHtml(TVSHOW[TVOPEN].j);
+    return;
+  }
+  if (a === "tvdel") { tvFollow(k, ""); }
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "tvQ") return;
+  debounced("tvQ", function () { TVQ = $("tvQ") ? $("tvQ").value.trim().slice(0, 60) : ""; render(); tvSearch(); });
+});
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (t && t.dataset && t.dataset.s === "tvview") { tvp().view = t.value; persist(); render(); fetchTv(); }
+  else if (t && t.id === "tvCc") { tvp().cc = t.value; TVSCH = { t: 0, key: "", ev: [] }; persist(); render(); fetchTv(); }
+});
+REFRESH.tv = function () { fetchTv(true); };
+setInterval(function () { if (!document.hidden) fetchTv(); }, 900000);
+// Settings > TV shows
+function renderTvSet() {
+  var el = $("tvSet");
+  if (!el) return;
+  $("tvOn").checked = !boxOff("tv");
+  $("tvCc").innerHTML = opts(TV_CC, tvCc());
+  var mine = tvShows();
+  el.innerHTML = mine.length ? mine.map(function (s) {
+    var c = TVC[s.id];
+    return '<div class="row"><span><button class="lnk" data-a="tvopen" data-k="' + s.id + '"><span class="bnm">' + esc((c && c.n) || s.n || "Show") + "</span></button> <small class=\"mut\">" + esc(c ? [c.net, c.next ? "next " + tvDayName(c.next.ts) : c.st === "Ended" ? "ended" : "no date yet"].filter(Boolean).join(" · ") : "") + '</small></span><button data-a="tvdel" data-k="' + s.id + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></div>';
+  }).join("") : '<div class="mut sn">You follow no shows yet. Switch the box on, press ⌕ in it and type a name.</div>';
+}
+
+// ---- Radio: your own stations, found by name or genre in the Radio Browser catalogue (a free, public list of stations) ----
+// P.radio.mine = [[id, name, "My stations", stream address, country]], the same shape as the built-in list.
+var RB_HOSTS = ["de1", "nl1", "at1", "de2", "fi1"], RBRES = [], RBQ = "";
+function radMine() { var m = P.radio && Array.isArray(P.radio.mine) ? P.radio.mine : []; return m.filter(function (r) { return Array.isArray(r) && /^u_[\w-]{1,40}$/.test(String(r[0])) && /^https:\/\//i.test(String(r[3])); }).slice(0, 25); }
+function radAll() { return radMine().concat(RADIOS); }
+function radMsg(t) { if ($("radMsg")) $("radMsg").textContent = t || ""; }
+function rbGet(path, n) {
+  n = n || 0;
+  return fetch("https://" + RB_HOSTS[n] + ".api.radio-browser.info/json/" + path).then(function (r) { if (!r.ok) throw new Error("status " + r.status); return r.json(); })
+    .catch(function (e) { if (n + 1 < RB_HOSTS.length) return rbGet(path, n + 1); throw e; });   // the catalogue has several servers; the next one is tried if one is down
+}
+function radFind() {
+  var q = $("radQ") ? $("radQ").value.trim() : "", box = $("radRes");
+  if (!box) return;
+  RBQ = q;
+  if (q.length < 2) { box.innerHTML = ""; return; }
+  // a stream address typed in directly is added as it is
+  if (/^https?:\/\//i.test(q)) { box.innerHTML = /^https:\/\//i.test(q) ? '<div class="row"><span class="mut sn">Add this address as a station of your own</span><button data-a="radaddurl">Add</button></div>' : '<p class="mut sn">The address has to start with https://.</p>'; return; }
+  box.innerHTML = '<p class="mut sn">Searching…</p>';
+  var base = "stations/search?hidebroken=true&is_https=true&order=clickcount&reverse=true&limit=30&";
+  Promise.all([rbGet(base + "name=" + encodeURIComponent(q)).catch(function () { return null; }), rbGet(base + "tag=" + encodeURIComponent(q.toLowerCase())).catch(function () { return null; })]).then(function (r) {
+    if (RBQ !== q || !$("radRes")) return;
+    if (!r[0] && !r[1]) { box.innerHTML = '<p class="mut sn">The station catalogue is not answering right now. Try again in a moment.</p>'; return; }
+    var seen = {}, have = {};
+    radAll().forEach(function (s) { have[s[3]] = 1; });
+    RBRES = (r[0] || []).concat(r[1] || []).filter(function (s) {
+      var u = String(s.url_resolved || s.url || "");
+      // what a browser can play: a plain https stream (not a playlist that needs a player of its own)
+      if (!s.stationuuid || seen[s.stationuuid] || !/^https:\/\//i.test(u) || +s.hls === 1 || /\.(m3u8?|pls)(\?|$)/i.test(u) || !String(s.name || "").trim()) return false;
+      seen[s.stationuuid] = 1;
+      return true;
+    }).sort(function (a, b) { return (+b.clickcount || 0) - (+a.clickcount || 0); }).slice(0, 15).map(function (s) {
+      return { id: "u_" + String(s.stationuuid).replace(/[^\w-]/g, "").slice(0, 36), n: String(s.name).trim().slice(0, 60), u: String(s.url_resolved || s.url), c: String(s.country || s.countrycode || "").slice(0, 30), tags: String(s.tags || "").split(",").filter(Boolean).slice(0, 3).join(", ").slice(0, 60), kb: +s.bitrate || 0, have: !!have[String(s.url_resolved || s.url)] };
+    });
+    box.innerHTML = RBRES.length ? RBRES.map(function (s, i) {
+      return '<div class="row"><span><span class="bnm rbn">' + esc(s.n) + '</span> <small class="mut">' + esc([s.c, s.tags, s.kb ? s.kb + " kbit" : ""].filter(Boolean).join(" · ")) + "</small></span>" + (s.have || radMine().some(function (m) { return m[0] === s.id; }) ? '<span class="mut sn">✓ added</span>' : '<span class="radb"><button data-a="radtry" data-k="' + i + '" title="Listen to it first">▶</button><button data-a="radadd" data-k="' + i + '">Add</button></span>') + "</div>";
+    }).join("") : '<p class="mut sn">No station found for “' + esc(q) + "”. Try a shorter name, a city or a genre such as jazz.</p>";
+  });
+}
+function radAddMine(st) {
+  P.radio = P.radio || {};
+  var mine = radMine();
+  if (mine.length >= 25) { radMsg("You have 25 stations of your own, which is the most. Remove one first."); return false; }
+  if (mine.some(function (m) { return m[0] === st[0] || m[3] === st[3]; })) { radMsg("You already have that station."); return false; }
+  mine.push(st);
+  P.radio.mine = mine;
+  // a station you add is ticked straight away
+  P.radio.on = radioIds().map(function (r) { return r[0]; }).concat([st[0]]);
+  persist(); renderRadioList(); render();
+  radMsg("Added " + st[1] + ". It is in the Radio box’s list now.");
+  return true;
+}
+var RADTRY = null;
+function radAct(a, k) {
+  if (a === "radgo") { radFind(); return; }
+  if (a === "radadd") { var s = RBRES[+k]; if (s && radAddMine([s.id, s.n, "My stations", s.u, s.c || "—"])) radFind(); return; }
+  if (a === "radaddurl") {
+    var u = safeUrl(RBQ);
+    if (!/^https:\/\//i.test(u)) return;
+    if (radAddMine(["u_" + hs(u), bmHost(u) || "My station", "My stations", u.slice(0, 500), "—"])) { $("radQ").value = ""; $("radRes").innerHTML = ""; }
+    return;
+  }
+  // a short listen before adding: plays in a player of its own, so the Radio box is left alone
+  if (a === "radtry") {
+    var t = RBRES[+k];
+    if (!t) return;
+    if (RADTRY) { RADTRY.pause(); RADTRY.removeAttribute("src"); RADTRY.load(); }
+    if (RADTRY && RADTRY.getAttribute("data-id") === t.id) { RADTRY = null; radMsg(""); return; }   // the same ▶ again stops it
+    RADTRY = new Audio(); RADTRY.setAttribute("data-id", t.id); RADTRY.volume = radioVol() / 100; RADTRY.src = t.u;
+    radMsg("Playing " + t.n + "… press ▶ again to stop.");
+    var p = RADTRY.play(), bad = function () { if (RADTRY && RADTRY.getAttribute("data-id") === t.id) { radMsg(t.n + " could not be played in the browser. Try another one."); RADTRY = null; } };
+    RADTRY.addEventListener("error", bad);
+    if (p && p.catch) p.catch(bad);
+    return;
+  }
+  if (a === "raddel") {
+    P.radio = P.radio || {};
+    P.radio.mine = radMine().filter(function (m) { return m[0] !== k; });
+    if (Array.isArray(P.radio.on)) P.radio.on = P.radio.on.filter(function (x) { return x !== k; });
+    if (RAD.id === k) radioStop();
+    persist(); renderRadioList(); render(); radMsg("");
+  }
+}
+function radTryStop() { if (RADTRY) { RADTRY.pause(); RADTRY.removeAttribute("src"); RADTRY.load(); RADTRY = null; } }
+
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -1356,9 +1614,11 @@ function renderHidden() {
   }).join("");
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
-var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports" };
-function boxOff(id) { if (isEmb(id)) return !embOn(id); var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
+var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports", tv: "TV shows" };
+function boxOff(id) { if (isEmb(id)) return !embOn(id); if (id === "tv") return !(P.tv && P.tv.on); var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
 function setBoxOff(id, off) {
+  if (id === "tv") { tvp().on = !off; if (!off && !LAY().fs.tv) LAY().fs.tv = 0.9;   // the same starting text size as the other list boxes
+    persist(); render(); renderTvSet(); if (!off) fetchTv(true); return; }
   if (isEmb(id)) { P.emb = P.emb && typeof P.emb === "object" ? P.emb : {}; P.emb[id] = Object.assign({}, emb(id), { on: !off }); persist(); render(); renderEmbSet(); return; }
   var L = LAY();
   L.off = L.off || {};
@@ -1673,7 +1933,7 @@ function stImport(text, from) {
     stMsg(""); stImpDraw();
   };
   if (!need.length) { finish({}); return; }
-  if (!sb || !USER) { stMsg("Sign in first (Settings, then Account)."); return; }
+  if (!sb || !USER) { stMsg("Sign in first (the person icon in the menu box)."); return; }
   stMsg("Looking up " + need.length + " ISIN code" + (need.length === 1 ? "" : "s") + "…");
   Promise.all([need.slice(0, 50), need.slice(50)].filter(function (a) { return a.length; }).map(function (a) {
     return sb.functions.invoke("quotes", { body: { isins: a } }).then(function (r) { return (r.data && r.data.isin) || {}; }).catch(function () { return {}; });
@@ -1724,7 +1984,7 @@ document.addEventListener("submit", function (e) {
   }
   if (e.target.id === "linkStock") {
     e.preventDefault();
-    if (!sb || !USER) { alert("Sign in first (Settings, then Account)."); return; }
+    if (!sb || !USER) { alert("Sign in first (the person icon in the menu box)."); return; }
     var lk = $("linkIn").value.trim();
     if (/^https:\/\/docs\.google\.com\/spreadsheets\//.test(lk)) {
       stMsg("Reading the sheet…");
@@ -3213,7 +3473,7 @@ var RADIOS = [
   ["wnyc", "WNYC New York", "News & talk", "https://fm939.wnyc.org/wnycfm", "English"]
 ];
 var RADIO_DEF = ["retro", "rockfm", "hot97", "hh100", "old181", "rprock", "rpmain"];
-function radioIds() { var on = P.radio && Array.isArray(P.radio.on) ? P.radio.on : RADIO_DEF; return RADIOS.filter(function (r) { return on.indexOf(r[0]) >= 0; }); }
+function radioIds() { var on = P.radio && Array.isArray(P.radio.on) ? P.radio.on : RADIO_DEF; return radAll().filter(function (r) { return on.indexOf(r[0]) >= 0; }); }
 function radioCur() { var list = radioIds(), id = P.radio && P.radio.cur; return list.filter(function (r) { return r[0] === id; })[0] || list[0] || null; }
 function radioVol() { var v = P.radio && P.radio.vol; return v >= 0 && v <= 100 ? +v : 60; }
 function radioSet(k, v) { P.radio = P.radio || {}; P.radio[k] = v; persist(); }
@@ -3221,6 +3481,7 @@ var RAD = { a: null, id: "", state: "" };   // state: "" stopped, "load" connect
 function radioPlay() {
   var s = radioCur();
   if (!s) return;
+  radTryStop();
   if (!RAD.a) {
     RAD.a = new Audio(); RAD.a.preload = "none";
     var set = function (st) { return function () { if (RAD.state && RAD.state !== st) { RAD.state = st; render(); } }; };
@@ -3287,6 +3548,7 @@ function radHist(id) { return Array.isArray(RADH[id]) ? RADH[id] : []; }
 function radioNow(force) {
   var st = radioCur();
   if (!st || !sb || !USER) return Promise.resolve();
+  if (/^u_/.test(st[0])) { RNP.id = st[0]; RNP.raw = ""; RNP.err = ""; RNP.at = Date.now(); return Promise.resolve(); }   // a station of your own: its song text is not read
   if (!force && RNP.id === st[0] && Date.now() - RNP.at < 20000) return Promise.resolve();
   if (RNP.id !== st[0]) { RNP.raw = null; RNP.err = ""; }
   RNP.id = st[0]; RNP.at = Date.now();
@@ -3397,15 +3659,15 @@ function showRadioPeek(el) {
 function renderRadioList() {
   var on = {}, groups = {}, order = [];
   radioIds().forEach(function (r) { on[r[0]] = 1; });
-  RADIOS.forEach(function (r) { if (!groups[r[2]]) { groups[r[2]] = []; order.push(r[2]); } groups[r[2]].push(r); });
+  radAll().forEach(function (r) { if (!groups[r[2]]) { groups[r[2]] = []; order.push(r[2]); } groups[r[2]].push(r); });
   $("radList").innerHTML = order.map(function (g) {
-    return '<div class="sub"><b>' + esc(g) + "</b>" + groups[g].map(function (r) { return '<label><span>' + esc(r[1]) + ' <small class="rlang">' + esc(r[4]) + '</small></span> <input type="checkbox" data-a="radtoggle" data-k="' + r[0] + '"' + (on[r[0]] ? " checked" : "") + "></label>"; }).join("") + "</div>";
+    return '<div class="sub"><b>' + esc(g) + "</b>" + groups[g].map(function (r) { return '<label><span>' + esc(r[1]) + (r[4] && r[4] !== "—" ? ' <small class="rlang">' + esc(r[4]) + "</small>" : "") + (/^u_/.test(r[0]) ? ' <button class="radx" data-a="raddel" data-k="' + esc(r[0]) + '" title="Remove this station" aria-label="Remove ' + esc(r[1]) + '">✕</button>' : "") + '</span> <input type="checkbox" data-a="radtoggle" data-k="' + r[0] + '"' + (on[r[0]] ? " checked" : "") + "></label>"; }).join("") + "</div>";
   }).join("");
 }
 function radioToggle(id, isOn) {
   var cur = radioIds().map(function (r) { return r[0]; }).filter(function (x) { return x !== id; });
   if (isOn) cur.push(id);
-  radioSet("on", RADIOS.map(function (r) { return r[0]; }).filter(function (x) { return cur.indexOf(x) >= 0; }));
+  radioSet("on", radAll().map(function (r) { return r[0]; }).filter(function (x) { return cur.indexOf(x) >= 0; }));
   render();
 }
 
@@ -3565,6 +3827,7 @@ document.addEventListener("input", function (e) {
   if (e.target.id === "cityIn" && e.target.value.trim().length >= 2) debounced("cityIn", cityGo);
   else if (e.target.id === "locIn" && e.target.value.trim().length >= 2) debounced("locIn", locGo);
   else if (e.target.id === "wzCity" && e.target.value.trim().length >= 2) debounced("wzCity", wizCityGo);
+  else if (e.target.id === "radQ") debounced("radQ", radFind);
   else if (e.target.id === "stockIn" || (e.target.id === "wzIn" && $("wzPage") && $("wzPage").dataset.p === "stocks")) debounced("stFind", function () { stFind(e.target.id); });
 });
 document.addEventListener("keydown", function (e) {
@@ -3687,6 +3950,9 @@ document.addEventListener("click", function (e) {
   if (a === "opennotes") { openNotes(); return; }
   if (a === "acctmenu2") { e.stopPropagation(); if (!USER) { MENU_OPEN = ""; ACCTMSG = ""; render(); openAuth(); return; } MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
+  if (a === "sumshow" || a === "sumpick" || a === "summv") { sumAct(a, k); return; }
+  if (/^tv(open|filt|fav|del)$/.test(a)) { tvAct(a, k); return; }
+  if (/^rad(go|add|addurl|try|del)$/.test(a)) { radAct(a, k); return; }
   if (a === "bmimpgo") { bmImpGo(); return; }
   if (a === "bmimpno") { BMIMP = null; bmImpDraw(); bmImpMsg(""); return; }
   if (/^ics(impgo|impno|reload|del)$/.test(a)) { icsAct(a, k); return; }
@@ -3713,7 +3979,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); return; }
   if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
@@ -4169,7 +4435,7 @@ function openHelp() {
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
     ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"],
     ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
-    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
+    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["tv", "TV shows"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
   ];
   var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
     toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
@@ -4178,7 +4444,7 @@ function openHelp() {
 
   html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide walks you through the boxes you want; you can run it again from <b>Settings &rarr; Layout &amp; boxes</b>. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
 
-  html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
+  html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Date &amp; time</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
   html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
     '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google\'s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it at any time, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
@@ -4251,9 +4517,9 @@ function openHelp() {
     '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
     '</ol>';
 
-  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
+  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. For your own stations the box does not show which song is playing. A red play button means that station could not be reached just now. <b>What is playing:</b> hover the box (not its buttons) for the song, artist and album cover; click it for the album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
-  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Clock &amp; alarms</b> &rarr; <b>Alarm volume</b>.</p>';
+  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p>';
 
   html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or use its shortcut). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>' +
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
@@ -4264,7 +4530,10 @@ function openHelp() {
     '<p><b>Search:</b> press ⌕ at the top of the box and type a team, player, fighter, league or event. It looks through everything that is loaded for the leagues you follow, whatever the view: what is live, what is coming up this month and the recent results, in that order. Several words narrow it down (for example <code>ufc allen</code>). Press ⌕ again to close the search.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Clock &amp; alarms you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
+    '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
+    '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +
@@ -4278,7 +4547,12 @@ function openHelp() {
     '<p><b>Good to know:</b> a card goes away by itself after 20 seconds, counted only while you are looking at the page, so one that arrived while the tab was in the background is still there when you come back. The ping can only play once you have clicked somewhere on the page; that is a rule of the browser. Heard something and saw nothing? <b>Settings &rarr; Notifications</b> ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.</p>' +
     '<p><b>On all your devices:</b> pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing its history are saved to your account. Do it on the computer and the phone shows the same within a minute, and nothing is announced twice.</p>' +
     '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
-    '<p><b>Summary:</b> on your first visit each day a small "Since yesterday" window shows weather warnings, today\'s events, top stories, biggest movers, mail and who is live. Open it any time from the cogwheel menu or with <code>b</code>.</p>' +
+    '<p><b>Summary:</b> one small window with what happened lately. Open it any time from the cogwheel menu or with <code>b</code>. Everything about it is set under <b>Settings → Summary</b>:</p><ul>' +
+    '<li><b>When it opens by itself:</b> never, on the first visit of the day, when you come back after being away, or both. You choose how long &ldquo;away&rdquo; is (30 minutes to 8 hours); away means the page was closed or its tab was in the background for that long.</li>' +
+    '<li><b>How far back it looks:</b> the last 6, 12 or 24 hours, or the last 2 days.</li>' +
+    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
+    '<li><b>Narrowing a part down:</b> press <b>Choose…</b> on a part to pick which news sources, Telegram channels, subreddits or sports it uses, or to keep it to your ★ channels and ★ teams only. New sources you add later are included by themselves.</li>' +
+    '<li><b>How it looks:</b> a list, cards side by side, or a compact version, and how many items each part shows at most (3 to 15).</li></ul>' +
     '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
 
   html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
@@ -4811,7 +5085,7 @@ function loadStockNews(id) {
 }
 
 // ---- Morning summary: what happened in the last 24 hours, in one small window ----
-var BRIEF_T = "Since yesterday";
+var BRIEF_T = "Summary";
 // "Top" = what most of your feeds are talking about. Every headline, Telegram post and Reddit title from the last 24 hours
 // is broken into words; a story scores by how often its words turn up elsewhere (names and numbers count extra), plus a
 // bonus for several sources reporting it and for your highlight words. Near-duplicates and a fourth story on the same
@@ -4822,14 +5096,14 @@ function tokSet(t, lg) {
   tokz(t, lg).forEach(function (x) { o.set.push(x.w); if (x.k === "n" || x.k === "p" || x.k === "d") o.strong[x.w] = 1; });
   return o;
 }
-function topStories(n) {
-  var now = Date.now(), cut = now - 86400000, df = {};
+function topStories(n, hours, skip) {
+  var now = Date.now(), cut = now - (hours || 24) * 3600000, df = {};
   NEWS.concat(TGP, RD).forEach(function (x) {
     if (x.ts < cut) return;
     var seen = {};
     tokSet(x.t, x.lg).set.forEach(function (w) { if (!seen[w]) { seen[w] = 1; df[w] = (df[w] || 0) + 1; } });
   });
-  var pool = newsGroups().filter(function (g) { return g[0].ts > cut; }).map(function (g) {
+  var pool = newsGroups().filter(function (g) { return g[0].ts > cut && (!skip || g.some(function (x) { return !skip(x.s); })); }).map(function (g) {
     var tk = tokSet(g[0].t, g[0].lg), uniq = {}, heat = 0;
     tk.set.forEach(function (w) {
       if (uniq[w]) return;
@@ -4850,33 +5124,164 @@ function topStories(n) {
   });
   return out.map(function (o) { return o.g; });
 }
-function briefHtml() {
-  var now = Date.now(), cut = now - 86400000, h = "", sec = function (t, body) { return body ? "<h3>" + t + "</h3>" + body : ""; };
-  var warn = WX ? wxWarn(WX) : [];
-  if (warn.length) h += '<div class="warnbox">' + warn.map(function (x) { return "<div><b>! " + x.t + "</b> " + x.day.toLowerCase() + (x.x ? " · " + esc(x.x) : "") + "</div>"; }).join("") + "</div>";
-  var todayEv = evsOn(ymd(new Date()));
-  h += sec("Today in your calendar", todayEv.map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join(""));
-  var top = NEWS.length ? topStories(6) : [];
-  h += sec("Top stories", top.map(function (g) {
-    return '<div class="row' + (g.some(function (x) { return isRead(x.u); }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
-  }).join(""));
-  var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, 6);
-  h += sec("Biggest movers", mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "");
-  var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!c || !c.url || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
-  h += sec("Mail", mail ? '<div class="chips">' + mail + "</div>" : "");
-  var live = (TWC && TW ? TW : []).filter(function (x) { return !P.hidden["t:" + x.id]; }).sort(function (a, b) { return (P.fav["t:" + b.id] ? 1 : 0) - (P.fav["t:" + a.id] ? 1 : 0) || b.v - a.v; }).slice(0, 8);
-  h += sec("Live now", live.length ? '<div class="chips">' + live.map(function (x) { return '<button data-a="open" data-k="' + esc("t:" + x.id) + '" title="' + esc(x.title || "") + '"><span class="dot"></span><b>' + esc(x.name || x.id) + "</b> <small>" + esc(x.sub || "") + "</small></button>"; }).join("") + "</div>" : "");
-  return h || '<p class="mut">Nothing to show yet. Sign in and let the page load first.</p>';
+// What the summary can show, in the order it starts with: [id, name, what it is, on from the start]
+var SUM_PARTS = [
+  ["wx", "Weather", "The weather now, today's low and high, and any warnings", 1],
+  ["cal", "Today in your calendar", "Your events of today, also from calendars you follow", 1],
+  ["top", "Top stories", "What most of your news sources are writing about", 1],
+  ["tg", "Telegram", "The newest posts of your channels", 0],
+  ["rd", "Reddit", "The posts at the top of your subreddits", 0],
+  ["movers", "Biggest stock movers", "The stocks on your list that moved most today", 1],
+  ["mail", "Mail", "Unread mail in your inboxes", 1],
+  ["live", "Live now on Twitch", "Channels you follow that are live right now", 1],
+  ["waslive", "Streamers you missed", "Your ★ streamers who were live while you were away and are offline now", 1],
+  ["spres", "Sports results", "Games, fights and races that finished", 1],
+  ["spnext", "Sports coming up", "What is on now and in the next 24 hours", 1]
+];
+var SUM_AUTO = [["off", "Never (only when I open it)"], ["day", "On the first visit of the day"], ["away", "When I come back after being away"], ["both", "Both: first visit of the day and after being away"]];
+var SUM_AWAY = [["30", "30 minutes"], ["60", "1 hour"], ["120", "2 hours"], ["240", "4 hours"], ["480", "8 hours"]];
+var SUM_SPAN = [["6", "The last 6 hours"], ["12", "The last 12 hours"], ["24", "The last 24 hours"], ["48", "The last 2 days"]];
+var SUM_LOOK = [["list", "List: one part under the other"], ["cards", "Cards: parts side by side in boxes"], ["compact", "Compact: small and tight"]];
+var SUM_N = [["3", "3"], ["6", "6"], ["10", "10"], ["15", "15"]];
+// The summary settings with every gap filled in. P.sum = { auto, away, span, look, n, order, off, x, twFav, spFav };
+// `x` holds what is left OUT of a part ("n:BBC", "g:channel", "r:subreddit", "p:football"), so new sources are in by themselves.
+function SUM() {
+  var s = P.sum && typeof P.sum === "object" ? P.sum : {}, ids = SUM_PARTS.map(function (p) { return p[0]; }), has = function (list, v, d) { return list.some(function (o) { return o[0] === String(v); }) ? String(v) : d; };
+  var order = (Array.isArray(s.order) ? s.order : []).filter(function (x, i, a) { return ids.indexOf(x) >= 0 && a.indexOf(x) === i; }), off = {};
+  ids.forEach(function (x) { if (order.indexOf(x) < 0) order.push(x); });
+  SUM_PARTS.forEach(function (p) { var v = s.off && typeof s.off === "object" ? s.off[p[0]] : null; if (v == null ? !p[3] : v) off[p[0]] = 1; });
+  return { auto: P.brief === false ? "off" : has(SUM_AUTO, s.auto, "day"), away: +has(SUM_AWAY, s.away, "120"), span: +has(SUM_SPAN, s.span, "24"), look: has(SUM_LOOK, s.look, "list"), n: +has(SUM_N, s.n, "6"),
+    order: order, off: off, x: s.x && typeof s.x === "object" ? s.x : {}, twFav: !!s.twFav, spFav: !!s.spFav };
 }
-function openBrief() { openModal(BRIEF_T, '<div class="brief">' + briefHtml() + "</div>"); }
+function sumSet(k, v) { P.sum = Object.assign({}, P.sum && typeof P.sum === "object" ? P.sum : {}); P.sum[k] = v; persist(); renderSumSet(); refreshBrief(); }
+// every game, fight and race that is loaded for the leagues you follow (minus the sports left out of the summary)
+function sumSports(S) {
+  var by = {}, on = {};
+  spLeagues().forEach(function (l) { on[l.n] = 1; });
+  [SP_PAST, SP_UP, SP_NOW].forEach(function (st) { Object.keys(st).forEach(function (k) { st[k].ev.forEach(function (e) { by[e.id] = e; }); }); });
+  return Object.keys(by).map(function (k) { return by[k]; }).filter(function (e) { return on[e.lg] && e.id.slice(-2) !== "~r" && !S.x["p:" + e.sp] && (!S.spFav || e.names.some(spIsFav)); });
+}
+function sumSpRow(e) {
+  var txt = e.kind === "team" ? esc(e.home.n) + (e.state === "pre" ? ' <span class="mut">–</span> ' : " <b>" + esc(e.home.s != null ? e.home.s : "") + "–" + esc(e.away.s != null ? e.away.s : "") + "</b> ") + esc(e.away.n) : esc(e.title || "");
+  return '<div class="row"><span><button class="lnk bsp" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + "<span>" + txt + '</span></button></span><span class="r">' + (e.names.some(spIsFav) ? '<i class="fv">★</i>' : "") + (e.state === "post" ? '<span class="mut">' + esc(e.lg) + "</span>" : spWhen(e)) + "</span></div>";
+}
+// the parts of the summary that have something to show: { id: html }
+function sumParts(S) {
+  var now = Date.now(), cut = now - S.span * 3600000, N = S.n, out = {};
+  if (WX && WX.current) {
+    var warn = wxWarn(WX), d = WX.daily || {};
+    out.wx = (warn.length ? '<div class="warnbox">' + warn.map(function (x) { return "<div><b>! " + x.t + "</b> " + x.day.toLowerCase() + (x.x ? " · " + esc(x.x) : "") + "</div>"; }).join("") + "</div>" : "") +
+      '<div class="row"><span><button class="lnk bsp" data-a="weather">' + wxIcon(WX.current.weather_code, WX.current.is_day, 18) + "<span><b>" + esc(homeCity().name) + " " + Math.round(WX.current.temperature_2m) + "°</b> " + esc(wxText(WX.current.weather_code)) + '</span></button></span><span class="r mut">' +
+      (d.temperature_2m_min && d.temperature_2m_max ? Math.round(d.temperature_2m_min[0]) + "° / " + Math.round(d.temperature_2m_max[0]) + "°" : "") + "</span></div>";
+  }
+  out.cal = evsOn(ymd(new Date())).slice(0, Math.max(N, 6)).map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join("");
+  out.top = (NEWS.length ? topStories(N, S.span, function (src) { return !!S.x["n:" + src]; }) : []).map(function (g) {
+    return '<div class="row' + (g.some(function (x) { return isRead(x.u); }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
+  }).join("");
+  out.tg = TGP.filter(function (g) { return g.ts > cut && shown("g:" + g.s) && !S.x["g:" + g.s]; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, N).map(function (g) {
+    return '<div class="row' + (isRead(g.u) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("m:" + g.u) + '">' + esc(String(g.t).slice(0, 140)) + "</button> <small>" + esc(g.s) + '</small></span><span class="r mut">' + ago(g.ts) + "</span></div>";
+  }).join("");
+  out.rd = RD.filter(function (x) { return x.ts > cut && !S.x["r:" + x.s]; }).slice(0, N).map(function (x) {
+    return '<div class="row' + (isRead(x.u) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("r:" + x.u) + '">' + esc(String(x.t).slice(0, 140)) + "</button> <small>r/" + esc(x.s) + '</small></span><span class="r mut">' + ago(x.ts) + "</span></div>";
+  }).join("");
+  var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, N);
+  out.movers = mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "";
+  var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!c || !c.url || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
+  out.mail = mail ? '<div class="chips">' + mail + "</div>" : "";
+  var liveAll = (TWC && TW ? TW : []).filter(function (x) { return !P.hidden["t:" + x.id] && (!S.twFav || P.fav["t:" + x.id]); }), liveIds = {};
+  (TWC && TW ? TW : []).forEach(function (x) { liveIds[x.id] = 1; });
+  var live = liveAll.sort(function (a, b) { return (P.fav["t:" + b.id] ? 1 : 0) - (P.fav["t:" + a.id] ? 1 : 0) || b.v - a.v; }).slice(0, Math.max(N, 4));
+  out.live = live.length ? '<div class="chips">' + live.map(function (x) { return '<button data-a="open" data-k="' + esc("t:" + x.id) + '" title="' + esc(x.title || "") + '"><span class="dot"></span><b>' + esc(x.name || x.id) + "</b> <small>" + esc(x.sub || "") + "</small></button>"; }).join("") + "</div>" : "";
+  var was = (TWC ? twFavs() : []).filter(function (l) { var o = TWOFF[l]; return !liveIds[l] && o && o.last > cut; }).sort(function (a, b) { return TWOFF[b].last - TWOFF[a].last; }).slice(0, Math.max(N, 4));
+  out.waslive = was.length ? '<div class="chips">' + was.map(function (l) { return '<button data-a="open" data-k="' + esc("t:" + l) + '"><b>' + esc(TWOFF[l].n || l) + '</b> <small>was live ' + ago(TWOFF[l].last) + " ago</small></button>"; }).join("") + "</div>" : "";
+  var sp = S.off.spres && S.off.spnext ? [] : sumSports(S), end = function (e) { return e.te || e.ts; };
+  out.spres = sp.filter(function (e) { return e.state === "post" && end(e) > cut; }).sort(function (a, b) { return (b.names.some(spIsFav) ? 1 : 0) - (a.names.some(spIsFav) ? 1 : 0) || end(b) - end(a); }).slice(0, N).map(sumSpRow).join("");
+  out.spnext = sp.filter(function (e) { return e.state === "in" || (e.state === "pre" && e.ts > now - 3600000 && e.ts < now + 86400000); }).sort(function (a, b) { return (b.state === "in" ? 1 : 0) - (a.state === "in" ? 1 : 0) || (b.names.some(spIsFav) ? 1 : 0) - (a.names.some(spIsFav) ? 1 : 0) || a.ts - b.ts; }).slice(0, N).map(sumSpRow).join("");
+  return out;
+}
+function briefHtml() {
+  var S = SUM(), parts = sumParts(S), name = {};
+  SUM_PARTS.forEach(function (p) { name[p[0]] = p[1]; });
+  var h = S.order.filter(function (id) { return !S.off[id] && parts[id]; }).map(function (id) { return '<section class="bsec"><h3>' + name[id] + "</h3>" + parts[id] + "</section>"; }).join("");
+  return '<div class="bhead mut sn">' + esc(SUM_SPAN.filter(function (o) { return +o[0] === S.span; })[0][1]) + "</div>" + (h || '<p class="mut bnone">Nothing to show yet. ' + (USER ? "Let the page load first, or switch more parts on." : "Sign in and let the page load first.") + "</p>") +
+    '<div class="bfoot"><button class="lnk2" data-a="setgo" data-k="Summary">Choose what the summary shows</button></div>';
+}
+function briefWrap() { return '<div class="brief ' + SUM().look + '">' + briefHtml() + "</div>"; }
+function openBrief() {
+  // results need the finished games of the last days: read once, when the summary asks for them
+  var S = SUM();
+  if (!S.off.spres && !boxOff("sports") && !SUMSP) { SUMSP = true; spLeagues().forEach(function (lg) { if (lg.kind && !lg.x && !SP_PAST[lg.id]) spGet(lg, SP_CATALOG.indexOf(lg), spPastDates(lg), true).then(refreshBrief); }); }
+  openModal(BRIEF_T, briefWrap());
+}
+var SUMSP = false;
 // Keeps an open summary up to date while the rest of the data is still arriving
-function refreshBrief() { if (!$("modal").hidden && $("mTitle").textContent === BRIEF_T) $("mBody").innerHTML = '<div class="brief">' + briefHtml() + "</div>"; }
+function refreshBrief() { if (!$("modal").hidden && $("mTitle").textContent === BRIEF_T) $("mBody").innerHTML = briefWrap(); }
+// Opens by itself: on the first visit of the day, and/or when you come back after being away for a while (Settings > Summary).
+// "Away" = the page was closed, or its tab was in the background, for at least the time you chose.
+var SUM_SEEN = +load("sp_sumseen", 0) || 0, SUM_READY = false;
+function sumTouch() { SUM_SEEN = Date.now(); save("sp_sumseen", SUM_SEEN); }
 function maybeBrief() {
-  var today = ymd(new Date());
-  if (P.brief === false || !USER || !NEWS.length || !$("modal").hidden || load("sp_brief", "") === today) return;
+  var S = SUM(), today = ymd(new Date()), now = Date.now();
+  if (document.hidden || !USER || !NEWS.length) return;
+  SUM_READY = true;
+  var day = (S.auto === "day" || S.auto === "both") && load("sp_brief", "") !== today;
+  var away = (S.auto === "away" || S.auto === "both") && SUM_SEEN > 0 && now - SUM_SEEN >= S.away * 60000;
+  sumTouch();
+  if ((!day && !away) || !$("modal").hidden || !$("panel").hidden) return;
   save("sp_brief", today);
   openBrief();
 }
+setInterval(function () { if (!document.hidden && SUM_READY) sumTouch(); }, 60000);
+document.addEventListener("visibilitychange", function () { if (!document.hidden && SUM_READY) setTimeout(maybeBrief, 3000); });
+// ---- Settings > Summary ----
+var SUM_PICK = "";
+function sumChoices(id) {
+  if (id === "top") return newsSrc().map(function (x) { return ["n:" + x.name, x.name]; });
+  if (id === "tg") return tgSrc().map(function (x) { return ["g:" + x, x]; });
+  if (id === "rd") return rdSrc().map(function (x) { return ["r:" + x, "r/" + x]; });
+  if (id === "spres" || id === "spnext") return spSports().slice(1).map(function (x) { return ["p:" + x[0], x[1]]; });
+  return [];
+}
+function renderSumSet() {
+  var el = $("sumParts");
+  if (!el) return;
+  var S = SUM(), info = {};
+  SUM_PARTS.forEach(function (p) { info[p[0]] = p; });
+  $("sumAuto").innerHTML = opts(SUM_AUTO, S.auto); $("sumAway").innerHTML = opts(SUM_AWAY, String(S.away)); $("sumSpan").innerHTML = opts(SUM_SPAN, String(S.span));
+  $("sumLook").innerHTML = opts(SUM_LOOK, S.look); $("sumN").innerHTML = opts(SUM_N, String(S.n));
+  $("sumAwayRow").hidden = S.auto !== "away" && S.auto !== "both";
+  el.innerHTML = S.order.map(function (id, i) {
+    var p = info[id], ch = sumChoices(id), fav = id === "live" || id === "waslive" ? "twFav" : id === "spres" || id === "spnext" ? "spFav" : "", can = ch.length > 1 || (fav && id !== "waslive"), open = SUM_PICK === id && can;
+    var left = ch.filter(function (c) { return S.x[c[0]]; }).length, note = left ? (ch.length - left) + " of " + ch.length : fav && S[fav] && id !== "waslive" ? "★ only" : "";
+    return '<div class="sumrow' + (S.off[id] ? " off" : "") + '"><label><input type="checkbox" data-sum="on" data-id="' + id + '"' + (S.off[id] ? "" : " checked") + '> <span class="bnm">' + p[1] + '</span></label><span class="mut sn sumd">' + p[2] + "</span>" +
+      '<span class="sumb">' + (can ? '<button data-a="sumpick" data-k="' + id + '"' + (open ? ' class="on"' : "") + ' title="Choose what this part includes">' + (note ? esc(note) : "Choose…") + "</button>" : "") +
+      '<button data-a="summv" data-k="' + id + '|-1" title="Move up" aria-label="Move ' + p[1] + ' up"' + (i ? "" : " disabled") + '>▲</button><button data-a="summv" data-k="' + id + '|1" title="Move down" aria-label="Move ' + p[1] + ' down"' + (i < S.order.length - 1 ? "" : " disabled") + ">▼</button></span>" +
+      (open ? '<div class="sumpick">' + (fav && id !== "waslive" ? '<label class="sumfav"><input type="checkbox" data-sum="' + fav + '"' + (S[fav] ? " checked" : "") + "> " + (fav === "twFav" ? "Only my ★ channels" : "Only games of my ★ teams, fighters and players") + "</label>" : "") +
+        (ch.length > 1 ? '<div class="chipwrap">' + ch.map(function (c) { return '<label><input type="checkbox" data-sum="x" data-id="' + esc(c[0]) + '"' + (S.x[c[0]] ? "" : " checked") + "> " + esc(c[1]) + "</label>"; }).join("") + "</div>" : "") + "</div>" : "") + "</div>";
+  }).join("");
+}
+function sumAct(a, k) {
+  if (a === "sumshow") { $("panel").hidden = true; openBrief(); return; }
+  if (a === "sumpick") { SUM_PICK = SUM_PICK === k ? "" : k; renderSumSet(); return; }
+  if (a === "summv") {
+    var p = String(k).split("|"), o = SUM().order.slice(), i = o.indexOf(p[0]), j = i + (+p[1] || 0);
+    if (i < 0 || j < 0 || j >= o.length) return;
+    o.splice(i, 1); o.splice(j, 0, p[0]); sumSet("order", o);
+  }
+}
+document.addEventListener("change", function (e) {
+  var t = e.target, S = SUM();
+  if (!t) return;
+  if (t.id === "sumAuto") { P.brief = t.value !== "off"; sumSet("auto", t.value); return; }
+  if (t.id === "sumAway") { sumSet("away", +t.value); return; }
+  if (t.id === "sumSpan") { sumSet("span", +t.value); return; }
+  if (t.id === "sumLook") { sumSet("look", t.value); return; }
+  if (t.id === "sumN") { sumSet("n", +t.value); return; }
+  if (!t.dataset || !t.dataset.sum) return;
+  if (t.dataset.sum === "on") { var off = {}; SUM_PARTS.forEach(function (p) { off[p[0]] = S.off[p[0]] ? 1 : 0; }); off[t.dataset.id] = t.checked ? 0 : 1; sumSet("off", off); }
+  else if (t.dataset.sum === "x") { var x = Object.assign({}, S.x); if (t.checked) delete x[t.dataset.id]; else x[t.dataset.id] = 1; sumSet("x", x); }
+  else if (t.dataset.sum === "twFav" || t.dataset.sum === "spFav") sumSet(t.dataset.sum, t.checked);
+});
 
 // ---- Sports: live scores and fixtures from ESPN's public scoreboard (read straight from the browser, no key) ----
 // The catalog of leagues you can switch on in Settings > Sports. Order = importance: with several games on at once,
@@ -5929,9 +6334,10 @@ var WIZ_BOXES = [
   ["youtube", "YouTube", "New uploads from your subscriptions."],
   ["sports", "Sports", "Live football, NBA and UFC scores and fixtures."],
   ["mail", "Mail", "Unread counts for up to two Gmail inboxes."],
-  ["live", "Radio", "Internet radio: pick a station and press play."]
+  ["live", "Radio", "Internet radio: pick a station and press play."],
+  ["tv", "TV shows", "New episodes of the shows you follow, and what is on today."]
 ];
-var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "twitch", "youtube", "mail"];
+var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "tv", "twitch", "youtube", "mail"];
 var WIZCITY = [];
 function wizCityGo() {
   var q = $("wzCity") ? $("wzCity").value.trim() : "";
@@ -5969,12 +6375,14 @@ function wizPage(id) {
       '<p class="mut sn">' + (P.home ? "This is the city you chose." : "This is a guess from the time zone your device is set to. No permission was asked for and your position was not looked up, so it can be the wrong city in the right country.") + "</p>" +
       "<p>Is that right? Press <b>Next</b>. If not, search for your city and press <b>Use</b>:</p>" +
       '<div class="add"><input type="text" id="wzCity" placeholder="Search a city, e.g. Stockholm" autocomplete="off"><button data-a="wizcitygo">Search</button></div><div id="wzCityRes"></div><div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + "</div>" +
-      '<p class="mut sn">You can change it later: click the weather box for the weather city, and Settings → Clock &amp; alarms for the clock.</p>';
+      '<p class="mut sn">You can change it later: click the weather box for the weather city, and Settings → Date &amp; time for the clock.</p>';
   }
   if (id === "news") return "<p>News starts with these sources. Add any news site by its address (for example <code>bbc.com</code>) or a feed address.</p>" + wizChips(newsSrc().map(function (x) { return x.name; })) + wizAddRow("news", "A website or feed, e.g. bbc.com") +
     '<p class="mut sn">Later, in Settings → News, Telegram &amp; Reddit, you can remove sources, mute words you do not want to see, and highlight words you care about.</p>';
   if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
     mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport");
+  if (id === "tv") return "<p>Follow the series you watch. The box then shows the next episode of each show, the ones that just aired, and what is on today. Type a name, press Search and then Follow on the right one.</p>" + wizChips(tvShows().map(function (s) { return s.n; })) + wizAddRow("tv", "Name of a show, e.g. Severance", "Search") + '<div id="wzRes"></div>' +
+    '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes.</p>';
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
   if (id === "stocks") return "<p>Type a company name and pick it from the list, or type symbols separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. Tesla, or NVDA, AAPL, BTCUSD") + '<div id="wzRes"></div>' +
     '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go.</p>';
@@ -6015,9 +6423,13 @@ function wizPage(id) {
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Type <code>help</code> in it to see everything.</li>" +
-    "<li><b>Radio:</b> pick your stations in Settings → Radio.</li><li><b>Help:</b> press <code>?</code>, or use the link at the bottom of the page, for the full guide.</li></ul>";
+    "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
+    "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
+    "<li><b>Bring your things along:</b> the bookmarks of your browser (Settings → Bookmarks), a Google, Outlook or Apple calendar (Settings → Calendar) and a portfolio file from your broker (Settings → Stocks) can all be imported.</li>" +
+    "<li><b>Summary:</b> a small window with what happened while you were away. Choose what is in it and when it opens in Settings → Summary.</li>" +
+    "<li><b>Web page boxes:</b> up to three web pages of your choice can get a box of their own (Settings → Web page boxes).</li><li><b>Help:</b> press <code>?</code>, or use the link at the bottom of the page, for the full guide.</li></ul>";
 }
-var WIZ_TITLES = { pick: "Welcome to OmniTree", city: "Your city", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
+var WIZ_TITLES = { pick: "Welcome to OmniTree", city: "Your city", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", tv: "TV shows", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
 function wizRender() {
   var pages = wizPages();
   WIZ.step = Math.max(0, Math.min(pages.length - 1, WIZ.step));
@@ -6038,6 +6450,7 @@ function wizAct(a, k) {
     if (id === "pick") {
       var L = LAY(); L.off = L.off || {};
       WIZ_BOXES.forEach(function (b) { if (WIZ.sel[b[0]]) delete L.off[b[0]]; else L.off[b[0]] = 1; });
+      tvp().on = !!WIZ.sel.tv; delete L.off.tv;
       persist(); render();
     }
     // pressing Next on the city page confirms the guessed city, so it stays even if the device's time zone changes later
@@ -6060,6 +6473,18 @@ function wizAct(a, k) {
   else if (a === "wiztw") { try { sessionStorage.setItem("sp_wiz", JSON.stringify(WIZ)); } catch (e) {} twConnect(); return; }
   else if (a === "wizadd") {
     if (!v) return;
+    // TV shows: the search answers with a short list, each with a Follow button (the page is not redrawn, so the list stays)
+    if (k === "tv") {
+      $("wzRes").innerHTML = '<p class="mut sn">Searching…</p>';
+      tvGet("search/shows?q=" + encodeURIComponent(v)).then(function (j) {
+        if (!$("wzRes")) return;
+        var res = (Array.isArray(j) ? j : []).map(function (x) { return x.show || {}; }).filter(function (s) { return s.id && s.name; }).slice(0, 6);
+        $("wzRes").innerHTML = res.length ? res.map(function (s) {
+          return '<div class="row"><span><span class="bnm rbn">' + esc(s.name) + '</span> <small class="mut">' + esc([String(s.premiered || "").slice(0, 4), tvNet(s)].filter(Boolean).join(" · ")) + "</small></span>" + (tvHas(s.id) ? '<span class="mut sn">✓ following</span>' : '<button data-a="tvfav" data-k="' + (+s.id) + "|" + esc(String(s.name).slice(0, 80)) + '">Follow</button>') + "</div>";
+        }).join("") : '<p class="mut sn">No show found with that name.</p>';
+      }).catch(function () { if ($("wzRes")) $("wzRes").innerHTML = '<p class="mut sn">Could not search right now. You can add shows later in the box.</p>'; });
+      return;
+    }
     if (k === "news") { ok = addNewsSrc("", v); if (ok) srcChanged(); }
     else if (k === "tg") { ok = addTgSrc(v); if (ok) srcChanged(); }
     else if (k === "reddit") { ok = addRdSrc(v); if (ok) rdChanged(); }
@@ -6365,7 +6790,7 @@ function loadExtraForm() {
   var n = NTF();
   NF_BOX.forEach(function (x) { $(x[0]).checked = n[x[1]] !== false && !!n[x[1]]; });
   NF_NUM.forEach(function (x) { $(x[0]).value = n[x[1]]; });
-  $("briefOn").checked = P.brief !== false;
+  renderSumSet();
   renderLangs(); renderRadioList(); renderSdForm();
   $("cntNews").value = String(cntOf("news") - MORE.news); $("cntTg").value = String(cntOf("tg") - MORE.tg);
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
@@ -6386,7 +6811,7 @@ function setNtf() {
   if (n.desktop) askNotify();
 }
 NF_BOX.concat(NF_NUM).forEach(function (x) { $(x[0]).onchange = setNtf; });
-$("briefOn").onchange = function () { P.brief = this.checked; persist(); };
+
 $("sparkSel").onchange = function () { P.spark = this.value !== "off"; if (P.spark) P.sparkR = this.value; persist(); if (sparkRange() !== SPARKR) SPARK = {}; render(); fetchSparks(true); };
 $("spCalOn").onchange = function () { P.spCal = this.checked; persist(); render(); refreshCal(); };
 $("keysOn").onchange = function () { P.keysOff = !this.checked; persist(); renderKeys(); };
@@ -6653,7 +7078,7 @@ document.addEventListener("visibilitychange", function () {
 });
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs();
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs(); fetchTv();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);
