@@ -259,6 +259,8 @@
     <div class="mut sn" data-kw="tv television series shows episodes streaming netflix hbo calendar">A box with the next episodes of the shows you follow, the ones that just aired, and what is on today. Press ⌕ in the box and type a name to follow a show; click any row for the show and its episodes.</div>
     <label>Show the TV shows box <input type="checkbox" id="tvOn" data-a="boxtoggle" data-k="tv"></label>
     <label>Country for “On today” <select id="tvCc"></select></label>
+    <label data-kw="calendar episodes">Show my shows' episodes in the calendar <input type="checkbox" id="tvCalOn"></label>
+    <div class="mut sn">The next and the latest episode of each show you follow. A notification when a new episode airs is switched on and off under Notifications.</div>
     <div class="sub"><b>Shows you follow</b>
       <div id="tvSet"></div>
     </div>
@@ -311,7 +313,7 @@
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Calendar">
-    <div class="mut sn">Your own events are added in the calendar itself (the calendar icon in the menu box). Here you bring in other calendars and choose which days the calendar marks by itself.</div>
+    <div class="mut sn">Your own events are added and changed in the calendar itself (the calendar icon in the menu box; ✎ on an event changes it). Here you bring in other calendars, take your own events out, and choose which days the calendar marks by itself.</div>
     <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
       <b>Calendars from elsewhere</b>
       <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
@@ -321,6 +323,11 @@
       <div id="icsMsg" class="sn" role="status"></div>
       <div id="icsImp"></div>
       <div id="icsList"></div>
+    </div>
+    <div class="sub" data-kw="export download ics backup google outlook apple">
+      <b>Take your events elsewhere</b>
+      <div class="mut sn">Saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</div>
+      <span><button data-a="icsexport">Download my events as an .ics file</button></span>
     </div>
     <div class="sub">
       <b>Mark these days</b>
@@ -359,9 +366,11 @@
       <label class="in">Day move, % <input type="number" id="nfDay" min="1" max="90" step="0.5"></label>
       <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
       <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
+      <label data-kw="tv show series episode airs">New episode of a TV show I follow <input type="checkbox" id="nfTv"></label>
       <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
       <label>New mail <input type="checkbox" id="nfMail"></label>
     </div>
+    <div class="mut sn" data-kw="price alert level stock bell">An alert for a price you choose is set with the bell button in the Stocks box.</div>
     <div class="sub"><b>Sound</b>
       <label>Ping sound with a notification <input type="checkbox" id="nfSound"></label>
       <label data-kw="alarm timer countdown volume loudness">Alarm volume (timers, countdowns, alarms) <input type="range" id="volSlider" min="0" max="100"></label>

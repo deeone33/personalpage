@@ -351,27 +351,88 @@ button.pill{cursor:pointer;line-height:1.5}
    password (the Gmail token) is an ordinary field shown as dots */
 .nosub{display:contents}
 input.secret{-webkit-text-security:disc;text-security:disc}
-/* market hours: the clock button in the Stocks box (with a dot: green = open) and its window, one line per market */
-.mkd{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none;background:var(--mut);opacity:.55}
-.mkd.on{background:#22c55e;opacity:1;box-shadow:0 0 6px rgba(34,197,94,.6)}
-.mkb{position:relative;flex:none;display:inline-flex;align-items:center;justify-content:center}
-.mkb .mkd{position:absolute;right:1px;top:1px;width:6px;height:6px;border:1px solid var(--card)}
-.mkwin{display:flex;flex-direction:column}
-.mkrow{border-top:1px solid var(--line)}
-.mkrow:first-child{border-top:0}
-.mkhead{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:4px 10px;width:100%;border:0;background:none;padding:8px 4px;text-align:left;font:inherit;font-size:13.5px;color:var(--fg);border-radius:8px;cursor:pointer}
-.mkhead:hover,.mkrow.sel .mkhead{background:var(--acsoft)}
-.mkhead small{color:var(--mut);font-size:11.5px;font-weight:400}
-.mkn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mks{white-space:nowrap;text-align:right}
-.mko{color:#16a34a}
-.mkc{color:var(--mut)}
-:root[data-theme=dark] .mko{color:#4ade80}
-.mkt{font-size:12px;font-variant-numeric:tabular-nums;min-width:3.4em;text-align:right;white-space:nowrap}
-.mkmore{padding:2px 4px 10px 21px;display:flex;flex-direction:column;gap:6px}
+/* the score line of a game window never pushes the window wider: the team columns may shrink (long names wrap), and a
+   long score (cricket: 161/5 – 155/8) is set smaller */
+.spwin .spscore{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.spwin .spteam b,.spwin .spteam .lnk{overflow-wrap:anywhere;max-width:100%}
+.spmid .big{white-space:nowrap}
+.spmid .big.long{font-size:calc(21px*var(--fs,1));letter-spacing:0}
+@media(max-width:480px){.spwin .spscore{gap:6px}.spmid .big.long{font-size:17px}.spwin .spteam img{width:44px;height:44px}}
+/* rugby: what kind of score it was (T = try, C = conversion, P = penalty goal, DG = drop goal), where football has the ball */
+.evl{display:inline-block;min-width:1.7em;text-align:center;font-style:normal;font-size:10px;font-weight:700;line-height:1.5;border:1px solid var(--line);border-radius:5px;color:var(--mut);flex:none}
+/* market hours: the clock button in the Stocks box, the small box under the mouse and the window. "Open" has the Stocks
+   box's up color and "closed" its down color, at the strength set for that box (Settings > Appearance > Signal colors).
+   Every row is one line of the same grid, so market, count, share, state, countdown and time each sit in their own column. */
+.mkb{flex:none;display:inline-flex;align-items:center;justify-content:center}
+.mkb.on{color:var(--up)}
+.mkb.off{color:var(--down)}
+.mkd{display:block;width:7px;height:7px;border-radius:50%;align-self:center}
+.mkd.on{background:var(--up)}
+.mkd.off{background:var(--down)}
+.mkgrid{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto auto auto auto;column-gap:12px}
+.mkpop .mkgrid{grid-template-columns:auto minmax(0,1fr) auto auto auto auto;column-gap:10px}
+.mkline{grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:center;font-size:13px;line-height:1.3}
+.mkline>span{position:static;background:none;padding:0;margin:0;border:0;border-radius:0;min-width:0;height:auto;line-height:inherit;box-shadow:none;transform:none;font-weight:400}
+.mkn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mkc1,.mkc2,.mkl,.mkt{color:var(--mut);font-size:11.5px;white-space:nowrap}
+.mkc1,.mkc2,.mkdur,.mkt{text-align:right;font-variant-numeric:tabular-nums}
+.mks{font-weight:600}
+.mks.on{color:var(--up)}
+.mks.off{color:var(--down)}
+.mkdur{white-space:nowrap;font-size:12.5px}
+.mkhead{border:0;border-top:1px solid var(--line);border-radius:0;background:none;font:inherit;font-size:13px;color:var(--fg);text-align:left;padding:8px 6px;cursor:pointer}
+.mkhead:first-child{border-top:0}
+.mkhead:hover,.mkhead.sel{background:var(--acsoft)}
+.mkmore{grid-column:1/-1;padding:6px 6px 12px 25px;display:flex;flex-direction:column;gap:7px}
+.mkchips{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:5px}
+.mkchips button{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 8px;font-size:12.5px;min-width:0;border-radius:8px}
+.mkchips b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.mkchips span{flex:none;min-width:3.3em;text-align:right;font-size:12px;padding:0 4px}
+.mkchips span.mut{background:none}
 .mkfoot{margin:10px 0 0}
-.mbox:has(.mkwin){width:min(520px,100%)}
-@media(max-width:480px){.mkhead{grid-template-columns:auto minmax(0,1fr) auto;font-size:13px}.mkn{white-space:normal}.mks{grid-column:2/3;text-align:left;white-space:normal}.mkt{grid-column:3;grid-row:1/3;align-self:center}.mkmore{padding-left:17px}}
+.mbox:has(.mkwin){width:min(580px,100%)}
+#peek:has(.mkpop){width:auto;max-width:min(380px,calc(100vw - 16px))}
+.mkpop{padding:8px 12px 7px}
+.mkpop .mkline{padding:3px 0}
+.mkpop .mkline+.mkline{border-top:1px solid var(--line)}
+.mkhint{display:block;text-align:right;color:var(--mut);font-size:11px;margin-top:4px}
+@media(max-width:520px){
+  .mkwin .mkgrid{grid-template-columns:auto minmax(0,1fr) auto auto auto;column-gap:8px}
+  .mkwin .mkc1,.mkwin .mkc2,.mkwin .mkl{display:none}
+  .mkwin .mkn{white-space:normal}
+  .mkmore{padding-left:21px}
+  .mkchips{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+}
+/* the Stocks box has three buttons in its head now (market hours, price alerts, reload): the sort list gives way to them,
+   and in a desktop window that is only just wide enough for columns everything in the head is a little tighter */
+[data-id=stocks] .hc{gap:4px}
+[data-id=stocks] .hc select{flex:0 1 auto;min-width:34px}
+@media(min-width:821px) and (max-width:1000px){[data-id=stocks] .hc{gap:3px}[data-id=stocks] .hc select{min-width:22px;padding-left:4px;padding-right:14px}[data-id=stocks] .hc .ib{padding:2px 3px}[data-id=stocks] .th{gap:5px}}
+/* price alerts: the bell in the Stocks box and its window ("Alert me when [stock] is [more than] [price]") */
+.pab{flex:none;display:inline-flex;align-items:center;justify-content:center}
+.pab.on{color:var(--ac);border-color:var(--ac)}
+.mbox:has(.pawin){width:min(500px,100%)}
+.paform{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px}
+.paform select,.paform input,.parow select,.parow input[type=number]{font:inherit;font-size:13.5px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:5px 8px;min-width:0}
+.paform #paS{flex:1 1 90px;max-width:160px}
+.paform #paV{flex:1 1 80px;width:90px;max-width:130px}
+.paform .pri{flex:none}
+.pawin h3{margin:14px 0 4px}
+.parow{display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.parow:first-child{border-top:0}
+.parow b{flex:0 0 auto;min-width:3.6em;font-size:13.5px}
+.parow select{flex:0 0 auto}
+.parow input[type=number]{flex:0 1 96px;width:96px}
+.parow small{flex:1 1 90px;min-width:0;text-align:right;font-size:11.5px}
+.parow button{flex:none;padding:1px 8px}
+.parow.off b,.parow.off select,.parow.off input[type=number]{opacity:.55}
+#paMsg:empty{display:none}
+#paNow{margin-top:6px}
+/* the calendar's form while an event is being changed */
+.cadd.ed{border:1px solid var(--ac);border-radius:10px;padding:8px;background:var(--acsoft)}
+.cadd .caled{flex:1 1 100%;font-size:12.5px;font-weight:600}
+.cadd #calD{flex:1 1 130px;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:5px 8px}
+.cadd.ed #calT{flex:1 1 100%;order:0}
 /* TV shows box and window, and the radio station search */
 .tvrow .lnk{text-align:left}
 .tvrow>span:first-child{min-width:0;flex:1 1 0}
@@ -838,13 +899,16 @@ body.dockslim #dockGrip{display:none}
 .wizgrid .wizbox{min-width:0}
 .wizmail input{min-width:0;max-width:100%;box-sizing:border-box}
 .wizdots{min-width:0;flex-wrap:wrap}
+.wiz a,.safe a{overflow-wrap:anywhere}
 /* a narrow window: the row of dots (one per step; a full guide has eleven) gets a line of its own above the buttons */
 @media(max-width:560px){.wiznav{flex-wrap:wrap}.wizdots{flex-basis:100%;order:-1}.wiznav .pri{margin-left:auto}}
 @media(max-width:350px){.wizgrid{grid-template-columns:1fr}}
 /* a desktop window that is only just wide enough for columns (821 to 1000px): the narrow boxes need their head buttons
    and the menu icons a little tighter to fit */
 @media(min-width:821px) and (max-width:1000px){.hc select[data-s^=sort]{flex:0 1 auto;min-width:30px}.hc{gap:4px}}
-@media(min-width:821px) and (max-width:1100px){.card.compact .mrow.menurow{gap:2px;justify-content:space-between}.card.compact .menurow .ib{padding:3px 2px}}
+@media(min-width:821px) and (max-width:1100px){.card.compact .mrow.menurow{gap:2px;justify-content:space-between}.card.compact .menurow .ib{padding:3px 2px;position:relative}
+  /* the number on an icon (to-dos, today's events, missed notifications) sits on its corner here instead of beside it, so it takes no room */
+  .card.compact .menurow .ib>span{position:absolute;top:-5px;right:-4px;min-width:13px;padding:0 3px;font-size:9px;line-height:13px;border-radius:99px;background:var(--ac);color:var(--acfg);text-align:center;font-weight:700;pointer-events:none}}
 /* drawn pictures of the screens */
 .mock{margin:8px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);font-size:12.5px;max-width:420px}
 .mockbar{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--card);border-bottom:1px solid var(--line);color:var(--mut);font-size:11px}

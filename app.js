@@ -1,4 +1,4 @@
-var VERSION = 132;
+var VERSION = 136;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -156,12 +156,13 @@ var BC = [
 function bcGet(box, k) { var v = P.bc && P.bc[box] && P.bc[box][k]; return k === "op" ? (v >= 15 && v <= 100 ? +v : 100) : /^#[0-9a-f]{6}$/i.test(v || "") ? v : ""; }
 function applyBoxCols() {
   var css = BC.map(function (b) {
-    var box = b[0], op = bcGet(box, "op"), sel = '#grid [data-id="' + box + '"]', out = "";
+    // (the Stocks colors also hold in the windows that belong to that box: market hours, its hover box and price alerts)
+    var box = b[0], op = bcGet(box, "op"), sel = '#grid [data-id="' + box + '"]' + (box === "stocks" ? ", .mkwin, .mkpop, .pawin" : ""), out = "";
     var mix = function (hex) { return op < 100 ? "color-mix(in srgb," + hex + " " + op + "%,transparent)" : hex; };
     var vars = b[2].filter(function (c) { return c[0] !== "icon" && (bcGet(box, c[0]) || op < 100); }).map(function (c) { return "--" + c[0] + ":" + mix(bcGet(box, c[0]) || c[2]); });
     if (vars.length) out += sel + "{" + vars.join(";") + "}";
     // the sport icons each have their own color until you pick one for all of them
-    if (box === "sports" && (bcGet(box, "icon") || op < 100)) out += sel + " .spi{" + (bcGet(box, "icon") ? "color:" + bcGet(box, "icon") + ";" : "") + (op < 100 ? "opacity:" + op / 100 : "") + "}";
+    if (box === "sports" && (bcGet(box, "icon") || op < 100)) out += '#grid [data-id="sports"] .spi{' + (bcGet(box, "icon") ? "color:" + bcGet(box, "icon") + ";" : "") + (op < 100 ? "opacity:" + op / 100 : "") + "}";
     return out;
   }).join("\n");
   var st = $("boxCols");
@@ -765,7 +766,7 @@ function render() {
       if (a == null || b == null) return (a == null ? 1 : 0) - (b == null ? 1 : 0);
       return SS === "up" ? b - a : SS === "down" ? a - b : Math.abs(b) - Math.abs(a);
     });
-  var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>" + mkBtn();
+  var ctlS = '<select data-s="sort:stocks" aria-label="Sort stocks">' + opts([["move", "Biggest mover"], ["up", "Most up"], ["down", "Most down"], ["name", "Name"]], (P.sort && P.sort.stocks) || "move") + "</select>" + mkBtn() + paBtn();
   var IC = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
   T.menu = tile("menu", "", '<div class="mrow menurow">' +
     '<div class="dd"><button data-a="clockmenu2" class="ib" aria-label="Timer, countdown, stopwatch" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "clock") + '"><svg ' + IC + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>' +
@@ -1341,7 +1342,7 @@ function tvImg(s) { return safeUrl(((s.image || {}).medium || "").replace(/^http
 function tvCode(e) { return e && e.s >= 1900 ? (e.e ? "Ep " + e.e : "") : e && e.s ? "S" + pad2(e.s) + (e.e ? "E" + pad2(e.e) : "") : e && e.e ? "Ep " + e.e : ""; }
 function fetchTv(force) {
   if (boxOff("tv")) return;
-  var now = Date.now(), todo = tvShows().filter(function (s) { var c = TVC[s.id]; return force || !c || now - c.t > 21600000; });
+  var now = Date.now(), todo = tvShows().filter(function (s) { var c = TVC[s.id]; return force || !c || now - c.t > 21600000 || (c.next && c.next.ts < now && now - c.t > 1800000); });   // also when its next episode has aired: what comes after it?
   // four at a time, so a long list stays well inside what the service allows
   var next = function () {
     var s = todo.shift();
@@ -1481,6 +1482,7 @@ document.addEventListener("input", function (e) {
 document.addEventListener("change", function (e) {
   var t = e.target;
   if (t && t.dataset && t.dataset.s === "tvview") { tvp().view = t.value; persist(); render(); fetchTv(); }
+  else if (t && t.id === "tvCalOn") { tvp().cal = t.checked; tvCalKey = ""; persist(); render(); refreshCalAny(); }
   else if (t && t.id === "tvCc") { tvp().cc = t.value; TVSCH = { t: 0, key: "", ev: [] }; persist(); render(); fetchTv(); }
 });
 REFRESH.tv = function () { fetchTv(true); };
@@ -1491,6 +1493,7 @@ function renderTvSet() {
   if (!el) return;
   $("tvOn").checked = !boxOff("tv");
   $("tvCc").innerHTML = opts(TV_CC, tvCc());
+  $("tvCalOn").checked = !(P.tv && P.tv.cal === false);
   var mine = tvShows();
   el.innerHTML = mine.length ? mine.map(function (s) {
     var c = TVC[s.id];
@@ -1665,7 +1668,7 @@ var MK = {
   cn: { n: "China", x: "Shanghai, Shenzhen", tz: "Asia/Shanghai", s: [[570, 690], [780, 900]], h: "" },
   br: { n: "São Paulo", x: "B3", tz: "America/Sao_Paulo", s: [[600, 1020]], h: "" },
   mx: { n: "Mexico", x: "BMV", tz: "America/Mexico_City", s: [[510, 900]], h: "" },
-  fut: { n: "Oil, gold & futures", x: "trade almost around the clock, Sunday evening to Friday evening", tz: "America/New_York", w: [[[1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020]], []] },
+  fut: { n: "Commodities", x: "trade almost around the clock, Sunday evening to Friday evening", tz: "America/New_York", w: [[[1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020], [1080, 1440]], [[0, 1020]], []] },
   fx: { n: "Currencies", x: "trade around the clock, Sunday evening to Friday evening", tz: "America/New_York", w: [[[1020, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1440]], [[0, 1020]], []] },
   crypto: { n: "Crypto", x: "never closes", always: 1 }
 };
@@ -1769,28 +1772,64 @@ function mkMine() {
   Object.keys(by).forEach(function (k) { out.push({ key: k, ids: by[k], st: mkState(k) }); });
   return out.sort(function (a, b) { return b.ids.length - a.ids.length || (a.key < b.key ? -1 : 1); });
 }
-// the button in the head of the Stocks box: a dot for the market most of your stocks are on, and your main markets in its tooltip
+// A market that never closes (crypto) is left out everywhere: there is nothing to tell about it.
+function mkListed() { return mkMine().filter(function (m) { return !MK[m.key].always; }); }
+function mkTotal() { return mkMine().reduce(function (n, m) { return n + m.ids.length; }, 0); }
+// "main" = every market with at least a fifth of your stocks; at least the biggest one, at most three
+function mkMain() { var all = mkListed(), total = mkTotal(); return all.filter(function (m, i) { return i === 0 || m.ids.length / total >= 0.2; }).slice(0, 3); }
+// the words next to Open / Closed, and how long: ["closes in", "2h 10m"]
+function mkWhen(st) { return !st.until ? ["", ""] : [st.open ? "closes in" : st.brk ? "lunch, back in" : "opens in", mkLeft(st.until - Date.now())]; }
+// The button in the head of the Stocks box: a clock in the box's own "up" color while the market most of your stocks are
+// on is open, in its "down" color while it is closed (Settings > Appearance > Signal colors per box). Point at it for your
+// main markets, click it for all of them.
 function mkBtn() {
-  var mine = mkMine(), total = mine.reduce(function (n, m) { return n + m.ids.length; }, 0);
-  if (!mine.length) return "";
-  // "main" = every market with at least a fifth of your stocks; at least the biggest one, at most three
-  var main = mine.filter(function (m, i) { return i === 0 || m.ids.length / total >= 0.2; }).slice(0, 3);
-  var tip = main.map(function (m) { return MK[m.key].n + ": " + (MK[m.key].always ? "always open" : (m.st.open ? "OPEN, " : "CLOSED, ") + mkText(m.key, m.st)); }).join("\n") + (mine.length > main.length ? "\n+" + (mine.length - main.length) + " more. Click for all." : "\nClick for the details.");
-  return '<button class="ib sm mkb" data-a="mkopen" title="' + esc(tip) + '" aria-label="Market hours: ' + esc(tip.replace(/\n/g, ". ")) + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><i class="mkd ' + (main[0].st.open ? "on" : "off") + '"></i></button>';
+  var main = mkMain();
+  if (!main.length) return "";
+  var say = main.map(function (m) { return MK[m.key].n + " " + (m.st.open ? "open" : "closed") + ", " + mkWhen(m.st).join(" "); }).join(". ");
+  return '<button class="ib sm mkb ' + (main[0].st.open ? "on" : "off") + '" data-a="mkopen" aria-label="Market hours. ' + esc(say) + '"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>';
 }
+// one market as the cells of a row; every row has the same cells, so they line up in columns
+function mkCells(m, full) {
+  var M = MK[m.key], st = m.st, w = mkWhen(st);
+  return '<i class="mkd ' + (st.open ? "on" : "off") + '"></i><b class="mkn">' + esc(M.n) + "</b>" +
+    (full ? '<span class="mkc1">' + m.ids.length + (m.ids.length === 1 ? " stock" : " stocks") + '</span><span class="mkc2">' + Math.round(m.ids.length / mkTotal() * 100) + "%</span>" : "") +
+    '<b class="mks ' + (st.open ? "on" : "off") + '">' + (st.open ? "Open" : "Closed") + '</b><span class="mkl">' + w[0] + '</span><span class="mkdur">' + w[1] + '</span><span class="mkt">' + (st.until ? mkAt(st.until) : "") + "</span>";
+}
+// the small box under the mouse: your main markets, in the same columns as the window
+function mkPeek(el) {
+  var main = mkMain(), rest = mkListed().length - main.length;
+  if (!main.length || EDIT || !$("modal").hidden) return;
+  $("peek").innerHTML = '<div class="mkpop"><div class="mkgrid">' + main.map(function (m) { return '<div class="mkline">' + mkCells(m, false) + "</div>"; }).join("") + '</div><small class="mkhint">' + (rest > 0 ? "+" + rest + " more · " : "") + "click for all</small></div>";
+  // right under the button (above it when there is no room below), kept inside the window
+  var p = $("peek");
+  p.hidden = false;
+  var r = el.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight, y = r.bottom + 6;
+  if (y + h > innerHeight - 8) y = r.top - h - 6;
+  p.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))) + "px"; p.style.top = Math.round(Math.max(8, y)) + "px";
+}
+document.addEventListener("mouseover", function (e) {
+  var b = e.target.closest && e.target.closest("#grid .mkb");
+  if (!b || peekKey === "mk") return;
+  clearTimeout(peekT); peekKey = "mk";
+  peekT = setTimeout(function () { if (peekKey === "mk" && document.contains(b)) mkPeek(b); }, 250);
+});
+document.addEventListener("mouseout", function (e) {
+  var b = e.target.closest && e.target.closest("#grid .mkb");
+  if (b && !(e.relatedTarget && b.contains(e.relatedTarget)) && peekKey === "mk") hidePeek();
+});
 var MK_T = "Market hours", MK_SEL = "";
 function mkHtml() {
-  var mine = mkMine(), total = mine.reduce(function (n, m) { return n + m.ids.length; }, 0);
-  if (!mine.length) return '<p class="mut">No stocks on your list yet.</p>';
-  return '<div class="mkwin">' + mine.map(function (m) {
-    var M = MK[m.key], st = m.st, open = MK_SEL === m.key, pct = Math.round(m.ids.length / total * 100);
-    return '<div class="mkrow' + (open ? " sel" : "") + '"><button class="mkhead" data-a="mkrow" data-k="' + m.key + '" aria-expanded="' + open + '" title="Show the stocks on this market">' +
-      '<i class="mkd ' + (st.open ? "on" : "off") + '"></i><span class="mkn"><b>' + esc(M.n) + "</b> <small>" + m.ids.length + (m.ids.length === 1 ? " stock" : " stocks") + " · " + pct + "%</small></span>" +
-      '<span class="mks"><b class="' + (st.open ? "mko" : "mkc") + '">' + (st.open ? "Open" : "Closed") + "</b>" + (M.always ? " <small>always</small>" : st.until ? " <small>" + mkText(m.key, st).replace(/^always open$/, "") + "</small>" : "") + "</span>" +
-      '<span class="mkt mut">' + (st.until ? mkAt(st.until) : "") + "</span></button>" +
-      (open ? '<div class="mkmore"><div class="mut sn">' + esc(M.x) + (M.s ? " · trades " + M.s.map(function (s) { return pad2(Math.floor(s[0] / 60)) + ":" + pad2(s[0] % 60) + "–" + pad2(Math.floor(s[1] / 60)) + ":" + pad2(s[1] % 60); }).join(" and ") + " " + esc(M.tz.split("/").pop().replace(/_/g, " ")) + " time, Monday to Friday" : "") + '</div><div class="chips">' +
-        m.ids.map(function (id) { var q = QUOTES[tk(id)], c = q && q.c != null ? q.c : null; return '<button data-a="open" data-k="' + esc("s:" + id) + '"><b>' + esc(tk(id)) + "</b>" + (c != null ? ' <span class="' + (c >= 0 ? "up" : "down") + '">' + (c >= 0 ? "+" : "") + c.toFixed(1) + "%</span>" : "") + "</button>"; }).join("") + "</div></div>" : "") + "</div>";
-  }).join("") + '<p class="mut sn mkfoot">Times are in your own time (' + esc(LOCNAME) + "). Click a market for its stocks. The main public holidays are counted; shortened trading days and some local holidays are not. A symbol without an exchange in its name is taken as a US stock.</p></div>";
+  var list = mkListed(), hidden = mkMine().filter(function (m) { return MK[m.key].always; });
+  if (!mkMine().length) return '<p class="mut">No stocks on your list yet.</p>';
+  if (!list.length) return '<p class="mut">Everything on your list trades around the clock, so there are no opening hours to show.</p>';
+  return '<div class="mkwin"><div class="mkgrid">' + list.map(function (m) {
+    var M = MK[m.key], open = MK_SEL === m.key;
+    return '<button class="mkline mkhead' + (open ? " sel" : "") + '" data-a="mkrow" data-k="' + m.key + '" aria-expanded="' + open + '" title="Show the stocks on this market">' + mkCells(m, true) + "</button>" +
+      (open ? '<div class="mkmore"><div class="mut sn">' + esc(M.x) + (M.s ? " · " + M.s.map(function (s) { return pad2(Math.floor(s[0] / 60)) + ":" + pad2(s[0] % 60) + "–" + pad2(Math.floor(s[1] / 60)) + ":" + pad2(s[1] % 60); }).join(" and ") + " " + esc(M.tz.split("/").pop().replace(/_/g, " ")) + " time, Monday to Friday" : "") + '</div><div class="mkchips">' +
+        // the stocks of this market in equal cells: the symbol on the left, today's change on the right
+        m.ids.map(function (id) { var q = QUOTES[tk(id)], c = q && q.c != null ? q.c : null; return '<button data-a="open" data-k="' + esc("s:" + id) + '" title="' + esc(tk(id)) + '"><b>' + esc(tk(id)) + '</b><span class="' + (c == null ? "mut" : c >= 0 ? "up" : "down") + '">' + (c == null ? "–" : (c >= 0 ? "+" : "") + c.toFixed(1) + "%") + "</span></button>"; }).join("") + "</div></div>" : "");
+  }).join("") + '</div><p class="mut sn mkfoot">Times are on your own clock (' + esc(LOCNAME) + "). Click a market for its stocks." + (hidden.length ? " " + hidden.map(function (m) { return MK[m.key].n; }).join(", ") + " (" + hidden.reduce(function (n, m) { return n + m.ids.length; }, 0) + " on your list) is not shown: it never closes." : "") +
+    " The main public holidays are counted; shortened trading days and some local holidays are not. A symbol without an exchange in its name is taken as a US stock.</p></div>";
 }
 function openMarkets() { openModal(MK_T, mkHtml()); }
 function mkAct(a, k) {
@@ -1799,6 +1838,155 @@ function mkAct(a, k) {
 }
 // the open window counts down by itself
 setInterval(function () { if (!$("modal").hidden && $("mTitle").textContent === MK_T && !document.hidden) $("mBody").innerHTML = mkHtml(); }, 30000);
+
+var CALEDIT = "";   // the event being changed in the calendar's form (its id), or nothing
+// ---- TV episodes in the calendar, and a notification when one airs ----
+// The next and the latest episode of every show you follow sit on their day in the calendar (like your ★ teams' games);
+// they are not saved with your own events. Off with Settings > TV shows.
+var tvCalKey = "", tvCalMemo = {};
+function tvCalOn() { return !boxOff("tv") && !(P.tv && P.tv.cal === false) && tvShows().length > 0; }
+function tvCalMap() {
+  if (!tvCalOn()) return {};
+  var key = tvShows().map(function (s) { return s.id + ":" + ((TVC[s.id] || {}).t || 0); }).join("|");
+  if (key === tvCalKey) return tvCalMemo;
+  var m = {};
+  tvShows().forEach(function (s) {
+    var c = TVC[s.id];
+    if (!c) return;
+    [c.prev, c.next].forEach(function (ep) {
+      if (!ep || !ep.ts) return;
+      var d = new Date(ep.ts), ds = ymd(d);
+      (m[ds] = m[ds] || []).push({ id: "tv:" + s.id + ":" + ep.s + ":" + ep.e, tv: s.id, ro: 1, d: ds, tm: pad2(d.getHours()) + ":" + pad2(d.getMinutes()), t: (c.n || s.n) + (tvCode(ep) ? " " + tvCode(ep) : "") });
+    });
+  });
+  tvCalKey = key; tvCalMemo = m;
+  return m;
+}
+// a card when a new episode of a show you follow goes on air (checked every minute; told once, on all your devices together)
+function tvAlerts() {
+  if (boxOff("tv") || NTF().tv === false) return;
+  var now = Date.now(), stale = false;
+  tvShows().forEach(function (s) {
+    var c = TVC[s.id], ep = c && c.next;
+    if (!ep || ep.ts > now) return;
+    stale = true;
+    if (now - ep.ts > 21600000 || !once("tv:" + s.id + ":" + ep.s + ":" + ep.e + ":" + ep.ts)) return;
+    toast("tv", (c.n || s.n) + (tvCode(ep) ? " " + tvCode(ep) : ""), "New episode" + (ep.n && !/^(Episode \d+|TBA)$/.test(ep.n) ? ": " + ep.n : "") + (now - ep.ts < 180000 ? " · on now" : " · aired " + ago(ep.ts) + " ago"), { a: "tv", k: String(s.id) });
+  });
+  if (stale) fetchTv();   // an episode has aired: ask what the next one is
+}
+setInterval(tvAlerts, 60000);
+
+// ---- Price alerts: "tell me when NVDA is more than 200" (the bell in the Stocks box) ----
+// P.pa = [{ id, s: stock id, op: ">" | "<" | "=", v: price, on, hit: when it last told you, n: how often it was set again }]
+// An alert tells you once and switches itself off; ticking it (or changing it) sets it again.
+var PA_OPS = [[">", "more than"], ["<", "less than"], ["=", "reaches"]], PA_LAST = {}, PA_T = "Price alerts", PA_PICK = "";
+function PA() { return (Array.isArray(P.pa) ? P.pa : []).filter(function (a) { return a && a.id && a.s && isFinite(a.v) && a.v > 0; }).slice(0, 30); }
+function paPrice(s) { var q = QUOTES[tk(s)]; return q && q.p ? +q.p : null; }
+function paNum(v) { v = +v; return v.toLocaleString("en-GB", { minimumFractionDigits: v < 10 ? 2 : 0, maximumFractionDigits: v < 1 ? 6 : 2 }); }
+function priceAlerts() {
+  var list = PA(), changed = false, now = Date.now();
+  list.forEach(function (a) {
+    var p = paPrice(a.s), last = PA_LAST[a.id];
+    if (p == null) return;
+    PA_LAST[a.id] = p;
+    if (a.on === false) return;
+    // "reaches" = the price gets to that level from either side (it was on one side at the last look and is on the other, or exactly on it, now)
+    var hit = a.op === ">" ? p > a.v : a.op === "<" ? p < a.v : p === a.v || (last != null && (last - a.v) * (p - a.v) < 0);
+    if (!hit) return;
+    a.on = false; a.hit = now; changed = true;
+    if (once("pa:" + a.id + ":" + (a.n || 0))) toast("stock", tk(a.s) + " is " + (a.op === ">" ? "above " : a.op === "<" ? "below " : "at ") + paNum(a.v), "Now " + paNum(p) + ". Your price alert.", { a: "stock", k: a.s }, true, true);
+  });
+  if (changed) { P.pa = list; persist(); render(); paRedraw(); }
+}
+function paBtn() {
+  var n = PA().filter(function (a) { return a.on !== false; }).length;
+  return '<button class="ib sm pab' + (n ? " on" : "") + '" data-a="paopen" title="Price alerts' + (n ? " (" + n + " set)" : ": get told when a stock passes a price you choose") + '" aria-label="Price alerts"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.500 7 2.500 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg></button>';
+}
+function paStocks() { return (P.stocks || DATA.stocks).filter(function (x) { return shown("s:" + x.id); }).map(function (x) { return x.id; }); }
+function paHtml() {
+  var ids = paStocks(), list = PA(), pick = ids.indexOf(PA_PICK) >= 0 ? PA_PICK : ids[0] || "", now = pick ? paPrice(pick) : null;
+  if (!ids.length) return '<p class="mut">Add a stock first; then you can set an alert on its price.</p>';
+  return '<div class="pawin"><form id="paAdd" class="paform"><span>Alert me when</span><select id="paS" aria-label="Stock">' + ids.map(function (id) { return '<option value="' + esc(id) + '"' + (id === pick ? " selected" : "") + ">" + esc(tk(id)) + "</option>"; }).join("") + "</select><span>is</span>" +
+    '<select id="paOp" aria-label="Higher or lower">' + opts(PA_OPS, ">") + '</select><input type="number" id="paV" step="any" min="0" inputmode="decimal" placeholder="price" aria-label="Price"' + (now != null ? ' value="' + now + '"' : "") + '><button class="pri">Add</button></form>' +
+    '<div class="mut sn" id="paNow">' + (now != null ? esc(tk(pick)) + " is " + paNum(now) + " now." : "No price for " + esc(tk(pick)) + " yet.") + '</div><div id="paMsg" class="sn" role="status"></div>' +
+    (list.length ? '<h3>Your alerts</h3><div class="palist">' + list.map(function (a) {
+      var p = paPrice(a.s);
+      return '<div class="parow' + (a.on === false ? " off" : "") + '"><input type="checkbox" data-pa="on" data-id="' + esc(a.id) + '"' + (a.on === false ? "" : " checked") + ' title="' + (a.on === false ? "Switched off. Tick to set it again." : "Set. Untick to pause it.") + '" aria-label="Alert on or off"><b>' + esc(tk(a.s)) + "</b>" +
+        '<select data-pa="op" data-id="' + esc(a.id) + '" aria-label="Higher or lower">' + opts(PA_OPS, a.op) + '</select><input type="number" data-pa="v" data-id="' + esc(a.id) + '" step="any" min="0" inputmode="decimal" value="' + (+a.v) + '" aria-label="Price">' +
+        '<small class="mut">' + (p != null ? "now " + paNum(p) : "") + (a.hit ? (p != null ? " · " : "") + "told you " + ago(a.hit) + " ago" : "") + '</small><button data-a="padel" data-k="' + esc(a.id) + '" title="Remove this alert" aria-label="Remove this alert">✕</button></div>';
+    }).join("") + "</div>" : "") +
+    '<p class="mut sn">An alert tells you once and then switches itself off; tick it to set it again. “Reaches” means the price gets to that level from above or from below. Prices are looked at about once a minute while this page is open in a tab, so a very short spike can be missed.</p></div>';
+}
+function paOpen(id) { if (id) PA_PICK = id; openModal(PA_T, paHtml()); }
+function paRedraw() { if (!$("modal").hidden && $("mTitle").textContent === PA_T) { var act = document.activeElement; if (act && act.closest && act.closest(".pawin") && /^(INPUT|SELECT)$/.test(act.tagName)) return; $("mBody").innerHTML = paHtml(); } }
+function paSave(list) { P.pa = list; persist(); render(); }
+document.addEventListener("submit", function (e) {
+  if (e.target.id !== "paAdd") return;
+  e.preventDefault();
+  var s = $("paS").value, op = $("paOp").value, v = parseFloat(String($("paV").value).replace(",", ".")), list = PA(), msg = $("paMsg");
+  if (!(v > 0)) { msg.textContent = "Type the price to watch for."; $("paV").focus(); return; }
+  if (list.length >= 30) { msg.textContent = "Thirty alerts at most. Remove one first."; return; }
+  if (list.some(function (a) { return a.s === s && a.op === op && +a.v === v; })) { msg.textContent = "You already have that alert."; return; }
+  list.push({ id: "p" + Date.now().toString(36), s: s, op: op, v: v, on: true });
+  PA_PICK = s;
+  paSave(list);
+  $("mBody").innerHTML = paHtml();
+  $("paMsg").textContent = "Added: " + tk(s) + " " + (op === ">" ? "more than" : op === "<" ? "less than" : "reaches") + " " + paNum(v) + ".";
+  if (NTF().desktop) askNotify();
+  priceAlerts();
+});
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (!t) return;
+  if (t.id === "paS") { PA_PICK = t.value; var p = paPrice(t.value); if ($("paV") && p != null) $("paV").value = p; if ($("paNow")) $("paNow").textContent = p != null ? tk(t.value) + " is " + paNum(p) + " now." : "No price for " + tk(t.value) + " yet."; return; }
+  if (!t.dataset || !t.dataset.pa) return;
+  var list = PA(), a = list.filter(function (x) { return x.id === t.dataset.id; })[0];
+  if (!a) return;
+  if (t.dataset.pa === "on") a.on = t.checked;
+  else if (t.dataset.pa === "op") a.op = t.value === "<" || t.value === "=" ? t.value : ">";
+  else if (t.dataset.pa === "v") { var v = parseFloat(String(t.value).replace(",", ".")); if (!(v > 0)) { t.value = a.v; return; } a.v = v; }
+  // setting it again, or changing it, makes it a fresh alert: it may tell you once more
+  if (t.dataset.pa !== "on" || t.checked) { a.on = true; a.n = (a.n || 0) + 1; delete a.hit; delete PA_LAST[a.id]; }
+  paSave(list);
+  $("mBody").innerHTML = paHtml();
+  priceAlerts();
+});
+function paAct(a, k) {
+  if (a === "paopen") { paOpen(k || ""); return; }
+  if (a === "padel") { paSave(PA().filter(function (x) { return x.id !== k; })); $("mBody").innerHTML = paHtml(); }
+}
+
+// ---- Your own events as an .ics file (Settings > Calendar), for Google Calendar, Outlook, Apple Calendar and the like ----
+function icsEsc(t) { return String(t || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
+function icsMake(list) {
+  var z = function (ds) { return ds.replace(/-/g, ""); }, stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  var out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//OmniTree//Calendar//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:OmniTree"];
+  list.forEach(function (e) {
+    if (!e || !/^\d{4}-\d\d-\d\d$/.test(String(e.d))) return;
+    var tm = /^\d\d:\d\d$/.test(String(e.tm || "")) ? e.tm.replace(":", "") + "00" : "";
+    out.push("BEGIN:VEVENT", "UID:" + String(e.id).replace(/[^\w-]/g, "") + "@omnitree", "DTSTAMP:" + stamp, "SUMMARY:" + icsEsc(e.t));
+    // a time without a zone = "this time, wherever the calendar is", the way the event was typed in here
+    if (tm) out.push("DTSTART:" + z(e.d) + "T" + tm, "DURATION:PT1H"); else out.push("DTSTART;VALUE=DATE:" + z(e.d));
+    var freq = { d: "DAILY", w: "WEEKLY", m: "MONTHLY", y: "YEARLY", b: "YEARLY" }[e.rep];
+    if (freq) out.push("RRULE:FREQ=" + freq + (e.iv > 1 ? ";INTERVAL=" + Math.floor(e.iv) : "") + (/^\d{4}-\d\d-\d\d$/.test(String(e.u || "")) ? ";UNTIL=" + z(e.u) + (tm ? "T235959" : "") : ""));
+    if (freq && Array.isArray(e.x) && e.x.length) out.push("EXDATE" + (tm ? "" : ";VALUE=DATE") + ":" + e.x.filter(function (x) { return /^\d{4}-\d\d-\d\d$/.test(x); }).map(function (x) { return z(x) + (tm ? "T" + tm : ""); }).join(","));
+    if (e.rem != null && isFinite(e.rem)) out.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(e.t), "TRIGGER:-PT" + Math.max(0, Math.round(e.rem)) + "M", "END:VALARM");
+    out.push("END:VEVENT");
+  });
+  out.push("END:VCALENDAR");
+  return out.join("\r\n") + "\r\n";
+}
+function icsExport() {
+  var list = P.cal || [];
+  if (!list.length) { icsMsg("You have no events of your own to export yet."); return; }
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([icsMake(list)], { type: "text/calendar" }));
+  a.download = "omnitree-calendar-" + new Date().toISOString().slice(0, 10) + ".ics";
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  icsMsg("Downloaded " + list.length + " event" + (list.length === 1 ? "" : "s") + ". Import the file in your other calendar.");
+}
 
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
@@ -1995,7 +2183,7 @@ function fetchQuotes(force) {
     qBusy = false;
     if (r.error) QERR = r.error.message;
     else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
-    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); }
+    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); priceAlerts(); }
     render(); fetchSparks(force);
   }).catch(function (e) { qBusy = false; QERR = String((e && e.message) || e); render(); });
 }
@@ -4119,7 +4307,7 @@ function openStock(id) {
   var lk = function (u, l) { return '<a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + u + '">' + l + "</a>"; };
   openModal(id, (q ? '<div class="mrow sthead"><b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") + "</div>" : "") +
     '<div id="tv" class="tv"></div><div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
-    '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + "</p>");
+    '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + '<button class="lnk2" data-a="paopen" data-k="' + esc(id) + '">Set a price alert</button></p>');
   loadStockNews(id);
   var box = document.createElement("div"); box.className = "tradingview-widget-container"; box.style.height = "100%";
   var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget"; inner.style.height = "100%";
@@ -4255,7 +4443,9 @@ document.addEventListener("click", function (e) {
   if (/^cl(play|reset|rm|stop)$/.test(a)) { clockAct(a, k); return; }
   if (/^note(add|del|tab|cleardone|done|donetoggle|pin)$/.test(a)) { noteAct(a, k); return; }
   if (a === "opencal") { CALV = null; openCal(); return; }
-  if (/^cal(day|nav|del|jump|rep)$/.test(a)) { calAct(a, k); return; }
+  if (/^cal(day|nav|del|jump|rep|edit|cancel)$/.test(a)) { calAct(a, k); return; }
+  if (a === "paopen" || a === "padel") { paAct(a, k); return; }
+  if (a === "icsexport") { icsExport(); return; }
   if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
@@ -4729,7 +4919,7 @@ function openHelp() {
     '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
     '<li>Paste that link into the link field (the same one as for a Google Sheet) and press Import.</li>' +
     '</ol></li></ol>' +
-    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. Its dot is green when the market most of your stocks are on is open; point at it for your main markets, or click it for all of them: open or closed, how long until each closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto never closes; currencies, oil and gold trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. Star or hide a stock in Edit mode.</p>' +
+    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open and its &ldquo;down&rdquo; color while it is closed (the same colors and strength as the rest of the box, set under Settings &rarr; Appearance &rarr; Signal colors per box). Point at it for a small box with your main markets, or click it for all of them, lined up in columns: the market, how many of your stocks are on it, open or closed, how long until it closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto is left out because it never closes; currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. <b>Price alerts:</b> the bell button next to the clock opens a small window where you fill in one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price field starts at what the stock costs now. You get one notification when it happens and the alert then switches itself off; tick it to set it again, change its price or condition right in the list, or remove it with ✕. <b>Set a price alert</b> in the window of a stock opens the same thing for that stock. Up to 30 alerts; prices are looked at about once a minute while the page is open in a tab. Star or hide a stock in Edit mode.</p>' +
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
@@ -4769,23 +4959,23 @@ function openHelp() {
   html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or use its shortcut). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>' +
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
   html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
-  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups, NBA, NHL, NFL, MLB, tennis, Formula 1, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
-    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
+  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups from more than twenty countries plus the World Cup, the European Championship and the Nations League, NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
+    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. Rugby shows every try, conversion and penalty with the minute and the scorer (T, C, P, DG), the cards, both line-ups, the last five results and the table with bonus points; rugby league adds team stats. Cricket shows the result, the batting and bowling figures, the teams and the table with net run rate. Australian football shows the goals, the score of each quarter, team stats, the players with the most disposals and the ladder. IndyCar and NASCAR show the order of the race and the driver standings. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
     '<p><b>Results:</b> choose <b>Results</b> in the view list to go back in time: finished games, fight cards, races and tournaments, newest first, with a small heading for each day. Click one for the same full details as a live game (a finished UFC card opens with every fight, and each fight with its numbers). Team leagues go back to the start of the month (in the first week of a month, the month before as well); UFC cards, Formula 1 weekends and golf tournaments four weeks; tennis, SHL and esports about a week. The list shows the 120 newest; pick one sport in the first list to see further back in that sport.</p>' +
     '<p><b>Search:</b> press ⌕ at the top of the box and type a team, player, fighter, league or event. It looks through everything that is loaded for the leagues you follow, whatever the view: what is live, what is coming up this month and the recent results, in that order. Several words narrow it down (for example <code>ufc allen</code>). Press ⌕ again to close the search.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
     '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
     '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for the episode&rsquo;s title and the channel, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
-    '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
+    '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
   html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
-  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
+  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. To change an event afterwards, press ✎ on it: the same form then holds its name, day, time, reminder and repeat; press Save, or Cancel to leave it as it was. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +
     '<li><b>Import an .ics file:</b> copies the events into your own calendar, once. You first see what was found and how many there is room for (the calendar holds 300 events of your own). Repeating events keep repeating, one-time events older than a month are left out, and events you already have are skipped. Afterwards they are yours: change the repeat or delete them like any other event. Good for a school term, a sports schedule or moving over from another calendar.</li>' +
     '<li><b>Follow a calendar by its address:</b> paste the calendar&rsquo;s .ics address and press Follow. Its events show next to yours with the calendar&rsquo;s name after them, and are read again every half hour, so changes made in the other calendar turn up here by themselves. They are not copied and cannot be changed here. You can give each followed calendar a name and a reminder for all its events, and follow up to four. This needs you to be signed in.</li></ul>' +
     '<p><b>Where to find the address:</b> <b>Google Calendar:</b> Settings → click the calendar under &ldquo;Settings for my calendars&rdquo; → Integrate calendar → <b>Secret address in iCal format</b>. <b>Outlook.com:</b> Settings → Calendar → Shared calendars → Publish a calendar → the <b>ICS</b> link. <b>Apple iCloud:</b> share the calendar as a Public Calendar and copy the link. The file for a one-time import is in the same places (Google: Settings → Import &amp; export → Export). A secret address lets anyone who has it read that calendar, so treat it like a password; it is saved with your settings and used only to read the calendar.</p>' +
-    '<p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
+    '<p><b>Taking your events elsewhere:</b> in the same place in Settings, <b>Download my events as an .ics file</b> saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</p><p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
     '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
   html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
@@ -4795,7 +4985,7 @@ function openHelp() {
     '<p><b>Summary:</b> one small window with what happened lately. Open it any time from the cogwheel menu or with <code>b</code>. Everything about it is set under <b>Settings → Summary</b>:</p><ul>' +
     '<li><b>When it opens by itself:</b> never, on the first visit of the day, when you come back after being away, or both. You choose how long &ldquo;away&rdquo; is (30 minutes to 8 hours); away means the page was closed or its tab was in the background for that long.</li>' +
     '<li><b>How far back it looks:</b> the last 6, 12 or 24 hours, or the last 2 days.</li>' +
-    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
+    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, TV episodes of your shows, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
     '<li><b>Narrowing a part down:</b> press <b>Choose…</b> on a part to pick which news sources, Telegram channels, subreddits or sports it uses, or to keep it to your ★ channels and ★ teams only. New sources you add later are included by themselves.</li>' +
     '<li><b>How it looks:</b> a list, cards side by side, or a compact version, and how many items each part shows at most (3 to 15).</li></ul>' +
     '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
@@ -4821,7 +5011,7 @@ function acctHtml() {
 }
 
 // ---- Notifications: small cards in the bottom-right corner ----
-function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sport: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
+function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sport: true, tv: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
 var NOTIFIED = load("sp_notified", {});
 // true the first time a key is seen, so the same thing is never announced twice (also after a reload)
 function once(key) {
@@ -4834,7 +5024,7 @@ function once(key) {
   save("sp_notified", NOTIFIED);
   return true;
 }
-var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉", sport: "⚑" };
+var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉", sport: "⚑", tv: "▣" };
 // What clicking a notification does. Kept as plain data (not a function) so the history still works after a reload.
 function runAct(act) {
   if (!act) return;
@@ -4846,6 +5036,7 @@ function runAct(act) {
   else if (a === "cal") { CALV = { y: +k.slice(0, 4), m: +k.slice(5, 7) - 1, sel: k }; openCal(); }
   else if (a === "mail") { if (MAIL[+k] && !MAIL[+k].error) openMail(+k); }
   else if (a === "sport") openSport(k);
+  else if (a === "tv") openTv(k);
   else if (a === "settings") $("panel").hidden = false;
 }
 // History of the last 30 notifications (on this device). "seen" = you clicked or dismissed it, or opened the bell.
@@ -4971,13 +5162,16 @@ function evOn(e, ds) {
   if (e.rep === "y" || e.rep === "b") return a.getDate() === b.getDate() && a.getMonth() === b.getMonth() && (!iv || (b.getFullYear() - a.getFullYear()) % iv === 0);   // b = a birthday: every year, like y
   return false;
 }
-function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(icsEvs().filter(function (e) { return evOn(e, ds); }), spCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
+function evsOn(ds) { return (P.cal || []).filter(function (e) { return evOn(e, ds); }).concat(icsEvs().filter(function (e) { return evOn(e, ds); }), spCalMap()[ds] || [], tvCalMap()[ds] || []).sort(function (a, b) { return (a.tm || "").localeCompare(b.tm || ""); }); }
 var CALV = null, REPS = { "": "Once", b: "Birthday (every year)", y: "Yearly", m: "Monthly", w: "Weekly", d: "Daily" }, REMS = [["", "No reminder"], ["0", "At the time"], ["5", "5 min before"], ["15", "15 min before"], ["30", "30 min before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 function dayLabel(ds) { return new Date(ds + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
 function openCal() {
-  var draft = $("calT") ? $("calT").value : "";
+  // what you were typing survives a redraw: a new event's name, or everything in the form while an event is being changed
+  var f = $("calAdd"), FLD = ["calT", "calTm", "calRem", "calRep", "calD"], same = !!f && (f.dataset.ed || "") === CALEDIT;
+  var keep = same && CALEDIT ? FLD.map(function (id) { return $(id) ? $(id).value : null; }) : null, draft = same && !CALEDIT && $("calT") ? $("calT").value : "";
   putWidget("cal");
-  if ($("calT")) $("calT").value = draft;
+  if (keep) FLD.forEach(function (id, i) { if ($(id) && keep[i] != null) $(id).value = keep[i]; });
+  else if ($("calT") && !CALEDIT) $("calT").value = draft;
 }
 // ---- Special days in the calendar (Settings > Calendar): big days, smaller days, public holidays per country, the
 // seasons and clock changes, full moons, payday. All worked out here from the rules for each day (nothing is fetched).
@@ -5174,11 +5368,13 @@ function calHtml() {
       (evsOn(ds).length ? "<u></u>" : "") + (sp.some(function (x) { return x.g !== "hol"; }) ? "<s></s>" : "") + "</button>";
   }
   var evRow = function (e, ds, withDay) {
-    return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + (e.sp ? '<button class="lnk calsp" data-a="open" data-k="' + esc("p:" + e.sp) + '" title="A favorite\'s game. Click for the details.">' + spIcon(e.spo) + esc(e.t) + "</button>" : esc(e.t)) +
+    return '<div class="row"><span>' + (withDay ? '<button class="lnk" data-a="caljump" data-k="' + ds + '"><b class="ctm">' + dayLabel(ds) + "</b></button> " : "") + '<b class="ctm">' + (e.tm || "all day") + "</b> " + (e.sp ? '<button class="lnk calsp" data-a="open" data-k="' + esc("p:" + e.sp) + '" title="A favorite\'s game. Click for the details.">' + spIcon(e.spo) + esc(e.t) + "</button>" : e.tv ? '<button class="lnk calsp" data-a="tvopen" data-k="' + esc(String(e.tv)) + '" title="An episode of a show you follow. Click for the show.">' + esc(e.t) + "</button>" : esc(e.t)) +
       // a birthday with the birth year in its name ("Anna 1990") also says which birthday it is
       (e.rep === "b" ? " <small>🎂" + (function () { var by = /\b(19|20)\d\d\b/.exec(e.t), n = by ? +ds.slice(0, 4) - +by[0] : 0; return n > 0 && n < 130 ? " turns " + n : ""; })() + "</small>" : e.rep ? " <small>↻ " + REPS[e.rep].toLowerCase() + "</small>" : "") + (e.cn ? ' <small class="calcn" title="From a calendar you follow">' + esc(e.cn) + "</small>" : "") + (e.rem != null ? ' <small title="Reminder">◷ ' + (e.rem ? (e.rem >= 1440 ? "1d" : e.rem >= 60 ? "1h" : e.rem + "m") : "on time") + "</small>" : "") +
-      "</span>" + (withDay || e.sp || e.ro ? "" : '<span class="r"><button data-a="calrep" data-k="' + e.id + '" title="Repeat: ' + esc(REPS[e.rep || ""]) + '. Press to change (Once, Birthday, Yearly, Monthly, Weekly, Daily)." aria-label="Change how this event repeats">↻</button><button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button></span>') + "</div>";
+      "</span>" + (withDay || e.sp || e.ro ? "" : '<span class="r"><button data-a="caledit" data-k="' + e.id + '" title="Change this event: its name, day, time, reminder and repeat" aria-label="Change this event">✎</button><button data-a="calrep" data-k="' + e.id + '" title="Repeat: ' + esc(REPS[e.rep || ""]) + '. Press to change (Once, Birthday, Yearly, Monthly, Weekly, Daily)." aria-label="Change how this event repeats">↻</button><button data-a="caldel" data-k="' + e.id + '" aria-label="Delete event">✕</button></span>') + "</div>";
   };
+  var ed = CALEDIT ? (P.cal || []).filter(function (x) { return x.id === CALEDIT; })[0] : null;
+  if (!ed) CALEDIT = "";
   var up = [];
   for (var k = 1; k <= 90 && up.length < 5; k++) {
     var uds = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + k));
@@ -5187,11 +5383,15 @@ function calHtml() {
   return '<div class="calwrap"><div><div class="calh"><button data-a="calnav" data-k="-1" aria-label="Previous month">◀</button><b>' +
     new Date(CALV.y, CALV.m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) + '</b><button data-a="calnav" data-k="1" aria-label="Next month">▶</button><button data-a="calnav" data-k="0">Today</button></div><div class="calg' + (wk ? " wk" : "") + '">' + cells + "</div></div>" +
     '<div class="calr"><h3>' + (CALV.sel === today ? "Today · " : "") + dayLabel(CALV.sel) + "</h3>" + specialsOn(CALV.sel).map(sdRow).join("") + (evsOn(CALV.sel).map(function (e) { return evRow(e, CALV.sel); }).join("") || (specialsOn(CALV.sel).length ? "" : '<p class="mut sn">Nothing planned.</p>')) +
-    '<form id="calAdd" class="cadd"><input type="text" id="calT" placeholder="Add an event…" maxlength="120"><input type="time" id="calTm" aria-label="Time (empty = all day)" title="Time (leave empty for all day)">' +
-    '<select id="calRem" aria-label="Reminder">' + opts(REMS, "") + '</select><select id="calRep" aria-label="Repeat">' + opts(Object.keys(REPS).map(function (r) { return [r, REPS[r]]; }), "") + '</select><button class="pri">Add</button></form>' +
+    // the same form adds a new event or, after ✎ on an event, changes that one (then it also has a field for the day)
+    '<form id="calAdd" class="cadd' + (ed ? " ed" : "") + '" data-ed="' + (ed ? esc(ed.id) : "") + '">' + (ed ? '<div class="caled">Changing “' + esc(String(ed.t).slice(0, 40)) + '”</div><input type="date" id="calD" value="' + esc(ed.d) + '" aria-label="Day" title="Day">' : "") +
+    '<input type="text" id="calT" placeholder="Add an event…" maxlength="120"' + (ed ? ' value="' + esc(ed.t) + '"' : "") + '><input type="time" id="calTm" aria-label="Time (empty = all day)" title="Time (leave empty for all day)"' + (ed && ed.tm ? ' value="' + esc(ed.tm) + '"' : "") + ">" +
+    '<select id="calRem" aria-label="Reminder">' + opts(REMS, ed && ed.rem != null ? String(ed.rem) : "") + '</select><select id="calRep" aria-label="Repeat">' + opts(Object.keys(REPS).map(function (r) { return [r, REPS[r]]; }), ed ? ed.rep || "" : "") + '</select><button class="pri">' + (ed ? "Save" : "Add") + "</button>" + (ed ? '<button type="button" data-a="calcancel">Cancel</button>' : "") + "</form>" +
     (up.length ? "<h3>Coming up</h3>" + up.join("") : "") + "</div></div>";
 }
 function calAct(a, k) {
+  if (a === "caledit") CALEDIT = CALEDIT === k ? "" : k;
+  else if (a === "calcancel" || (a === "caldel" && k === CALEDIT)) CALEDIT = "";
   if (a === "calday" || a === "caljump") { CALV.sel = k; CALV.y = +k.slice(0, 4); CALV.m = +k.slice(5, 7) - 1; }
   else if (a === "calnav") {
     if (k === "0") CALV = null;
@@ -5210,6 +5410,20 @@ document.addEventListener("submit", function (e) {
   e.preventDefault();
   var t = $("calT").value.trim();
   if (!t) return;
+  if (CALEDIT) {
+    var ce = (P.cal || []).filter(function (x) { return x.id === CALEDIT; })[0];
+    if (ce) {
+      ce.t = t;
+      if ($("calD") && /^\d{4}-\d\d-\d\d$/.test($("calD").value)) ce.d = $("calD").value;
+      if ($("calTm").value) ce.tm = $("calTm").value; else delete ce.tm;
+      if ($("calRem").value !== "") { ce.rem = +$("calRem").value; if (NTF().desktop) askNotify(); } else delete ce.rem;
+      var nr = $("calRep").value;
+      if (nr !== (ce.rep || "")) { delete ce.iv; delete ce.u; delete ce.x; }   // another kind of repeat: the imported fine print no longer fits
+      if (nr) ce.rep = nr; else delete ce.rep;
+      CALV.sel = ce.d; CALV.y = +ce.d.slice(0, 4); CALV.m = +ce.d.slice(5, 7) - 1;
+    }
+    CALEDIT = ""; persist(); render(); openCal(); return;
+  }
   if ((P.cal = P.cal || []).length >= 300) { alert("The calendar is full (300 events). Delete some old ones first."); return; }
   var ev = { id: "e" + Date.now().toString(36), t: t, d: CALV.sel };
   if ($("calTm").value) ev.tm = $("calTm").value;
@@ -5380,6 +5594,7 @@ var SUM_PARTS = [
   ["mail", "Mail", "Unread mail in your inboxes", 1],
   ["live", "Live now on Twitch", "Channels you follow that are live right now", 1],
   ["waslive", "Streamers you missed", "Your ★ streamers who were live while you were away and are offline now", 1],
+  ["tv", "TV episodes", "Episodes of your shows that just aired or air within a day", 1],
   ["spres", "Sports results", "Games, fights and races that finished", 1],
   ["spnext", "Sports coming up", "What is on now and in the next 24 hours", 1]
 ];
@@ -5442,6 +5657,16 @@ function sumParts(S) {
   var sp = S.off.spres && S.off.spnext ? [] : sumSports(S), end = function (e) { return e.te || e.ts; };
   out.spres = sp.filter(function (e) { return e.state === "post" && end(e) > cut; }).sort(function (a, b) { return (b.names.some(spIsFav) ? 1 : 0) - (a.names.some(spIsFav) ? 1 : 0) || end(b) - end(a); }).slice(0, N).map(sumSpRow).join("");
   out.spnext = sp.filter(function (e) { return e.state === "in" || (e.state === "pre" && e.ts > now - 3600000 && e.ts < now + 86400000); }).sort(function (a, b) { return (b.state === "in" ? 1 : 0) - (a.state === "in" ? 1 : 0) || (b.names.some(spIsFav) ? 1 : 0) - (a.names.some(spIsFav) ? 1 : 0) || a.ts - b.ts; }).slice(0, N).map(sumSpRow).join("");
+  var tvr = [];
+  if (!boxOff("tv")) tvShows().forEach(function (s) {
+    var c = TVC[s.id];
+    if (!c) return;
+    if (c.prev && c.prev.ts > cut) tvr.push({ id: s.id, n: c.n || s.n, ep: c.prev, past: 1 });
+    if (c.next && c.next.ts < now + 86400000) tvr.push({ id: s.id, n: c.n || s.n, ep: c.next, past: c.next.ts <= now ? 1 : 0 });
+  });
+  out.tv = tvr.sort(function (a, b) { return a.ep.ts - b.ep.ts; }).slice(0, N).map(function (r) {
+    return '<div class="row"><span><button class="lnk" data-a="tvopen" data-k="' + r.id + '"><b>' + esc(r.n) + "</b>" + (tvCode(r.ep) ? " <small>" + esc(tvCode(r.ep)) + "</small>" : "") + '</button></span><span class="r mut">' + (r.past ? "aired " + ago(r.ep.ts) + " ago" : tvDayName(r.ep.ts) + " " + tvTime(r.ep.ts)) + "</span></div>";
+  }).join("");
   return out;
 }
 function briefHtml() {
@@ -5539,20 +5764,34 @@ var SP_CATALOG = [
   { id: "soccer/uefa.europa", sp: "football", n: "Europa League", on: 1 }, { id: "soccer/uefa.europa.conf", sp: "football", n: "Conference League" },
   { id: "soccer/eng.2", sp: "football", n: "Championship (England)" }, { id: "soccer/ned.1", sp: "football", n: "Eredivisie" },
   { id: "soccer/por.1", sp: "football", n: "Primeira Liga" }, { id: "soccer/swe.1", sp: "football", n: "Allsvenskan" }, { id: "soccer/usa.1", sp: "football", n: "MLS" },
+  { id: "soccer/nor.1", sp: "football", n: "Eliteserien (Norway)" }, { id: "soccer/den.1", sp: "football", n: "Superliga (Denmark)" }, { id: "soccer/fin.1", sp: "football", n: "Veikkausliiga (Finland)" },
+  { id: "soccer/sco.1", sp: "football", n: "Scottish Premiership" }, { id: "soccer/bel.1", sp: "football", n: "Pro League (Belgium)" }, { id: "soccer/tur.1", sp: "football", n: "Süper Lig (Turkey)" },
+  { id: "soccer/gre.1", sp: "football", n: "Super League (Greece)" }, { id: "soccer/sui.1", sp: "football", n: "Super League (Switzerland)" }, { id: "soccer/aut.1", sp: "football", n: "Bundesliga (Austria)" },
+  { id: "soccer/rus.1", sp: "football", n: "Premier League (Russia)" }, { id: "soccer/ksa.1", sp: "football", n: "Saudi Pro League" }, { id: "soccer/bra.1", sp: "football", n: "Série A (Brazil)" },
+  { id: "soccer/arg.1", sp: "football", n: "Liga Profesional (Argentina)" }, { id: "soccer/mex.1", sp: "football", n: "Liga MX (Mexico)" },
+  { id: "soccer/eng.fa", sp: "football", n: "FA Cup" }, { id: "soccer/eng.league_cup", sp: "football", n: "Carabao Cup" }, { id: "soccer/esp.copa_del_rey", sp: "football", n: "Copa del Rey" },
+  { id: "soccer/ger.dfb_pokal", sp: "football", n: "DFB-Pokal" }, { id: "soccer/ita.coppa_italia", sp: "football", n: "Coppa Italia" },
+  { id: "soccer/fifa.world", sp: "football", n: "World Cup" }, { id: "soccer/uefa.euro", sp: "football", n: "European Championship" }, { id: "soccer/uefa.nations", sp: "football", n: "Nations League" },
+  { id: "soccer/fifa.worldq.uefa", sp: "football", n: "World Cup qualifying (Europe)" }, { id: "soccer/eng.w.1", sp: "football", n: "Women's Super League" }, { id: "soccer/uefa.wchampions", sp: "football", n: "Women's Champions League" },
   { id: "basketball/nba", sp: "basketball", n: "NBA", on: 1 }, { id: "basketball/wnba", sp: "basketball", n: "WNBA" },
+  { id: "basketball/mens-college-basketball", sp: "basketball", n: "College basketball (NCAA)" },
   { id: "mma/ufc", sp: "ufc", n: "UFC", kind: "card", on: 1 },
   { id: "hockey/nhl", sp: "hockey", n: "NHL" },
-  { id: "football/nfl", sp: "amfootball", n: "NFL" },
+  { id: "football/nfl", sp: "amfootball", n: "NFL" }, { id: "football/college-football", sp: "amfootball", n: "College football (NCAA)" },
   { id: "baseball/mlb", sp: "baseball", n: "MLB" },
   { id: "tennis/atp", sp: "tennis", n: "ATP tennis", kind: "tour" }, { id: "tennis/wta", sp: "tennis", n: "WTA tennis", kind: "tour" },
-  { id: "racing/f1", sp: "racing", n: "Formula 1", kind: "race" },
-  { id: "golf/pga", sp: "golf", n: "PGA Tour", kind: "race" },
+  { id: "racing/f1", sp: "racing", n: "Formula 1", kind: "race" }, { id: "racing/irl", sp: "racing", n: "IndyCar", kind: "race" }, { id: "racing/nascar-premier", sp: "racing", n: "NASCAR Cup Series", kind: "race" },
+  { id: "golf/pga", sp: "golf", n: "PGA Tour", kind: "race" }, { id: "golf/eur", sp: "golf", n: "DP World Tour", kind: "race" }, { id: "golf/lpga", sp: "golf", n: "LPGA Tour", kind: "race" },
+  { id: "rugby/180659", sp: "rugby", n: "Six Nations" }, { id: "rugby/164205", sp: "rugby", n: "Rugby World Cup" }, { id: "rugby/271937", sp: "rugby", n: "Champions Cup" }, { id: "rugby/267979", sp: "rugby", n: "Premiership (England)" },
+  { id: "rugby/270557", sp: "rugby", n: "United Rugby Championship" }, { id: "rugby/270559", sp: "rugby", n: "Top 14 (France)" }, { id: "rugby/242041", sp: "rugby", n: "Super Rugby Pacific" }, { id: "rugby-league/3", sp: "rugby", n: "NRL (rugby league)" },
+  { id: "cricket/8048", sp: "cricket", n: "Indian Premier League" }, { id: "cricket/8039", sp: "cricket", n: "Cricket World Cup" },
+  { id: "australian-football/afl", sp: "afl", n: "AFL" },
   // Not on ESPN: these come through the feeds function (x = its name for the source), so they need you to be signed in.
   // SHL from shl.se; esports from bo3.gg (the two top tiers of tournaments).
   { id: "x/shl", sp: "hockey", n: "SHL (Sweden)", x: "shl" },
   { id: "x/cs2", sp: "esports", n: "Counter-Strike 2", x: "cs2" }, { id: "x/lol", sp: "esports", n: "League of Legends", x: "lol" }, { id: "x/dota2", sp: "esports", n: "Dota 2", x: "dota2" }
 ];
-var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC", hockey: "Ice hockey", amfootball: "American football", baseball: "Baseball", tennis: "Tennis", racing: "Formula 1", golf: "Golf", esports: "Esports" };
+var SP_NAME = { football: "Football", basketball: "Basketball", ufc: "UFC", hockey: "Ice hockey", amfootball: "American football", baseball: "Baseball", tennis: "Tennis", racing: "Motorsport", golf: "Golf", esports: "Esports", rugby: "Rugby", cricket: "Cricket", afl: "Australian football" };
 function spLeagues() { var on = P.spLeagues; return SP_CATALOG.filter(function (l) { return on ? on.indexOf(l.id) >= 0 : l.on; }); }
 function spSports() {
   var seen = {}, out = [["", "All sports"]];
@@ -5638,21 +5877,26 @@ function spParse(lg, j, pri, past) {
         var c = cs2.filter(function (x) { return x.homeAway === ha; })[0] || {}, t = c.team || {}, st = {};
         (c.statistics || []).forEach(function (x) { st[x.name] = x.displayValue; });
         return {
-          n: t.shortDisplayName || t.displayName || "?", ab: String(t.abbreviation || t.shortDisplayName || t.displayName || "?").slice(0, 4).toUpperCase(), s: c.score, logo: safeUrl(t.logo), win: !!c.winner, id: String(t.id || ""),
-          lines: (c.linescores || []).map(function (l) { return Math.round(l.value); }), st: st,
+          n: t.shortDisplayName || t.displayName || "?", ab: String(t.abbreviation || t.shortDisplayName || t.displayName || "?").slice(0, 4).toUpperCase(), s: lg.sp === "cricket" ? String(c.score == null ? "" : c.score).split(" ")[0] : c.score, logo: safeUrl(t.logo), win: c.winner === true || c.winner === "true", id: String(t.id || ""),
+          lines: lg.sp === "rugby" || lg.sp === "cricket" ? [] : (c.linescores || []).map(function (l) { return Math.round(l.value); }), st: st,   // (the source's period scores for rugby and cricket do not add up)
           // top performers (points, goals, assists...), one per category
-          lead: (c.leaders || []).slice(0, 3).map(function (l) { var x = (l.leaders || [])[0] || {}; return { cat: l.shortDisplayName || l.displayName || "", who: (x.athlete || {}).displayName || "", val: x.displayValue || "" }; }).filter(function (l, i, arr) { return l.who && !arr.slice(0, i).some(function (o) { return o.cat === l.cat && o.who === l.who; }); })
+          lead: (Array.isArray(c.leaders) ? c.leaders : []).slice(0, 3).map(function (l) { var x = (l.leaders || [])[0] || {}; return { cat: l.shortDisplayName || l.displayName || "", who: (x.athlete || {}).displayName || "", val: x.displayValue || "" }; }).filter(function (l, i, arr) { return l.who && !arr.slice(0, i).some(function (o) { return o.cat === l.cat && o.who === l.who; }); })
         };
       };
       o.home = side("home"); o.away = side("away");
       o.names = [o.home.n, o.away.n];
       // what happened: goals and cards with minute and player (football), venue, crowd, and ESPN's one-line recap
       o.ev = (comp.details || []).map(function (d) {
-        var kind = d.redCard ? "red" : d.yellowCard ? "yel" : d.scoringPlay ? "goal" : "";
-        return kind ? { k: kind, min: (d.clock || {}).displayValue || "", who: ((d.athletesInvolved || [])[0] || {}).displayName || "", side: String((d.team || {}).id) === o.home.id ? "h" : "a", pen: !!d.penaltyKick, og: !!d.ownGoal } : null;
+        // rugby names each event (try, conversion, penalty goal, drop goal, cards) instead of flagging it
+        var tt = String((d.type || {}).text || "").toLowerCase(), rug = lg.sp === "rugby" && !/miss/.test(tt);
+        var kind = d.redCard || (rug && /red card/.test(tt)) ? "red" : d.yellowCard || (rug && /yellow card/.test(tt)) ? "yel" : d.scoringPlay || (rug && /try|conversion|penalty goal|drop goal/.test(tt)) ? "goal" : "";
+        var lab = lg.sp !== "rugby" || kind !== "goal" ? "" : /penalty try/.test(tt) ? "PT" : /try/.test(tt) ? "T" : /conversion/.test(tt) ? "C" : /drop/.test(tt) ? "DG" : "P";
+        return kind ? { k: kind, min: (d.clock || {}).displayValue || "", who: ((d.athletesInvolved || [])[0] || {}).displayName || "", side: String((d.team || {}).id) === o.home.id ? "h" : "a", pen: !!d.penaltyKick, og: !!d.ownGoal, lab: lab } : null;
       }).filter(Boolean);
       o.venue = (comp.venue || {}).fullName || ""; o.att = +comp.attendance || 0;
       o.recap = ((comp.headlines || [])[0] || {}).shortLinkText || "";
+      // cricket: the row has room for runs and wickets only; the overs and the target are said here
+      if (lg.sp === "cricket") o.recap = [String((comp.status || {}).summary || "")].concat(cs2.map(function (x) { return ((x.team || {}).abbreviation || "") + " " + (x.score == null ? "" : x.score); }).filter(function (x) { return x.trim().length > 4; })).filter(Boolean).join(" · ") || o.recap;
     }
     if (o.fights) o.names = o.fights.reduce(function (acc, f) { acc.push(f.a, f.b); return acc; }, []);
     return o;
@@ -5853,7 +6097,10 @@ var SP_ICON = {
   tennis: '<circle cx="12" cy="12" r="9"/><path d="M3.6 8.5c5.5 1 9 5.5 8.9 12.4M20.4 15.5c-5.500-1-9-5.500-8.900-12.400"/>',
   racing: '<path d="M5 21V4M5 4h13l-2.500 4L18 12H5"/><path d="M9.300 4v8M13.600 4v8M5 8h10.500"/>',
   golf: '<path d="M11 21V3l7 3.500-7 3.500"/><path d="M6 21c0-1.700 2.700-3 5-3s5 1.300 5 3z"/>',
-  esports: '<rect x="2.500" y="7.500" width="19" height="10" rx="5"/><path d="M7.500 10.500v4M5.500 12.500h4M15.500 11.300h.01M18 13.700h.01"/>'
+  esports: '<rect x="2.500" y="7.500" width="19" height="10" rx="5"/><path d="M7.500 10.500v4M5.500 12.500h4M15.500 11.300h.01M18 13.700h.01"/>',
+  rugby: '<ellipse cx="12" cy="12" rx="9.500" ry="5.500" transform="rotate(-45 12 12)"/><path d="M9 15l6-6M10 11.500l2.500 2.500M11.500 10l2.500 2.500"/>',
+  cricket: '<path d="M14.500 3.500l6 6-9 9-3.500.500.500-3.500z"/><path d="M8.500 15.500L4 20"/><circle cx="18" cy="18" r="2.200"/>',
+  afl: '<ellipse cx="12" cy="12" rx="9.500" ry="6"/><path d="M12 6v12M9.500 9h5M9.500 15h5"/>'
 };
 function spIcon(sp) { return '<i class="spi sp-' + sp + '" title="' + (SP_NAME[sp] || "") + '"><svg ' + SP_SVG + ">" + (SP_ICON[sp] || SP_ICON.baseball) + "</svg></i>"; }
 function spCrest(t) {
@@ -5897,13 +6144,16 @@ function spRowHtml(e, W, plain) {
   }).join("");
 }
 // ---- The story of a game: who scored and when, cards, period scores, stats and top performers ----
-function spEvIcon(x) { return x.k === "goal" ? '<i class="evg" title="Goal">⚽</i>' : '<i class="evc ' + x.k + '" title="' + (x.k === "red" ? "Red card" : "Yellow card") + '"></i>'; }
+var EV_LAB = { T: "Try", C: "Conversion", P: "Penalty goal", DG: "Drop goal", PT: "Penalty try" };
+function spEvIcon(x) { return x.k === "goal" ? x.lab ? '<i class="evl" title="' + (EV_LAB[x.lab] || "") + '">' + x.lab + "</i>" : '<i class="evg" title="Goal">⚽</i>' : '<i class="evc ' + x.k + '" title="' + (x.k === "red" ? "Red card" : "Yellow card") + '"></i>'; }
 // Home events on the left, away on the right, in time order. `short` = goals and red cards only (for the hover card).
 function spEventsHtml(e, short) {
   var ev = (e.ev || []).filter(function (x) { return !short || x.k !== "yel"; });
   if (!ev.length) return "";
-  return (short ? "" : "<h3>Goals and cards</h3>") + '<div class="evs">' + ev.map(function (x) {
-    var txt = esc(x.who || (x.k === "goal" ? "Goal" : "Card")) + (x.pen ? " (pen)" : "") + (x.og ? " (own goal)" : "");
+  // rugby has many scores: the hover card keeps to the tries
+  if (short && e.sp === "rugby") ev = ev.filter(function (x) { return x.lab === "T" || x.lab === "PT" || x.k === "red"; }).slice(-8);
+  return (short ? "" : "<h3>" + (e.sp === "rugby" ? "Scoring and cards" : "Goals and cards") + "</h3>") + '<div class="evs' + (!short && ev.length > 16 ? " sptabw" : "") + '">' + ev.map(function (x) {
+    var txt = esc(x.who || (x.k === "goal" ? EV_LAB[x.lab] || "Goal" : "Card")) + (x.pen ? " (pen)" : "") + (x.og ? " (own goal)" : "");
     return '<div class="ev ' + x.side + '"><span class="evm">' + esc(x.min) + "</span>" + spEvIcon(x) + "<span>" + txt + "</span></div>";
   }).join("") + "</div>";
 }
@@ -5978,12 +6228,15 @@ function spTabHtml(groups, e) {
   var foot = mine[0].rows[0].s.points != null && mine[0].rows[0].s.ties != null && mine[0].rows[0].s.gamesBehind == null;
   var own = Array.isArray(mine[0].cols) && mine[0].cols.length;   // a source that names its own columns (SHL); the last one is the points
   var hoc = !own && e.sp === "hockey";   // NHL: points decide, so they go last like in football
-  var cols = own ? mine[0].cols.map(function (c) { return [String(c[0]), esc(String(c[1]))]; }) : foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]]
+  var cols = own ? mine[0].cols.map(function (c) { return [String(c[0]), esc(String(c[1]))]; }) : e.sp === "rugby" ? [["gamesPlayed", "P"], ["gamesWon", "W"], ["gamesDrawn", "D"], ["gamesLost", "L"], ["pointsDifference", "+/-"], ["bonusPoints", "BP"], ["points", "Pts"]]
+    : e.sp === "cricket" ? [["matchesPlayed", "P"], ["matchesWon", "W"], ["matchesLost", "L"], ["noresult", "NR"], ["netrr", "NRR"], ["matchPoints", "Pts"]]
+    : e.sp === "afl" ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["percentage", "%"], ["points", "Pts"]]
+    : foot ? [["gamesPlayed", "P"], ["wins", "W"], ["ties", "D"], ["losses", "L"], ["pointDifferential", "+/-"], ["points", "Pts"]]
     : hoc ? [["gamesPlayed", "GP"], ["wins", "W"], ["losses", "L"], ["otLosses", "OTL"], ["pointDifferential", "+/-"], ["streak", "Strk"], ["points", "Pts"]]
     : e.sp === "amfootball" ? [["wins", "W"], ["losses", "L"], ["ties", "T"], ["winPercent", "Pct"], ["pointsFor", "PF"], ["pointsAgainst", "PA"], ["streak", "Strk"]]
     : e.sp === "baseball" ? [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["pointDifferential", "+/-"], ["streak", "Strk"]]
     : [["wins", "W"], ["losses", "L"], ["winPercent", "Pct"], ["gamesBehind", "GB"], ["Home", "Home"], ["Road", "Away"], ["streak", "Strk"]];
-  if (hoc) foot = true;
+  if (hoc || e.sp === "rugby" || e.sp === "cricket" || e.sp === "afl") foot = true;   // points decide, so they are the last (bold) column
   cols = cols.filter(function (c) { return mine[0].rows.some(function (r) { return r.s[c[0]] != null && r.s[c[0]] !== ""; }); });
   return mine.map(function (g) {
     return "<h3>" + esc(mine.length > 1 || !(foot || own) ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
@@ -6014,6 +6267,8 @@ var SP_STATX = {
   basketball: [["fieldGoalsMade-fieldGoalsAttempted", "Field goals"], ["fieldGoalPct", "Field goal %"], ["threePointFieldGoalsMade-threePointFieldGoalsAttempted", "3-pointers"], ["threePointFieldGoalPct", "3-point %"], ["freeThrowsMade-freeThrowsAttempted", "Free throws"], ["totalRebounds", "Rebounds"], ["assists", "Assists"], ["steals", "Steals"], ["blocks", "Blocks"], ["turnovers", "Turnovers"], ["pointsInPaint", "Points in the paint"], ["fastBreakPoints", "Fast-break points"], ["largestLead", "Largest lead"]],
   hockey: [["shotsTotal", "Shots"], ["saves", "Saves"], ["hits", "Hits"], ["blockedShots", "Blocked shots"], ["faceoffPercent", "Face-offs won %"], ["powerPlayGoals", "Power-play goals"], ["powerPlayOpportunities", "Power plays"], ["penaltyMinutes", "Penalty minutes"], ["takeaways", "Takeaways"], ["giveaways", "Giveaways"]],
   amfootball: [["totalYards", "Total yards"], ["netPassingYards", "Passing yards"], ["rushingYards", "Rushing yards"], ["firstDowns", "First downs"], ["thirdDownEff", "3rd downs made"], ["turnovers", "Turnovers"], ["sacksYardsLost", "Sacks – yards lost"], ["totalPenaltiesYards", "Penalties – yards"], ["redZoneAttempts", "Red zone made"], ["possessionTime", "Time of possession"]],
+  afl: [["disposals", "Disposals"], ["kicks", "Kicks"], ["handballs", "Handballs"], ["marks", "Marks"], ["tackles", "Tackles"], ["inside50s", "Inside 50s"], ["totalClearances", "Clearances"], ["hitouts", "Hit-outs"], ["contestedPossessions", "Contested possessions"], ["goals", "Goals"], ["behinds", "Behinds"], ["goalAccuracy", "Goal accuracy %"]],
+  rugby: [["general.tries", "Tries"], ["general.metres", "Metres run"], ["general.runs", "Runs"], ["general.cleanBreaks", "Clean breaks"], ["general.passes", "Passes"], ["general.offload", "Offloads"], ["general.tackles", "Tackles"], ["general.missedTackles", "Missed tackles"], ["general.kicks", "Kicks"], ["general.penaltiesConceded", "Penalties conceded"], ["general.scrumsWon", "Scrums won"], ["general.lineoutsWon", "Line-outs won"], ["general.yellowCards", "Yellow cards"], ["general.redCards", "Red cards"]],
   baseball: [["batting.hits", "Hits"], ["batting.homeRuns", "Home runs"], ["batting.walks", "Walks"], ["batting.strikeouts", "Struck out"], ["batting.runnersLeftOnBase", "Left on base"], ["batting.avg", "Batting average"], ["pitching.strikeouts", "Strikeouts pitched"], ["fielding.errors", "Errors"]]
 };
 // player lines per sport: which of ESPN's groups, the heading, the columns (ESPN's labels), what to sort on, how many
@@ -6021,6 +6276,7 @@ var SP_BOX = {
   basketball: [{ g: [0], t: "Players", cols: ["MIN", "PTS", "REB", "AST", "FG", "3PT"], sort: ["PTS", "REB", "AST"], n: 6 }],
   hockey: [{ g: ["forwards", "defenses"], t: "Skaters", cols: ["G", "A", "S", "+/-", "TOI"], sort: ["G", "A", "S"], n: 6 }, { g: ["goalies"], t: "Goalies", cols: ["SA", "SV", "SV%", "TOI"], n: 2 }],
   amfootball: [{ g: ["passing"], t: "Passing", cols: ["C/ATT", "YDS", "TD", "INT"], n: 1 }, { g: ["rushing"], t: "Rushing", cols: ["CAR", "YDS", "TD"], n: 2 }, { g: ["receiving"], t: "Receiving", cols: ["REC", "YDS", "TD"], n: 3 }],
+  afl: [{ g: [0], t: "Players", cols: ["D", "K", "H", "M", "T", "G"], sort: ["D", "G"], n: 8 }],
   baseball: [{ g: ["pitching"], t: "Pitchers", cols: ["IP", "H", "ER", "BB", "K"], n: 5 }, { g: ["batting"], t: "Batters", cols: ["AB", "R", "H", "RBI", "HR"], sort: ["H", "RBI", "R"], n: 5 }]
 };
 function spNum(v) { v = String(v == null ? "" : v); var m = v.match(/^(\d+):(\d\d)$/); return m ? +m[1] * 60 + +m[2] : parseFloat(v) || 0; }
@@ -6057,23 +6313,37 @@ function spSumParse(e, j) {
     });
   });
   // who scored (ice hockey, American football, baseball; football has its goals and cards already, basketball scores all the time)
-  if (e.sp === "hockey" || e.sp === "amfootball" || e.sp === "baseball") {
-    var plays = j.scoringPlays || (j.plays || []).filter(function (p) { return p.scoringPlay && (e.sp !== "baseball" || (p.type || {}).type === "play-result"); });
+  if (e.sp === "hockey" || e.sp === "amfootball" || e.sp === "baseball" || e.sp === "afl") {
+    var plays = e.sp === "afl" ? (j.plays || []).filter(function (p) { return (p.type || {}).type === "goal"; }) : j.scoringPlays || (j.plays || []).filter(function (p) { return p.scoringPlay && (e.sp !== "baseball" || (p.type || {}).type === "play-result"); });
     d.sc = plays.slice(-40).map(function (p) {
       var per = p.period || {}, n = per.number || "";
-      return { s: side((p.team || {}).id), per: e.sp === "baseball" ? String(per.type || "").slice(0, 1) + n : e.sp === "amfootball" ? (n > 4 ? "OT" : "Q" + n) : per.displayValue || (n ? "P" + n : ""),
+      return { s: side((p.team || {}).id), per: e.sp === "baseball" ? String(per.type || "").slice(0, 1) + n : e.sp === "amfootball" || e.sp === "afl" ? (n > 4 ? "OT" : "Q" + n) : per.displayValue || (n ? "P" + n : ""),
         clk: (p.clock || {}).displayValue || "", txt: String(p.text || "").slice(0, 150), hs: p.homeScore, as: p.awayScore };
     }).filter(function (p) { return p.txt; });
   }
   // football line-ups: formation, the eleven that started (↓ = taken off) and who came on
-  (e.sp === "football" ? j.rosters || [] : []).forEach(function (t) {
+  (e.sp === "football" || e.sp === "rugby" || e.sp === "cricket" ? j.rosters || [] : []).forEach(function (t) {
     var s = side((t.team || {}).id), yes = function (v) { return v === true || !!(v && v.didSub); };
     if (!s || !Array.isArray(t.roster)) return;
-    var st = t.roster.filter(function (r) { return r.starter; });
-    if (st.length) d.lu[s] = { f: String(t.formation || ""), st: st.map(function (r) { return { j: String(r.jersey || ""), n: (r.athlete || {}).displayName || "?", out: yes(r.subbedOut) }; }),
-      on: t.roster.filter(function (r) { return !r.starter && yes(r.subbedIn); }).map(function (r) { return (r.athlete || {}).displayName || "?"; }),
-      bench: t.roster.filter(function (r) { return !r.starter && !yes(r.subbedIn); }).map(function (r) { return lastName((r.athlete || {}).displayName || "?"); }) };
+    // rugby does not mark who started: shirts 1 to 15 do (1 to 13 in rugby league), the higher numbers are the bench
+    var lim = e.id.indexOf("rugby-league") === 0 ? 13 : 15, isSt = function (r) { return !!r.starter || (e.sp === "rugby" && +r.jersey >= 1 && +r.jersey <= lim); };
+    var st = t.roster.filter(isSt);
+    if (e.sp === "rugby") st.sort(function (a, b) { return +a.jersey - +b.jersey; });
+    if (st.length) d.lu[s] = { f: String(t.formation || ""), st: st.map(function (r) { return { j: String(r.jersey || ""), n: ((r.athlete || {}).displayName || "?") + (r.captain && e.sp !== "football" ? " (c)" : ""), out: yes(r.subbedOut) }; }),
+      on: t.roster.filter(function (r) { return !isSt(r) && yes(r.subbedIn); }).map(function (r) { return (r.athlete || {}).displayName || "?"; }),
+      bench: t.roster.filter(function (r) { return !isSt(r) && !yes(r.subbedIn); }).map(function (r) { return lastName((r.athlete || {}).displayName || "?"); }) };
   });
+  // cricket: the batting and bowling figures of the innings the source gives, and what kind of match it was
+  if (e.sp === "cricket") {
+    var cell = function (x) { return x == null ? "" : String(x); };
+    (j.matchcards || []).forEach(function (m) {
+      var ab = String(m.teamName || "").toUpperCase().slice(0, 4), s = ab === e.home.ab ? "h" : ab === e.away.ab ? "a" : "", pd = Array.isArray(m.playerDetails) ? m.playerDetails : [];
+      if (!s || !pd.length) return;
+      if (m.headline === "Batting") d.pl[s].push({ t: "Batting", cols: ["R", "B", "4s", "6s"], rows: pd.filter(function (p) { return p.runs != null && p.runs !== ""; }).slice(0, 11).map(function (p) { return { n: cell(p.playerName || "?") + (p.dismissal === "not out" ? "*" : ""), v: [p.runs, p.ballsFaced, p.fours, p.sixes].map(cell) }; }) });
+      else if (m.headline === "Bowling") d.pl[s].push({ t: "Bowling", cols: ["O", "M", "R", "W", "Econ"], rows: pd.slice(0, 8).map(function (p) { return { n: cell(p.playerName || "?"), v: [p.overs, p.maidens, p.conceded, p.wickets, p.economyRate].map(cell) }; }) });
+    });
+    d.tour = (j.notes || []).filter(function (n) { return n && (n.type === "seriesnote" || n.type === "matchdays"); }).map(function (n) { return String(n.text || ""); }).filter(Boolean).join(" · ").slice(0, 200);
+  }
   (j.lastFiveGames || []).forEach(function (t) {
     var s = side((t.team || {}).id);
     if (s) d.form[s] = (t.events || []).slice(0, 5).map(function (g) { return { r: String(g.gameResult || "").slice(0, 1).toUpperCase(), t: [g.score, g.atVs, (g.opponent || {}).displayName].filter(Boolean).join(" ") }; }).filter(function (x) { return /^[WDL]$/.test(x.r); });
@@ -6206,8 +6476,9 @@ function spRankGet(lgId) {
     var rk = (j.rankings || [])[0] || {};
     return done([{ n: "World ranking", pts: "Points", rows: (rk.ranks || []).slice(0, 50).map(function (r) { return { pos: r.current, n: (r.athlete || {}).displayName || "?", p: r.points != null ? Math.round(r.points).toLocaleString("en-GB") : "", mv: r.previous && r.current ? r.previous - r.current : 0 }; }) }]);
   });
-  if (lgId === "racing/f1") return fetch("https://site.api.espn.com/apis/v2/sports/racing/f1/standings").then(json).then(function (j) {
-    return done((j.children || []).map(function (c) {
+  // Formula 1 (drivers and teams), IndyCar and NASCAR (drivers)
+  if (lgId.indexOf("racing/") === 0) return fetch("https://site.api.espn.com/apis/v2/sports/" + lgId + "/standings").then(json).then(function (j) {
+    return done((j.children && j.children.length ? j.children : [j]).map(function (c) {
       return { n: /constructor/i.test(c.name || "") ? "Teams" : "Drivers", pts: "Pts", rows: (((c.standings || {}).entries) || []).map(function (x) {
         var v = {}; (x.stats || []).forEach(function (q) { v[q.name] = q.displayValue; });
         return { pos: +v.rank || 0, n: (x.athlete || x.team || {}).displayName || "?", p: v.championshipPts != null ? v.championshipPts : v.points != null ? v.points : "", mv: 0 };
@@ -6347,7 +6618,7 @@ function openSport(id) {
     // an esports team's name opens the team: roster, results, what is next, titles
     var esKey = e.sp === "esports" ? e.id.slice(2, e.id.lastIndexOf(":")) : "";
     var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + (esKey && t.slug ? '<button class="lnk" data-a="esteam" data-k="' + esc(esKey + "|" + t.slug) + '" title="About this team"><b' + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + " ›</b></button>" : "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + "</b>") + favBtn(t.n) + "</div>"; };
-    body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
+    body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big' + (e.state !== "pre" && (String(e.home.s) + String(e.away.s)).length > 6 ? " long" : "") + '">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
       // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
       (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + '<div id="spLn">' + spLinesHtml(e) + '</div><div id="spSc"></div><div id="spStats">' + spStatsHtml(e) + '</div><div id="spLead">' + spLeadersHtml(e) + '</div><div id="spSum"></div>' +
@@ -6627,10 +6898,10 @@ function wizPage(id) {
   if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
     mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport");
   if (id === "tv") return "<p>Follow the series you watch. The box then shows the next episode of each show, the ones that just aired, and what is on today. Type a name, press Search and then Follow on the right one.</p>" + wizChips(tvShows().map(function (s) { return s.n; })) + wizAddRow("tv", "Name of a show, e.g. Severance", "Search") + '<div id="wzRes"></div>' +
-    '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes.</p>';
+    '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes. New episodes also show in your calendar, and you get a notification when one airs.</p>';
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
   if (id === "stocks") return "<p>Type a company name and pick it from the list, or type symbols separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. Tesla, or NVDA, AAPL, BTCUSD") + '<div id="wzRes"></div>' +
-    '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go. The small clock button in the Stocks box shows whether the markets your stocks trade on are open, and when they open or close.</p>';
+    '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go. The small clock button in the Stocks box shows whether the markets your stocks trade on are open, and when they open or close; the bell next to it sets an alert for a price you choose.</p>';
   if (id === "twitch") return "<p>Connect your Twitch account so the box can show which of the channels you follow are live. The page only asks to <b>see who you follow</b>; it cannot chat, follow or change anything.</p>" +
     mock("id.twitch.tv", "<b>OmniTree wants to access your account</b>" + mkl(60) + '<span class="mknote">View your list of followed channels</span><span class="mkrow">' + mkb("Cancel") + mkb("Authorize", 1) + "</span>") +
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
@@ -7046,7 +7317,7 @@ function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi")
 $("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
 $("twPopOn").onchange = function () { P.twPop = this.checked; persist(); };
 // Notification settings: [input id, name in P.ntf, (for numbers) lowest, highest]
-var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSport", "sport"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
+var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSport", "sport"], ["nfTv", "tv"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
 var NF_NUM = [["nfSrcN", "srcN", 2, 6], ["nfPct", "pct", 0.5, 50], ["nfDay", "day", 1, 90]];
 function setNtf() {
   var n = {};
