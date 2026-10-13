@@ -1,4 +1,4 @@
-var VERSION = 147;
+var VERSION = 148;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -7724,9 +7724,10 @@ function wizPage(id) {
       '<p class="mut sn">You can change it later: click the weather box for the weather city, and Settings → Date &amp; time for the clock.</p>';
   }
   if (id === "news") return "<p>News starts with these sources. Add any news site by its address (for example <code>bbc.com</code>) or a feed address.</p>" + wizChips(newsSrc().map(function (x) { return x.name; })) + wizAddRow("news", "A website or feed, e.g. bbc.com") +
-    '<p class="mut sn">Later, in Settings → News, Telegram &amp; Reddit, you can remove sources, mute words you do not want to see, and highlight words you care about.</p>';
+    '<p class="mut sn">Later, in Settings → News, Telegram &amp; Reddit, you can remove sources, mute words you do not want to see, and highlight words you care about. In the box, click a headline to read the whole article in a window and scroll on to the next ones from there.</p>';
   if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
-    mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport");
+    mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport") +
+    '<p class="mut sn">Back after a while? The small list button at the top of the box opens all posts in one window, starting at the oldest one you have not seen.</p>';
   if (id === "tv") return "<p>Follow the series you watch. The box then shows the next episode of each show, the ones that just aired, and what is on today. Type a name, press Search and then Follow on the right one.</p>" + wizChips(tvShows().map(function (s) { return s.n; })) + wizAddRow("tv", "Name of a show, e.g. Severance", "Search") + '<div id="wzRes"></div>' +
     '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes. New episodes also show in your calendar, and you get a notification when one airs.</p>';
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
@@ -7737,6 +7738,7 @@ function wizPage(id) {
     "<ol><li>Press the button below. Twitch opens and asks you to log in if you are not already.</li><li>Press <b>Authorize</b>. You come straight back here.</li></ol>" +
     (twToken() ? '<p><span class="pill ac">✓ Twitch is connected</span></p>' : '<p><button class="pri" data-a="wiztw">Connect Twitch</button></p>') +
     '<div class="safe"><b>Is this safe?</b> Yes. You log in on Twitch\'s own page, so this site never sees your Twitch password. The only permission asked for is to read the list of channels you follow. You can take it back at any time on twitch.tv under Settings → Connections, or here in Settings → Twitch → Disconnect.</div>' +
+    '<p class="mut sn">The compass button at the top of the Twitch box (Discover) shows the biggest live streams and lets you search for any channel or game, also ones you do not follow.</p>' +
     '<p class="mut sn">Good to know: if the chat inside this page asks you to log in, or you get ads despite Turbo or a sub, your browser is hiding your Twitch login from the player. Use <b>Pop out</b> on the stream, or see <b>Help &rarr; Twitch</b> for the one-time browser setting that fixes it.</p>';
   if (id === "youtube") {
     var nch = P.yt && P.yt.ch ? P.yt.ch.length : 0;
@@ -7771,7 +7773,7 @@ function wizPage(id) {
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
     "<li><b>Twitch:</b> the compass button at the top of the box finds live streams and channels you do not follow.</li>" +
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
-    "<li><b>News, Telegram and Reddit:</b> click a post to scroll through all of them in one window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
+    "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
     "<li><b>Bring your things along:</b> the bookmarks of your browser (Settings → Bookmarks), a Google, Outlook or Apple calendar (Settings → Calendar) and a portfolio file from your broker (Settings → Stocks) can all be imported.</li>" +
     "<li><b>Summary:</b> a small window with what happened while you were away. Choose what is in it and when it opens in Settings → Summary.</li>" +

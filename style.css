@@ -1344,7 +1344,7 @@ body.noshadow #srchAns{box-shadow:none}
 }
 
 /* Settings, Reading posts: on a phone the two long questions get the full width, with their list under them */
-@media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir){flex-wrap:wrap}#rdrCdir,#rdrBdir{margin-left:auto}}
+@media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir),label:has(#rdrSnap),label:has(#rdrH),label:has(#ssKeySel){flex-wrap:wrap}#rdrCdir,#rdrBdir,#rdrSnap,#rdrH,#ssKeySel{margin-left:auto}}
 
 /* Twitch Discover and Search all boxes: two compact windows of one-line rows */
 .mbox:has(.twd){width:min(560px,100%)}
@@ -1407,3 +1407,7 @@ body.noshadow #srchAns{box-shadow:none}
 .rdart p{margin:10px 0 0;line-height:1.55}
 .rdart h4{margin:16px 0 0;font-size:15px}
 .rdsum:has(+ .rdart.ok){display:none}
+/* Search all boxes: a long hit is cut with dots inside its row, and what it belongs to stays readable after it */
+.site .row>span:first-child{display:flex;align-items:baseline;gap:6px}
+.site .row .lnk{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site .row>span:first-child small{flex:0 0 auto;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
