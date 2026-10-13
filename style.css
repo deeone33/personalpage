@@ -1344,7 +1344,7 @@ body.noshadow #srchAns{box-shadow:none}
 }
 
 /* Settings, Reading posts: on a phone the two long questions get the full width, with their list under them */
-@media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir),label:has(#rdrSnap),label:has(#rdrH),label:has(#ssKeySel){flex-wrap:wrap}#rdrCdir,#rdrBdir,#rdrSnap,#rdrH,#ssKeySel{margin-left:auto}}
+@media(max-width:520px){label:has(#rdrCdir),label:has(#rdrBdir),label:has(#rdrSnap),label:has(#rdrH),label:has(#rdrStop),label:has(#rdrPush),label:has(#ssKeySel){flex-wrap:wrap}#rdrCdir,#rdrBdir,#rdrSnap,#rdrH,#rdrStop,#rdrPush,#ssKeySel{margin-left:auto}}
 
 /* Twitch Discover and Search all boxes: two compact windows of one-line rows */
 .mbox:has(.twd){width:min(560px,100%)}
