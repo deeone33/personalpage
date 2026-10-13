@@ -1380,10 +1380,14 @@ body.noshadow #srchAns{box-shadow:none}
 @media(max-width:520px){.twdcats{max-height:82px}}
 /* Reader, one post at a time: each post fills the window and the list rests on a post */
 .rdr.snap{scroll-snap-type:y mandatory}
-.rdr.snap .rdp{height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;scrollbar-width:thin}
-/* a long post scrolls inside its own panel; the list itself shows no scroll bar, so there is only ever one */
-.rdr.snap{scrollbar-width:none}
-.rdr.snap::-webkit-scrollbar{display:none}
+.rdr.snap .rdp{height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--mut) 45%,transparent) transparent}
+/* Two bars: the list's own one at the edge of the window is for all the posts; a long post has a thin, faint one of its
+   own just left of it, for how far through that post you are. */
+.rdr.snap{scrollbar-color:rgba(140,147,163,.75) transparent}
+@supports selector(::-webkit-scrollbar){.rdr.snap .rdp{scrollbar-width:auto;scrollbar-color:auto}}
+.rdr.snap .rdp::-webkit-scrollbar{width:3px}
+.rdr.snap .rdp::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--mut) 45%,transparent);border-radius:3px}
+.rdr.snap .rdp::-webkit-scrollbar-track{background:transparent}
 .rdr.snap #rdrTop{scroll-snap-align:start}
 .rdr.snap #rdrEnd{scroll-snap-align:end}
 /* The top line of every box: the title on the left, the controls on the right, always on ONE line and always the same
