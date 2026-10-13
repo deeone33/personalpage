@@ -1,4 +1,4 @@
-var VERSION = 163;
+var VERSION = 165;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2991,12 +2991,14 @@ function twPop(login) {
 }
 function twChat(login) { window.open("https://www.twitch.tv/popout/" + encodeURIComponent(login) + "/chat?popout=", "twc_" + login, "popup,width=380,height=680"); }
 function twEmbedSrc(login) { return "https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=true"; }
+// On a phone a docked player sits at the top of the page, so there is one button there and it says so (style.css)
+var DOCK_LAB = '<span class="dkd">Dock left</span><span class="dkp">Dock to top</span>';
 function watchTwitch(login) { if (P.twPop) twPop(login); else openTwitch(login); }
 function openTwitch(login) {
   var s = (TW || []).filter(function (x) { return x.id === login; })[0] || TWDS[login];
   openModal((s && s.name) || login, (s && s.title ? '<p class="mut sn">' + esc(s.title) + (s.sub ? " · " + esc(s.sub) : "") + "</p>" : "") +
     '<div class="tw"><iframe allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc(twEmbedSrc(login)) + '"></iframe></div>' +
-    '<p class="tools"><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing at the left side of the page">Dock left</button><button data-a="dockr" data-k="t:' + esc(login) + '" title="Keep it playing at the right side of the page">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + '<button data-a="twdopen">Discover</button></p>' +
+    '<p class="tools"><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="t:' + esc(login) + '" title="Keep it playing at the right side of the page">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + '<button data-a="twdopen">Discover</button></p>' +
     '<p class="mut sn">Seeing ads in this embedded player even with Turbo or a sub? Your browser is hiding your Twitch login from embeds. Use Pop out, or allow third-party cookies for <code>[*.]twitch.tv</code> (Help → Twitch).</p>');
 }
 
@@ -3285,7 +3287,7 @@ function fetchYT() {
   }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
 function openYT(id) {
-  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock left</button> <button data-a="dockr" data-k="v:' + esc(id) + '">Dock right</button> ' + laterBtn("v:" + id) + "</p>");
+  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">' + DOCK_LAB + '</button> <button class="dkr" data-a="dockr" data-k="v:' + esc(id) + '">Dock right</button> ' + laterBtn("v:" + id) + "</p>");
 }
 document.addEventListener("change", function (e) {
   var ds = e.target.dataset && e.target.dataset.s;
@@ -4611,11 +4613,12 @@ document.addEventListener("pointerdown", function (e) {
   var g = e.target.closest && e.target.closest(".cgrip");
   if (!g) return;
   e.preventDefault();
-  var c = g.parentNode, isH = g.dataset.g === "h", r = c.getBoundingClientRect(), v = 0;
+  // at the right side of the page the chat keeps its right edge and is resized from its left one
+  var c = g.parentNode, isH = g.dataset.g === "h", r = c.getBoundingClientRect(), v = 0, atR = !!c.closest("#dockR");
   try { g.setPointerCapture(e.pointerId); } catch (x) {}
   document.body.classList.add("resizing");   // lets the mouse pass over the video and chat frames while dragging
   function mv(ev) {
-    v = Math.round(isH ? Math.max(160, Math.min(ev.clientY - r.top, window.innerHeight - 40)) : Math.max(220, Math.min(ev.clientX - r.left, c.parentNode.clientWidth)));
+    v = Math.round(isH ? Math.max(160, Math.min(ev.clientY - r.top, window.innerHeight - 40)) : Math.max(220, Math.min(atR ? r.right - ev.clientX : ev.clientX - r.left, c.parentNode.clientWidth)));
     if (isH) { c.style.height = v + "px"; c.classList.add("fixedh"); } else c.style.width = v + "px";
   }
   function up() {
@@ -5884,7 +5887,7 @@ function openHelp() {
 
   html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish. On a phone the boxes sit in one column, so the arrows point up and down (▲ / ▼) and the width buttons are left out.</p>';
 
-  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b>. It keeps playing in a strip on that side of the page while you use the rest of the site. You can dock up to 3 at once, and drag the edge of a strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
+  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone: <b>Dock to top</b>). It keeps playing in a strip on that side of the page while you use the rest of the site. You can dock up to 3 at once, and drag the edge of a strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
 
   html += '<h3 id="help-account">Account &amp; privacy</h3><p>Under <b>Settings</b>, the Account sections are:</p><ul>' +
     '<li><b>Password:</b> set a new one (typed twice). If you forget it, click the person icon, then <b>Forgot password?</b>, and a reset link is emailed to you.</li>' +
