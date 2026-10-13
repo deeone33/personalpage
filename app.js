@@ -1,4 +1,4 @@
-var VERSION = 145;
+var VERSION = 146;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2048,7 +2048,7 @@ function rdrPost(box, it, line) {
   var x = it.x, h;
   if (box === "news") {
     var n = x[0];
-    h = '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" + rdrMedia("", n.img) + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
+    h = '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" + rdrMedia("", n.img) + (n.d ? '<p class="rdsum">' + esc(n.d) + "</p>" : "") + artBox(it.k) +
       (PREVIEW ? "" : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") +
       (x.length > 1 ? '<details class="rdrsrc"><summary>' + x.length + " sources report this</summary>" + x.map(function (a) {
         var au = safeUrl(a.u);
@@ -2154,7 +2154,7 @@ function rdrWatch() {
   Array.prototype.forEach.call(L.querySelectorAll(".rdp"), function (p) { if (p._h == null) { p._h = p.offsetHeight; R.ro.observe(p); } });
 }
 // One post at a time (Settings > News, Telegram & Reddit > Reading posts): every post is at least as tall as the window
-// and the list comes to rest on a post, so two posts are never on screen together. A post taller than the window is
+// and the list comes to rest on a post, so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. A post taller than the window is
 // scrolled through first. The mouse wheel goes one post (or one screen of a long post) per notch.
 function rdrFit() { var L = $("rdrL"); if (L) L.style.setProperty("--rh", L.clientHeight + "px"); }
 window.addEventListener("resize", rdrFit);
@@ -2181,6 +2181,8 @@ function rdrScan() {
   for (var i = 0; i < ps.length; i++) {
     var p = ps[i], y = p.offsetTop, b = y + p.offsetHeight, v = p.querySelector("video");
     if (y < hi && b > lo && !p._rd) { p._rd = 1; got.push(p.dataset.u); }
+    // news: the full text of the post on screen, and of the one after it so it is there when you get to it
+    if (R.box === "news" && !p._art && b > top - 10 && y < top + ch * 1.6) { p._art = 1; rdrArt(p.dataset.u); }
     if (!v) continue;
     if (b > top && y < top + ch) { if (v.preload === "none" && !v.getAttribute("poster")) { v.preload = "metadata"; try { v.load(); } catch (e) {} } }
     else if (!v.paused) v.pause();   // a video you scrolled away from stops playing
@@ -2700,6 +2702,53 @@ if (window.ResizeObserver && $("grid")) new ResizeObserver(function () {
 }).observe($("grid"));
 window.addEventListener("pageshow", function () { fitHeads(); });
 document.addEventListener("visibilitychange", function () { if (!document.hidden) fitHeads(); });
+// ---- The full text of a news article, in the reader and in a headline's own window ----
+// When you get to a headline, the feeds function fetches the article's page and picks the text out of it (see article()
+// there). It takes the place of the short summary. Where a site does not give its text (a paywall, a page that only
+// works in a browser) the summary stays and a line says why. Kept here for this visit; a failure is tried again after
+// two minutes. If the first source of a story gives nothing, its other sources are asked (three at most).
+var ARTC = {};
+function artOn() { return !PREVIEW && !!sb && !!USER; }
+function artHtml(key) {
+  var a = ARTC[key];
+  if (!a || a.busy) return '<p class="mut sn">Loading the full article…</p>';
+  if (!a.ps.length) return '<p class="mut sn">The full text could not be shown here: ' + esc(a.err || "the site gave no text") + ". The button below opens the article on the site.</p>";
+  return a.ps.map(function (p) { return p.h ? "<h4>" + esc(p.t) + "</h4>" : "<p>" + esc(p.t) + "</p>"; }).join("") +
+    (a.paid ? '<p class="mut sn">The site marks this article as for its subscribers. This is what it shows without a subscription.</p>' : "");
+}
+function artBox(key) { return artOn() ? '<div class="rdart' + (ARTC[key] && ARTC[key].ps.length ? " ok" : "") + '" data-u="' + esc(key) + '">' + artHtml(key) + "</div>" : ""; }
+function artDraw(key) {
+  Array.prototype.forEach.call(document.querySelectorAll("#mBody .rdart"), function (el) {
+    if (el.dataset.u !== key) return;
+    el.innerHTML = artHtml(key); el.classList.toggle("ok", !!(ARTC[key] && ARTC[key].ps.length));
+  });
+}
+function artLoad(key, urls) {
+  var c = ARTC[key];
+  if (!artOn() || !key || (c && (c.busy || c.ps.length || Date.now() - c.t < 120000))) return;
+  var a = ARTC[key] = { busy: true, ps: [], err: "", paid: false, t: Date.now() }, i = 0, list = (urls || [key]).filter(function (u, n, l) { return safeUrl(u) && l.indexOf(u) === n; }).slice(0, 3);
+  var done = function (err) {
+    a.busy = false; a.err = err || ""; a.t = Date.now();
+    var ks = Object.keys(ARTC);
+    if (ks.length > 150) ks.sort(function (x, y) { return ARTC[x].t - ARTC[y].t; }).slice(0, ks.length - 150).forEach(function (k) { if (!ARTC[k].busy) delete ARTC[k]; });
+    artDraw(key);
+  };
+  var next = function (err) {
+    if (i >= list.length) { done(err); return; }
+    sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { article: list[i++] } }).then(function (r) {
+      var v = r.data && r.data.article;
+      if (r.error) next(r.error.message);
+      else if (!v) done("it needs the updated feeds function (redeploy super-function in Supabase)");
+      else if (Array.isArray(v.ps) && v.ps.length) { a.ps = v.ps.filter(function (p) { return p && typeof p.t === "string" && p.t; }).slice(0, 150); a.paid = !!v.paid; done(""); }
+      else next(err && !v.err ? err : v.err || "the site gave no text");
+    }).catch(function (e) { next(String((e && e.message) || e)); });
+  };
+  next("");
+}
+function rdrArt(key) {
+  var it = RDR ? RDR.list.filter(function (x) { return x.k === key; })[0] : null;
+  artLoad(key, it ? [key].concat(it.us) : [key]);
+}
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -3849,8 +3898,9 @@ function openNews(u, one) {
   }).join("") : "";
   var img = safeUrl(n.img);
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
-    (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? "<p>" + esc(n.d) + "</p>" : "") +
+    (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? '<p class="rdsum">' + esc(n.d) + "</p>" : "") + artBox(n.u) +
     (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") + more);
+  artLoad(n.u, [n.u].concat(g.map(function (x) { return x.u; })));
   render();
 }
 function openTG(u, one) {
@@ -5694,7 +5744,7 @@ function openHelp() {
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
     '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
-    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window is scrolled through first), so two posts are never on screen together. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen).</p>' +
+    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window is scrolled through first), so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen).</p>' +
     '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
     '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 

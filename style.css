@@ -1403,3 +1403,7 @@ body.noshadow #srchAns{box-shadow:none}
 #grid .th .hc .pill{height:22px;box-sizing:border-box;display:inline-flex;align-items:center;flex:none;white-space:nowrap}
 #grid .th.fit3 .hc{gap:2px}
 #grid .th.fit3 .hc .ib.sm:not([data-a=filtmenu]){width:18px}
+/* The full text of a news article in the reader: it takes the place of the short summary */
+.rdart p{margin:10px 0 0;line-height:1.55}
+.rdart h4{margin:16px 0 0;font-size:15px}
+.rdsum:has(+ .rdart.ok){display:none}
