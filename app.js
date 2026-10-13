@@ -1,4 +1,4 @@
-var VERSION = 146;
+var VERSION = 147;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2261,13 +2261,21 @@ function rdrCom(u) {
 function rdrStep(d) {
   var L = $("rdrL");
   if (!L) return;
-  var ps = L.querySelectorAll(".rdp"), top = L.scrollTop, st = L.clientHeight * 0.85, i, y;
+  var ps = L.querySelectorAll(".rdp"), top = L.scrollTop, ch = L.clientHeight, st = ch * 0.85, i, cur = -1;
+  // the post you are in: the last one that starts at or above the top of the window
+  for (i = 0; i < ps.length; i++) if (ps[i].offsetTop <= top + 40) cur = i;
+  if (cur < 0) { L.scrollTop = d > 0 && ps.length ? ps[0].offsetTop : 0; return; }
+  var y = ps[cur].offsetTop, end = y + ps[cur].offsetHeight;
   if (d > 0) {
-    for (i = 0; i < ps.length; i++) { y = ps[i].offsetTop; if (y > top + 40) { L.scrollTop = y > top + st ? top + st : y; return; } }
-    L.scrollTop = L.scrollHeight;
+    // more of this post is below the window: the next screen of it, stopping exactly where the post ends (its last
+    // lines and its buttons), never past it. Only from there does the next step go to the next post.
+    if (end > top + ch + 4) { L.scrollTop = Math.min(top + st, end - ch); return; }
+    L.scrollTop = cur + 1 < ps.length ? ps[cur + 1].offsetTop : L.scrollHeight;
   } else {
-    for (i = ps.length - 1; i >= 0; i--) { y = ps[i].offsetTop; if (y < top - 40) { L.scrollTop = y < top - st ? top - st : y; return; } }
-    L.scrollTop = 0;
+    if (y < top - 4) { L.scrollTop = Math.max(top - st, y); return; }
+    if (cur === 0) { L.scrollTop = 0; return; }
+    var p = ps[cur - 1], py = p.offsetTop, ph = p.offsetHeight;
+    L.scrollTop = ph > ch + 4 ? py + ph - ch : py;   // back into a long post at its end, the way you left it
   }
 }
 document.addEventListener("keydown", function (e) {
