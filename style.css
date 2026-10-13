@@ -1380,7 +1380,10 @@ body.noshadow #srchAns{box-shadow:none}
 @media(max-width:520px){.twdcats{max-height:82px}}
 /* Reader, one post at a time: each post fills the window and the list rests on a post */
 .rdr.snap{scroll-snap-type:y mandatory}
-.rdr.snap .rdp{min-height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always}
+.rdr.snap .rdp{height:var(--rh,100%);box-sizing:border-box;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;scrollbar-width:thin}
+/* a long post scrolls inside its own panel; the list itself shows no scroll bar, so there is only ever one */
+.rdr.snap{scrollbar-width:none}
+.rdr.snap::-webkit-scrollbar{display:none}
 .rdr.snap #rdrTop{scroll-snap-align:start}
 .rdr.snap #rdrEnd{scroll-snap-align:end}
 /* The top line of every box: the title on the left, the controls on the right, always on ONE line and always the same

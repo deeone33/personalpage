@@ -1,4 +1,4 @@
-var VERSION = 148;
+var VERSION = 149;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2153,20 +2153,33 @@ function rdrWatch() {
   });
   Array.prototype.forEach.call(L.querySelectorAll(".rdp"), function (p) { if (p._h == null) { p._h = p.offsetHeight; R.ro.observe(p); } });
 }
-// One post at a time (Settings > News, Telegram & Reddit > Reading posts): every post is at least as tall as the window
-// and the list comes to rest on a post, so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. A post taller than the window is
-// scrolled through first. The mouse wheel goes one post (or one screen of a long post) per notch.
+// One post at a time (Settings > News, Telegram & Reddit > Reading posts): every post is a panel exactly as tall as the
+// window and the list comes to rest on a panel, so two posts are never on screen together. A post longer than the window
+// scrolls INSIDE its panel, smoothly, the way any page scrolls (the browser does that itself, with the wheel and with a
+// finger). At the end of the post that scroll stops; only a new scroll, after a short pause, goes on to the next post.
+// the post whose panel is on screen
+function rdrCur(L) {
+  var ps = L.querySelectorAll(".rdp"), cur = null;
+  for (var i = 0; i < ps.length; i++) if (ps[i].offsetTop <= L.scrollTop + 40) cur = ps[i];
+  return cur;
+}
 function rdrFit() { var L = $("rdrL"); if (L) L.style.setProperty("--rh", L.clientHeight + "px"); }
 window.addEventListener("resize", rdrFit);
 document.addEventListener("wheel", function (e) {
   var L = $("rdrL");
   if (!RDR || !L || !L.classList.contains("snap") || !L.contains(e.target) || e.ctrlKey || !e.deltaY) return;
+  var now = Date.now(), dn = e.deltaY > 0, p = e.target.closest ? e.target.closest(".rdp") : null;
+  if (!p) p = rdrCur(L);
+  // the post has more to show that way: the browser scrolls it, and this is remembered as "still reading"
+  if (p && (dn ? p.scrollTop + p.clientHeight < p.scrollHeight - 1 : p.scrollTop > 0)) { RDR.inT = now; return; }
   e.preventDefault();
-  var now = Date.now(), gap = now - (RDR.whl || 0), big = Math.abs(e.deltaY) >= 50;
+  // the scroll that brought you to the end of a post does not carry on into the next one: it takes a pause first
+  if (now - (RDR.inT || 0) < 350) { RDR.inT = now; return; }
+  var gap = now - (RDR.whl || 0), big = Math.abs(e.deltaY) >= 50;
   RDR.whl = now;
-  // a mouse wheel: one step per notch, at most five a second. A touchpad sends a long stream for one swipe: one step per swipe.
+  // a mouse wheel: one post per notch, at most five a second. A touchpad sends a long stream for one swipe: one post per swipe.
   if (big ? now - (RDR.wh || 0) < 200 : gap < 140) return;
-  RDR.wh = now; rdrStep(e.deltaY > 0 ? 1 : -1);
+  RDR.wh = now; rdrStep(dn ? 1 : -1);
 }, { passive: false });
 function rdrOnScroll() { if (RDR && !RDR.raf) RDR.raf = setTimeout(function () { if (RDR) { RDR.raf = 0; rdrScan(); } }, 80); }
 // A post counts as read once it has come into the upper half of the window (or the list has reached its end). A jump of
@@ -2265,6 +2278,16 @@ function rdrStep(d) {
   // the post you are in: the last one that starts at or above the top of the window
   for (i = 0; i < ps.length; i++) if (ps[i].offsetTop <= top + 40) cur = i;
   if (cur < 0) { L.scrollTop = d > 0 && ps.length ? ps[0].offsetTop : 0; return; }
+  if (L.classList.contains("snap")) {
+    // one post at a time: a long post scrolls inside its own panel first, then the list moves a whole panel
+    var c = ps[cur], room = d > 0 ? c.scrollHeight - c.clientHeight - c.scrollTop : c.scrollTop;
+    if (room > 1) { try { c.scrollBy({ top: d * Math.min(st, room), behavior: "smooth" }); } catch (e) { c.scrollTop += d * Math.min(st, room); } return; }
+    var n = ps[cur + d];
+    if (!n) { L.scrollTop = d > 0 ? L.scrollHeight : 0; return; }
+    n.scrollTop = d > 0 ? 0 : n.scrollHeight;   // going back, a long post is entered at its end, the way you left it
+    L.scrollTop = n.offsetTop;
+    return;
+  }
   var y = ps[cur].offsetTop, end = y + ps[cur].offsetHeight;
   if (d > 0) {
     // more of this post is below the window: the next screen of it, stopping exactly where the post ends (its last
@@ -5752,7 +5775,7 @@ function openHelp() {
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
     '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; being away for 2+ minutes does that automatically). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
-    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window is scrolled through first), so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen).</p>' +
+    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window scrolls smoothly inside it and stops at its end; a new scroll then moves on), so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen).</p>' +
     '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
     '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
 
