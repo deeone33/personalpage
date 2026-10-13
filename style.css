@@ -1419,3 +1419,8 @@ body.noshadow #srchAns{box-shadow:none}
 .site .row .lnk{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .site .row>span:first-child small{flex:0 0 auto;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .setgrp label.rowoff{opacity:.45}
+/* Reader, free scrolling: more air above and below the line between two posts, so it is clear where one ends */
+.rdr:not(.snap) .rdp{padding-top:26px;padding-bottom:26px}
+.rdr:not(.snap) .rdp:first-of-type{padding-top:14px}
+/* the count of new posts: the space between the number and the word (the two are laid out side by side, which drops a typed space) */
+#grid .th .hc .pill{gap:.3em}

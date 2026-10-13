@@ -1,4 +1,4 @@
-var VERSION = 158;
+var VERSION = 162;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -107,11 +107,21 @@ function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
 // Leftover HTML codes in feed text ("&#33;", "&amp;", "&hellip;") -> the real character
 var ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", mdash: "—", ndash: "–", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“" };
+// Every other named code ("&otilde;", "&Uuml;", "&eacute;": the letters of Estonian, Swedish, French and so on) is
+// looked up in the browser's own table, through a text box that is never shown: a text box holds plain text only, so
+// nothing in the code can run. Capitals matter ("&Uuml;" is Ü, "&uuml;" is ü). What the browser does not know stays as it is.
+var ENTBOX = null, ENTC = {};
+function entName(c) {
+  if (ENTC[c] !== undefined) return ENTC[c];
+  var v = "";
+  try { ENTBOX = ENTBOX || document.createElement("textarea"); ENTBOX.innerHTML = "&" + c + ";"; v = ENTBOX.value; } catch (e) {}
+  return (ENTC[c] = v && v !== "&" + c + ";" && v.length <= 2 ? v : "");
+}
 function unent(s) {
   if (!s || String(s).indexOf("&") < 0) return s;
   var once = function (x) {
-    return x.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z]{2,8});/gi, function (m, c) {
-      if (c.charAt(0) !== "#") return ENT[c.toLowerCase()] || m;
+    return x.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,30});/gi, function (m, c) {
+      if (c.charAt(0) !== "#") return ENT[c] || entName(c) || ENT[c.toLowerCase()] || m;
       var n = c.charAt(1).toLowerCase() === "x" ? parseInt(c.slice(2), 16) : parseInt(c.slice(1), 10);
       return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
     });
@@ -1878,7 +1888,7 @@ function tvAlerts() {
     if (!ep || ep.ts > now) return;
     stale = true;
     if (now - ep.ts > 21600000 || !once("tv:" + s.id + ":" + ep.s + ":" + ep.e + ":" + ep.ts)) return;
-    toast("tv", (c.n || s.n) + (tvCode(ep) ? " " + tvCode(ep) : ""), "New episode" + (ep.n && !/^(Episode \d+|TBA)$/.test(ep.n) ? ": " + ep.n : "") + (now - ep.ts < 180000 ? " · on now" : " · aired " + ago(ep.ts) + " ago"), { a: "tv", k: String(s.id) });
+    toast("tv", (c.n || s.n) + (tvCode(ep) ? " " + tvCode(ep) : ""), "New episode" + (ep.n && !/^(Episode \d+|TBA)$/.test(ep.n) ? ": " + ep.n : "") + (now - ep.ts < 180000 ? " · on now" : " · aired " + ago(ep.ts) + " ago"), { a: "tv", k: String(s.id) }, false, false, ep.ts);
   });
   if (stale) fetchTv();   // an episode has aired: ask what the next one is
 }
@@ -2788,7 +2798,7 @@ function artLoad(key, urls) {
       var v = r.data && r.data.article;
       if (r.error) next(r.error.message);
       else if (!v) done("it needs the updated feeds function (redeploy super-function in Supabase)");
-      else if (Array.isArray(v.ps) && v.ps.length) { a.ps = v.ps.filter(function (p) { return p && typeof p.t === "string" && p.t; }).slice(0, 150); a.paid = !!v.paid; done(""); }
+      else if (Array.isArray(v.ps) && v.ps.length) { a.ps = v.ps.filter(function (p) { return p && typeof p.t === "string" && p.t; }).slice(0, 150); a.ps.forEach(function (p) { p.t = unent(p.t); }); a.paid = !!v.paid; done(""); }
       else next(err && !v.err ? err : v.err || "the site gave no text");
     }).catch(function (e) { next(String((e && e.message) || e)); });
   };
@@ -2926,7 +2936,7 @@ function fetchTwitch() {
       TWC = true;
       TW = tw;
       if (LIVEPREV) TW.forEach(function (x) {
-        if (!LIVEPREV[x.id] && P.fav["t:" + x.id]) toast("live", (x.name || x.id) + " is live", (x.sub ? x.sub + " · " : "") + (x.title || ""), { a: "tw", k: x.id });
+        if (!LIVEPREV[x.id] && P.fav["t:" + x.id]) toast("live", (x.name || x.id) + " is live", (x.sub ? x.sub + " · " : "") + (x.title || ""), { a: "tw", k: x.id }, false, false, x.st);
       });
       LIVEPREV = {}; TW.forEach(function (x) { LIVEPREV[x.id] = 1; });
       render(); fetchTwOffline(tok);
@@ -3536,7 +3546,7 @@ function newsAlerts() {
     if (sent[k] || n >= 3) return;
     sent[k] = 1; n++;
     var isTg = TGP.indexOf(x) >= 0;
-    toast("words", x.s, hd(x.t, 140), { a: isTg ? "tg" : "news", k: x.u });
+    toast("words", x.s, hd(x.t, 140), { a: isTg ? "tg" : "news", k: x.u }, false, false, x.ts);
   });
   save("sp_nalert", top);
   if (top > last0) { sy().nalert = Math.max(+sy().nalert || 0, top); persist(); }
@@ -3992,8 +4002,8 @@ function mailAlerts(i, m) {
   sy().mail[i] = Math.max(+sy().mail[i] || 0, top); persist();
   var nm = (P.mail[i] && P.mail[i].name) || "Mail", who = function (x) { return (x.from || "").replace(/<.*>/, "").replace(/"/g, "").trim() || x.from || "?"; };
   fresh.sort(function (a, b) { return b.ts - a.ts; });
-  toast("mail", nm + " · " + who(fresh[0]), fresh[0].subject || "(no subject)", { a: "mail", k: i });
-  if (fresh.length > 1) toast("mail", nm + " · " + (fresh.length - 1) + " more new email" + (fresh.length > 2 ? "s" : ""), fresh.slice(1, 4).map(who).join(", "), { a: "mail", k: i });
+  toast("mail", nm + " · " + who(fresh[0]), fresh[0].subject || "(no subject)", { a: "mail", k: i }, false, false, fresh[0].ts);
+  if (fresh.length > 1) toast("mail", nm + " · " + (fresh.length - 1) + " more new email" + (fresh.length > 2 ? "s" : ""), fresh.slice(1, 4).map(who).join(", "), { a: "mail", k: i }, false, false, fresh[1].ts);
 }
 function mailN(i) {
   var m = MAIL[i], seen = P.mail[i] && P.mail[i].seen, n = seen && m.fresh != null ? m.fresh : m.unread;
@@ -5913,10 +5923,14 @@ function runAct(act) {
 // History of the last 30 notifications (on this device). "seen" = you clicked or dismissed it, or opened the bell.
 var NLOG = load("sp_nlog", []);
 function missed() { return NLOG.filter(function (e) { return !e.seen; }).length; }
-function toast(kind, title, body, act, sticky, force) {
+// `at`: the time the thing itself happened (the post was published, the mail arrived, the stream started), where that
+// is known. The history shows that time. Without it the history shows when you were told, which can be hours later
+// (the page was closed, or the story only reached your sources then).
+function toast(kind, title, body, act, sticky, force, at) {
   var n = NTF();
   if (!force && n[kind] === false) return;
   var id = ++toastN, box = $("toasts"), el = document.createElement("div"), entry = { k: kind, t: String(title).slice(0, 160), b: String(body || "").slice(0, 200), ts: Date.now(), act: act || null };
+  if (+at > 0 && +at < entry.ts) entry.et = +at;
   TOASTS[id] = entry;
   NLOG.push(entry); if (NLOG.length > 30) NLOG = NLOG.slice(-30);
   save("sp_nlog", NLOG);
@@ -5971,7 +5985,7 @@ function toastAct(a, id) {
 }
 function bellHtml() {
   return '<div class="menu bell" role="menu">' + (NLOG.length ? NLOG.slice().reverse().map(function (e, i) {
-    return '<button role="menuitem" data-a="bellgo" data-k="' + (NLOG.length - 1 - i) + '" class="k-' + esc(e.k) + '"><b><i>' + (TICON[e.k] || "●") + "</i>" + esc(e.t) + "</b>" + (e.b ? "<span>" + esc(e.b) + "</span>" : "") + "<small>" + ago(e.ts) + " ago</small></button>";
+    return '<button role="menuitem" data-a="bellgo" data-k="' + (NLOG.length - 1 - i) + '" class="k-' + esc(e.k) + '"><b><i>' + (TICON[e.k] || "●") + "</i>" + esc(e.t) + "</b>" + (e.b ? "<span>" + esc(e.b) + "</span>" : "") + '<small title="' + esc(when(e.et || e.ts)) + (e.et && e.ts - e.et > 600000 ? ". You were told " + esc(ago(e.ts)) + " ago" : "") + '">' + ago(e.et || e.ts) + " ago</small></button>";
   }).join("") + '<button class="lnk2" data-a="bellclear">Clear history</button>' : '<div class="mut sn">No notifications yet.</div>') + "</div>";
 }
 // Big news: the same story from several of your sources within two hours
@@ -5984,7 +5998,7 @@ function bigNews() {
     var seenO = {}, close = g.filter(function (x) { var o = outlet(x.s); if (newest - x.ts >= 7200000 || seenO[o]) return false; seenO[o] = 1; return true; });   // each outlet counts once
     if (close.length < Math.max(2, n.srcN) || sent >= 2 || !once("bn:" + g[g.length - 1].u)) return;
     sent++;
-    toast("news", g[0].t, close.length + " sources · " + close.map(function (x) { return x.s; }).join(", "), { a: "news", k: g[0].u });
+    toast("news", g[0].t, close.length + " sources · " + close.map(function (x) { return x.s; }).join(", "), { a: "news", k: g[0].u }, false, false, g[0].ts);
   });
 }
 // Stocks: a fast move (compared with the price up to 35 minutes ago) or a big move on the day
