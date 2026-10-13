@@ -1424,3 +1424,21 @@ body.noshadow #srchAns{box-shadow:none}
 .rdr:not(.snap) .rdp:first-of-type{padding-top:14px}
 /* the count of new posts: the space between the number and the word (the two are laid out side by side, which drops a typed space) */
 #grid .th .hc .pill{gap:.3em}
+/* A link that sits among ordinary buttons and should not stand out from them (Open on Telegram, Read the full article,
+   Open comments on Reddit, Open on Twitch): the same look as the button beside it */
+a.btn.pl{background:var(--card);color:var(--fg);border:1px solid var(--line);font-weight:400;transition:border-color .15s}
+a.btn.pl:hover{border-color:var(--ac);box-shadow:none}
+/* Players docked at the right side of the page: that side becomes a player strip with its own drag edge */
+#dockPR{display:contents}
+body.dockrp #dockR{width:var(--dockrp-w)}
+body.dockrp.dockedr{padding-right:var(--dockrp-w)}
+body.dockrp.dockedr #toasts{right:calc(var(--dockrp-w) + 14px)}
+#dockGripR{display:none;position:fixed;top:0;bottom:0;right:calc(var(--dockrp-w) - 5px);width:10px;cursor:ew-resize;z-index:6;touch-action:none}
+#dockGripR:hover,#dockGripR:active{background:linear-gradient(90deg,transparent 4px,var(--ac) 4px,var(--ac) 6px,transparent 6px)}
+body.dockrp #dockGripR{display:block}
+@media(max-width:820px){
+  body.dockrp #dockR{width:auto}
+  body.dockrp.dockedr{padding-right:0}
+  body.dockrp.dockedr #toasts{right:14px}
+  body.dockrp #dockGripR{display:none}
+}

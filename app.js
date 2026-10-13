@@ -1,4 +1,4 @@
-var VERSION = 162;
+var VERSION = 163;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -131,7 +131,7 @@ function unent(s) {
 function unentAll(list, keys) { (list || []).forEach(function (x) { keys.forEach(function (k) { if (x[k]) x[k] = unent(x[k]); }); }); return list || []; }
 // Links and images that come from feeds must be plain web addresses (never javascript: or data:)
 function safeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
-function linkBtn(u, label) { u = safeUrl(u); return u ? '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + label + "</a>" : ""; }
+function linkBtn(u, label, plain) { u = safeUrl(u); return u ? '<a class="btn' + (plain ? " pl" : "") + '" target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + label + "</a>" : ""; }
 // Broken logos remove themselves (instead of an inline onerror, which the security policy blocks)
 // A logo that failed to load is remembered for a week, so it is not put back (and flashed white) on every redraw.
 var BADIMG = load("sp_badimg", {});
@@ -2061,17 +2061,17 @@ function rdrPost(box, it, line) {
   if (box === "news") {
     var n = x[0];
     h = '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" + rdrMedia("", n.img) + (n.d ? '<p class="rdsum">' + esc(n.d) + "</p>" : "") + artBox(it.k) +
-      (PREVIEW ? "" : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") +
+      (PREVIEW ? "" : '<p class="tools">' + linkBtn(n.u, "Read the full article", 1) + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") +
       (x.length > 1 ? '<details class="rdrsrc"><summary>' + x.length + " sources report this</summary>" + x.map(function (a) {
         var au = safeUrl(a.u);
         return '<div class="mi">' + (au ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(au) + '">' + esc(a.t) + "</a>" : esc(a.t)) + '<small class="mut">' + esc(a.s) + " · " + when(a.ts) + "</small></div>";
       }).join("") + "</details>" : "");
   } else if (box === "tg") {
-    h = '<div class="mut">' + esc(x.s) + " · " + when(x.ts) + "</div>" + rdrMedia(x.vid, x.img, x.th) + '<p class="nt">' + esc(x.tx || x.t) + '</p><p class="tools">' + linkBtn(x.u, "Open on Telegram") + laterBtn("m:" + x.u) + "</p>";
+    h = '<div class="mut">' + esc(x.s) + " · " + when(x.ts) + "</div>" + rdrMedia(x.vid, x.img, x.th) + '<p class="nt">' + esc(x.tx || x.t) + '</p><p class="tools">' + linkBtn(x.u, "Open on Telegram", 1) + laterBtn("m:" + x.u) + "</p>";
   } else {
     var com = !PREVIEW && rdComN();
     h = '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" + rdrMedia("", x.img, "", " rdimg") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
-      '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + laterBtn("r:" + x.u) + (com && !RDR.com[x.u] ? '<button data-a="rdrcom" data-k="' + esc(x.u) + '">Top comments</button>' : "") + "</p>" +
+      '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit", 1) + (x.x ? linkBtn(x.x, "Open the link", 1) : "") + laterBtn("r:" + x.u) + (com && !RDR.com[x.u] ? '<button data-a="rdrcom" data-k="' + esc(x.u) + '">Top comments</button>' : "") + "</p>" +
       (com ? '<div class="rdcw" data-u="' + esc(x.u) + '">' + (RDR.com[x.u] ? '<p class="mut sn">Loading comments…</p>' : "") + "</div>" : "");
   }
   return '<article class="rdp' + (RDR.nw[it.k] ? " nw" : "") + '" data-u="' + esc(it.k) + '">' + (line || "") + h + "</article>";
@@ -2996,7 +2996,7 @@ function openTwitch(login) {
   var s = (TW || []).filter(function (x) { return x.id === login; })[0] || TWDS[login];
   openModal((s && s.name) || login, (s && s.title ? '<p class="mut sn">' + esc(s.title) + (s.sub ? " · " + esc(s.sub) : "") + "</p>" : "") +
     '<div class="tw"><iframe allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc(twEmbedSrc(login)) + '"></iframe></div>' +
-    '<p class="tools"><button class="pri" data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised">Pop out (no ads with Turbo/sub)</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button><button data-a="dock" data-k="t:' + esc(login) + '">Dock on the left</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch") + '<button data-a="twdopen">Discover</button></p>' +
+    '<p class="tools"><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing at the left side of the page">Dock left</button><button data-a="dockr" data-k="t:' + esc(login) + '" title="Keep it playing at the right side of the page">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + '<button data-a="twdopen">Discover</button></p>' +
     '<p class="mut sn">Seeing ads in this embedded player even with Turbo or a sub? Your browser is hiding your Twitch login from embeds. Use Pop out, or allow third-party cookies for <code>[*.]twitch.tv</code> (Help → Twitch).</p>');
 }
 
@@ -3285,7 +3285,7 @@ function fetchYT() {
   }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
 function openYT(id) {
-  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock on the left</button> ' + laterBtn("v:" + id) + "</p>");
+  openModal("YouTube", '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">Dock left</button> <button data-a="dockr" data-k="v:' + esc(id) + '">Dock right</button> ' + laterBtn("v:" + id) + "</p>");
 }
 document.addEventListener("change", function (e) {
   var ds = e.target.dataset && e.target.dataset.s;
@@ -3889,7 +3889,7 @@ function openReddit(u, one) {
   var img = safeUrl(x.img);
   openModal("r/" + x.s, '<h2 class="mh">' + esc(x.t) + '</h2><div class="mut">r/' + esc(x.s) + (x.by ? " · " + esc(x.by) : "") + " · " + when(x.ts) + "</div>" +
     (img ? '<img class="mimg rdimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (x.d ? '<p class="nt">' + esc(x.d) + "</p>" : "") +
-    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit") + (x.x ? linkBtn(x.x, "Open the link") : "") + laterBtn("r:" + x.u) + "</p>" + (PREVIEW ? previewNote() : rdComN() ? '<div id="rdCom"><p class="mut sn">Loading comments…</p></div>' : ""));
+    '<p class="tools">' + linkBtn(x.u, "Open comments on Reddit", 1) + (x.x ? linkBtn(x.x, "Open the link", 1) : "") + laterBtn("r:" + x.u) + "</p>" + (PREVIEW ? previewNote() : rdComN() ? '<div id="rdCom"><p class="mut sn">Loading comments…</p></div>' : ""));
   render();
   if (!PREVIEW && rdComN()) loadRdComments(u);
 }
@@ -3958,7 +3958,7 @@ function openNews(u, one) {
   var img = safeUrl(n.img);
   openModal(n.s, '<h2 class="mh">' + esc(n.t) + '</h2><div class="mut">' + esc(n.s) + " · " + when(n.ts) + "</div>" +
     (img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "") + (n.d ? '<p class="rdsum">' + esc(n.d) + "</p>" : "") + artBox(n.u) +
-    (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article") + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") + more);
+    (PREVIEW ? previewNote() : '<p class="tools">' + linkBtn(n.u, "Read the full article", 1) + '<button data-a="nsearch" data-k="' + esc(n.t) + '">Search other coverage</button>' + laterBtn("a:" + n.u) + "</p>") + more);
   artLoad(n.u, [n.u].concat(g.map(function (x) { return x.u; })));
   render();
 }
@@ -3970,7 +3970,7 @@ function openTG(u, one) {
   var vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th;
   var media = vid ? '<video class="mvid" controls playsinline preload="metadata"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
     : img ? '<img class="mimg" referrerpolicy="no-referrer" alt="" data-rm="1" src="' + esc(img) + '">' : "";
-  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + '</p><p class="tools">' + linkBtn(g.u, "Open on Telegram") + laterBtn("m:" + g.u) + "</p>" + (PREVIEW ? previewNote() : ""));
+  openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + '</p><p class="tools">' + linkBtn(g.u, "Open on Telegram", 1) + laterBtn("m:" + g.u) + "</p>" + (PREVIEW ? previewNote() : ""));
   render();
 }
 var MAIL = [], mBusy = false;
@@ -4538,34 +4538,42 @@ $("updBtn").onclick = function () { location.reload(); };
 // ---- Docked players: keep watching on the left while you use the rest of the site ----
 var DOCK = [], dockUid = 0;
 function setDockW(w) { document.documentElement.style.setProperty("--dock-w", w + "px"); }
-(function () {
-  var grip = $("dockGrip");
+// players docked at the right have a width of their own (P.dockWR); until you drag it, it is that of the left strip
+function setDockWR() { document.documentElement.style.setProperty("--dockrp-w", P.dockWR ? P.dockWR + "px" : "var(--dock-w)"); }
+[["dockGrip", 0], ["dockGripR", 1]].forEach(function (g) {
+  var grip = $(g[0]), right = !!g[1];
   grip.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     try { grip.setPointerCapture(e.pointerId); } catch (x) {}
     document.body.classList.add("resizing");
     var w = 0;
-    function mv(ev) { w = Math.round(Math.max(240, Math.min(ev.clientX, window.innerWidth * 0.75))); setDockW(w); }
+    function mv(ev) {
+      w = Math.round(Math.max(240, Math.min(right ? window.innerWidth - ev.clientX : ev.clientX, window.innerWidth * 0.75)));
+      if (right) document.documentElement.style.setProperty("--dockrp-w", w + "px"); else setDockW(w);
+    }
     function up() {
       grip.removeEventListener("pointermove", mv); grip.removeEventListener("pointerup", up);
       document.body.classList.remove("resizing");
-      if (w) { P.dockW = w; persist(); packGrid(); }
+      if (w) { if (right) P.dockWR = w; else P.dockW = w; persist(); packGrid(); }
     }
     grip.addEventListener("pointermove", mv); grip.addEventListener("pointerup", up);
   });
-})();
+});
 function syncDock() {
-  var l = DOCK.length > 0 || $("sideL").children.length > 0, r = $("sideR").children.length > 0;
+  var pl = DOCK.some(function (d) { return d.side !== "r"; }), pr = DOCK.some(function (d) { return d.side === "r"; });
+  var l = pl || $("sideL").children.length > 0, r = pr || $("sideR").children.length > 0;
   $("dock").hidden = !l; $("dockR").hidden = !r;
   document.body.classList.toggle("docked", l); document.body.classList.toggle("dockedr", r);
-  document.body.classList.toggle("dockslim", l && !DOCK.length);
+  document.body.classList.toggle("dockslim", l && !pl);
+  document.body.classList.toggle("dockrp", pr);   // players at the right: that side is as wide as a player strip
+  if (pr) setDockWR();
   setTimeout(packGrid, 0);   // the page just got wider or narrower
 }
-function dockAdd(k) {
+function dockAdd(k, side) {
   var kind = k.charAt(0), id = k.slice(2);
   if (DOCK.some(function (d) { return d.kind === kind && d.id === id; })) { closeModal(); return; }
   if (DOCK.length >= 3) { alert("The dock is full (3 players). Close one first."); return; }
-  var d = { kind: kind, id: id, uid: ++dockUid };
+  var d = { kind: kind, id: id, uid: ++dockUid, side: side === "r" ? "r" : "l" };
   DOCK.push(d);
   var src = kind === "t" ? twEmbedSrc(id)
     : "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1";
@@ -4575,7 +4583,7 @@ function dockAdd(k) {
   w.innerHTML = '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div><div class="dkc">' +
     (kind === "t" ? '<button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button>' : "") +
     '<button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
-  $("dockP").appendChild(w);
+  $(d.side === "r" ? "dockPR" : "dockP").appendChild(w);
   if (kind === "t" && P.dockChat) dockChat(d.uid);
   syncDock(); closeModal();
 }
@@ -5358,6 +5366,7 @@ document.addEventListener("click", function (e) {
   if (a === "rdrefresh") { fetchReddit(true); return; }
   if (a === "srcdel") { delSrc(k); return; }
   if (a === "dock") { dockAdd(k); return; }
+  if (a === "dockr") { dockAdd(k, "r"); return; }
   if (a === "undock") { undock(k); return; }
   if (a === "dockchat") { dockChat(k); return; }
   if (a === "mailread") { markRead(+k); return; }
@@ -5875,7 +5884,7 @@ function openHelp() {
 
   html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish. On a phone the boxes sit in one column, so the arrows point up and down (▲ / ▼) and the width buttons are left out.</p>';
 
-  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock on the left</b>. It keeps playing in a strip on the left side while you use the rest of the site. You can dock up to 3 at once, and drag the edge of that strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
+  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b>. It keeps playing in a strip on that side of the page while you use the rest of the site. You can dock up to 3 at once, and drag the edge of a strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
 
   html += '<h3 id="help-account">Account &amp; privacy</h3><p>Under <b>Settings</b>, the Account sections are:</p><ul>' +
     '<li><b>Password:</b> set a new one (typed twice). If you forget it, click the person icon, then <b>Forgot password?</b>, and a reset link is emailed to you.</li>' +
