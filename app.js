@@ -1,4 +1,4 @@
-var VERSION = 165;
+var VERSION = 167;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -616,21 +616,23 @@ function tile(id, title, body, click, hx) {
     var pr = typeof click === "string" ? click.split(":") : ["weather"];
     at = ' data-a="' + pr[0] + '"' + (pr[1] != null ? ' data-k="' + pr[1] + '"' : "") + ' tabindex="0" role="button"';
   }
-  if (EDIT) {
+  var ed2 = EDIT && typeof ED !== "undefined" && ED && ED.on;   // the new Edit mode draws its own controls (edDecorate)
+  if (EDIT && !ed2) {
     var bt = function (act, d, glyph, ttl, cls) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '" title="' + ttl + '" aria-label="' + ttl + '"' + (cls ? ' class="' + cls + '"' : "") + ">" + glyph + "</button>"; };
     var noW = id === "live" || id === "menu";
     // on a phone the boxes sit in one column: the arrows point up and down there, and the width buttons are left out (style.css)
-    var arw = function (a, b) { return '<span class="ad">' + a + '</span><span class="ap">' + b + "</span>"; };
+    // (not called "ad": ad blockers such as Brave Shields hide anything with that class name)
+    var arw = function (a, b) { return '<span class="mvh">' + a + '</span><span class="mvv">' + b + "</span>"; };
     t = '<div class="tools">' + bt("mv", -1, arw("◀", "▲"), "Move earlier") + bt("mv", 1, arw("▶", "▼"), "Move later") +
       (noW ? "" : bt("w", -1, "W−", "Narrower", "wbt") + bt("w", 1, "W+", "Wider", "wbt")) +
       (isEmb(id) ? "" : bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text")) +
       (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : isEmb(id) ? bt("h", -1, "H−", "Lower box") + bt("h", 1, "H+", "Taller box") : "") +
       (id === "menu" ? "" : '<button data-a="boxoff" data-k="' + id + '" title="Hide this whole box. Bring it back in Settings, Layout.">Hide</button>') + "</div>";
   }
-  var h3 = "<h3" + (EDIT ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
+  var h3 = "<h3" + (EDIT && !ed2 ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
   var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
   var errs = cp ? [] : boxErrs(id), eb = errs.length ? '<button class="ib sm errb" data-a="boxerr" data-k="' + id + '" title="' + esc(errs.length > 1 ? errs.length + " problems. Click for the details." : errs[0].what + ". Click for the details.") + '" aria-label="Problem in this box">!</button>' : "";
-  var head = cp ? (EDIT ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
+  var head = cp ? (EDIT && !ed2 ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
   return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
@@ -652,6 +654,8 @@ function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div 
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
 function render() {
+  // while a box is being dragged in the new Edit mode, other redraws (new data arriving) wait until it is let go
+  if (typeof ED !== "undefined" && ED && ED.hold && !ED.mine) { ED.pending = true; return; }
   var D = DATA, T = {};
   var t = WX ? Math.round(WX.current.temperature_2m) : D.weather.temp;
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + Math.round(WX.current.apparent_temperature) + "°" : D.weather.note;
@@ -847,6 +851,7 @@ function render() {
   placeEmbeds();
   rdrSync();
   siteSync();
+  edDecorate();
   Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
   grid0.style.minHeight = "";
   if (sy0 > 0) {
@@ -882,6 +887,8 @@ function fitSparks() {
 function packGrid() {
   fitSparks();
   var kids = Array.prototype.slice.call($("grid").children);
+  // places set for a layout that keeps its columns (below) are cleared first: on a phone there are no columns
+  kids.forEach(function (k) { if (k.style.gridColumn) k.style.gridColumn = ""; if (k.style.gridRowStart) k.style.gridRow = ""; });
   // start from each list's natural height (undo any earlier snapping)
   Array.prototype.forEach.call($("grid").querySelectorAll(".list[data-snap]"), function (l) { l.style.minHeight = ""; l.style.maxHeight = l.dataset.mh; l.removeAttribute("data-snap"); });
   var span = function () {
@@ -890,6 +897,9 @@ function packGrid() {
   };
   span();
   if (window.innerWidth <= 820) return;   // one column on phones: nothing to line up
+  // a layout edited in the new Edit mode keeps each box in its own columns (edPlaceGrid); others are packed as before
+  var XM = !!(P.layout && P.layout.x);
+  if (XM) edPlaceGrid(kids);
   // Snap: a stack of boxes (two headers and a gap) can never add up to exactly one tall box using H steps alone.
   // So when a box ends within 24px of the bottom edge of a clearly taller box beside it, it is stretched or trimmed
   // those few pixels and the two bottom edges line up exactly.
@@ -918,7 +928,7 @@ function packGrid() {
       cur = above || null;
     }
   });
-  if (changed) span();
+  if (changed) { span(); if (XM) edPlaceGrid(kids); }
 }
 var packT = 0;
 window.addEventListener("resize", function () { clearTimeout(packT); packT = setTimeout(packGrid, 80); });
@@ -2808,6 +2818,353 @@ function rdrArt(key) {
   var it = RDR ? RDR.list.filter(function (x) { return x.k === key; })[0] : null;
   artLoad(key, it ? [key].concat(it.us) : [key]);
 }
+// ==== The new Edit mode (being tried out: Settings > Layout & boxes shows its switch only to the site's admin) ====
+// Turning Edit on moves nothing: the boxes only get a dashed outline and a ⠿ tab on their top edge, and there are no rows
+// of buttons. Click a box for its buttons (they float over the page); drag its right edge, bottom edge or corner to
+// resize it; drag its ⠿ tab to move it. Every step is drawn by the page's own layout code at once, so what you see while
+// dragging is exactly what you get. Changes are kept only with Done; Cancel puts everything back.
+// Boxes keep the column they are dropped in: P.layout.x = { box: first column (0-11) }. A layout without it is packed
+// as before (each box into the first gap it fits); it gets its columns the first time it is edited here, taken from where
+// the boxes stand at that moment, so it looks exactly the same. On a phone it is one column in order, as before.
+// The pair of Radio and Menu shares one cell 6 columns wide and moves as one ("live").
+var ED = { on: false, sel: "", drag: null, size: null, base: "", hist: [], hold: false, mine: false, pending: false };
+function edOn() { return EDIT && ED.on; }
+function edPhone() { return window.innerWidth <= 820; }
+function edKey(el) { return (el && el.dataset && el.dataset.id) || (el && el.classList && el.classList.contains("pairwrap") ? "live" : ""); }
+function edItem(key) { var g = $("grid").children; for (var i = 0; i < g.length; i++) if (edKey(g[i]) === key) return g[i]; return null; }
+function edCols(key) { return key === "live" ? 6 : LAY().c[key] || DEF_C[key] || 3; }
+function edCanW(key) { return key !== "live"; }
+function edCanH(key) { return LISTS.indexOf(key) >= 0 || isEmb(key); }
+function edName(key) { return key === "live" ? "Radio and Menu" : isEmb(key) ? embName(key) : BOX_NAMES[key] || key; }
+// Going down the page, each box goes into its own columns, right under what already stands in them
+function layPlace(keys, H, X) {
+  var sky = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], out = {};
+  keys.forEach(function (k) {
+    var c = Math.min(12, edCols(k)), x = Math.max(0, Math.min(12 - c, +X[k] || 0)), top = 0, i;
+    for (i = x; i < x + c; i++) top = Math.max(top, sky[i]);
+    for (i = x; i < x + c; i++) sky[i] = top + H[k];
+    out[k] = { x: x, y: top, c: c };
+  });
+  return out;
+}
+// (called by packGrid on a computer when the layout has its columns)
+function edPlaceGrid(kids) {
+  var X = LAY().x || {}, H = {}, keys = [];
+  kids.forEach(function (k) { var key = edKey(k); if (!key) return; keys.push(key); H[key] = k.offsetHeight + 14; });
+  var at = layPlace(keys, H, X);
+  kids.forEach(function (k) { var p = at[edKey(k)]; if (!p) return; k.style.gridColumn = (p.x + 1) + " / span " + p.c; k.style.gridRow = (p.y + 1) + " / span " + H[edKey(k)]; });
+}
+// the columns of a layout that does not have them yet: from where its boxes stand now, and the order read from the top
+function edAdopt() {
+  var g = $("grid"), gr = g.getBoundingClientRect(), colW = (gr.width - 11 * 14) / 12, pos = {}, L = LAY();
+  Array.prototype.forEach.call(g.children, function (k) {
+    var key = edKey(k);
+    if (!key) return;
+    var r = k.getBoundingClientRect();
+    pos[key] = { x: Math.max(0, Math.min(12 - edCols(key), Math.round((r.left - gr.left) / (colW + 14)))), t: Math.round(r.top), l: r.left };
+  });
+  var o = orderIds(), vis = o.filter(function (k) { return pos[k]; }).sort(function (a, b) { return pos[a].t - pos[b].t || pos[a].l - pos[b].l; }), i = 0;
+  L.order = o.map(function (k) { return pos[k] ? vis[i++] : k; });   // boxes that are off keep their places
+  L.x = {};
+  Object.keys(pos).forEach(function (k) { L.x[k] = pos[k].x; });
+}
+// what Cancel and Undo put back: the layout, and which boxes are on
+function edState() { return JSON.stringify({ layout: P.layout || null, tv: P.tv ? !!P.tv.on : null, emb: P.emb || null }); }
+function edRestore(s) {
+  s = JSON.parse(s);
+  if (s.layout) P.layout = s.layout; else delete P.layout;
+  if (s.tv !== null && P.tv) P.tv.on = s.tv;
+  if (s.emb) P.emb = s.emb; else delete P.emb;
+}
+function edPush() { ED.hist.push(edState()); if (ED.hist.length > 60) ED.hist.shift(); }
+// Redraw with a slide: every box goes from where it was to its new place
+function edRender() {
+  var before = {};
+  Array.prototype.forEach.call($("grid").children, function (k) { var key = edKey(k); if (key) before[key] = k.getBoundingClientRect(); });
+  ED.mine = true; render(); ED.mine = false;
+  Array.prototype.forEach.call($("grid").children, function (k) {
+    var key = edKey(k), a = before[key];
+    if (!a || (ED.drag && ED.drag.key === key) || (ED.size && ED.size.key === key)) return;
+    var r = k.getBoundingClientRect(), dx = a.left - r.left, dy = a.top - r.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    try { k.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" }); } catch (e) {}
+  });
+}
+function edSay(t) { if ($("edSay")) $("edSay").textContent = t; }
+function edSizeText(key) {
+  var L = LAY(), r = L.rows && L.rows[key];
+  return (edPhone() || !edCanW(key) ? "" : edCols(key) + " of 12 columns") + (edCanH(key) ? (edPhone() || !edCanW(key) ? "" : " · ") + (r || (isEmb(key) ? 10 : key === "news" || key === "telegram" || key === "reddit" || key === "sports" ? 6 : 10)) + " rows" : "");
+}
+// ---- Starting and ending ----
+function edStart() {
+  ED.on = true; ED.sel = ""; ED.hist = []; ED.drag = null; ED.size = null;
+  ED.base = edState();
+  if (!(P.layout && P.layout.x) && !edPhone()) edAdopt();   // (taken from the page as it stands, before anything is drawn again)
+  document.body.classList.add("ed2");
+  if (!$("edBar")) {
+    var bar = document.createElement("div");
+    bar.id = "edBar";
+    bar.innerHTML = '<span class="edhint">Drag ⠿ to move a box. Click a box for its buttons, and drag its edge or corner to resize it.</span><span id="edHidden" class="edchips"></span>' +
+      '<button data-ed="undo">Undo</button><button data-ed="cancel">Cancel</button><button class="pri" data-ed="done">Done</button><span id="edSay" class="vis-hidden" aria-live="polite"></span>';
+    document.body.appendChild(bar);
+    var tb = document.createElement("div");
+    tb.id = "edTb"; tb.setAttribute("role", "toolbar"); tb.setAttribute("aria-label", "Box settings"); tb.hidden = true;
+    document.body.appendChild(tb);
+    var cols = document.createElement("div");
+    cols.id = "edCols";
+    for (var i = 0; i < 12; i++) cols.appendChild(document.createElement("i"));
+    $("gridw").appendChild(cols);
+  }
+  $("edBar").hidden = false;
+}
+function edEnd(keep) {
+  if (!ED.on) return;
+  if (!keep) edRestore(ED.base);
+  ED.on = false; ED.sel = ""; ED.drag = null; ED.size = null; ED.hold = false; ED.pending = false;
+  document.body.classList.remove("ed2", "edsizing");
+  if ($("edBar")) $("edBar").hidden = true;
+  if ($("edTb")) $("edTb").hidden = true;
+  EDIT = false; document.body.classList.remove("editing");
+  if (keep || edState() !== ED.base) persist();
+  render(); renderHidden();
+  if (typeof renderTvSet === "function") renderTvSet();
+  if (typeof renderEmbSet === "function") renderEmbSet();
+}
+// Edit on and off, from the cogwheel menu and the E key
+function toggleEdit() {
+  if (EDIT) { if (ED.on) edEnd(true); else { EDIT = false; document.body.classList.remove("editing"); render(); } return; }
+  EDIT = true; document.body.classList.add("editing");
+  if (P.ed2) edStart();
+  render();
+}
+// ---- After every redraw: the ⠿ tabs, the handles of the selected box, the toolbar and the bar ----
+function edDecorate() {
+  if (!edOn()) return;
+  Array.prototype.forEach.call($("grid").children, function (k) {
+    var key = edKey(k);
+    if (!key) return;
+    var sel = key === ED.sel;
+    k.classList.add("edbox"); k.classList.toggle("edsel", sel); k.classList.toggle("edph", !!ED.drag && ED.drag.key === key);
+    if (!k.querySelector(":scope > .edgrip")) k.insertAdjacentHTML("beforeend", '<span class="edgrip" data-edg="' + key + '" title="Drag to move" aria-hidden="true">⠿</span>');
+    if (sel && !k.querySelector(":scope > .edh")) {
+      var w = edCanW(key) && !edPhone(), h = edCanH(key);
+      k.insertAdjacentHTML("beforeend", (w ? '<span class="edh r" data-edh="r"></span>' : "") + (h ? '<span class="edh b" data-edh="b"></span>' : "") + (w && h ? '<span class="edh c" data-edh="c"></span>' : "") + '<span class="edbadge"></span>');
+    }
+    if (ED.size && ED.size.key === key) { k.classList.add("edsizing"); var bd = k.querySelector(".edbadge"); if (bd) bd.textContent = edSizeText(key); }
+  });
+  var off = ALL_IDS.filter(function (id) { return id !== "menu" && !isEmb(id) && boxOff(id); });
+  if ($("edHidden")) $("edHidden").innerHTML = off.map(function (id) { return '<button class="edchip" data-ed="show" data-k="' + id + '" title="Bring this box back">+ ' + esc(BOX_NAMES[id] || id) + "</button>"; }).join("");
+  edTb();
+}
+function edTb() {
+  var tb = $("edTb"), it = ED.sel && !ED.drag && !ED.size ? edItem(ED.sel) : null;
+  if (!tb) return;
+  tb.hidden = !it;
+  if (!it) return;
+  var key = ED.sel, ph = edPhone(), b = function (a, label, ttl, cls) { return '<button data-ed="' + a + '"' + (cls ? ' class="' + cls + '"' : "") + ' title="' + ttl + '" aria-label="' + ttl + '">' + label + "</button>"; };
+  var hide = key === "live" ? (boxOff("live") ? "" : b("hide", "Hide radio", "Hide the radio box")) : b("hide", "Hide", "Hide this box");
+  tb.innerHTML = '<span class="edname">' + esc(edName(key)) + "</span>" +
+    (ph ? "" : b("x:-1", "◀", "One column to the left") + b("x:1", "▶", "One column to the right")) + b("mv:-1", "▲", "Move up") + b("mv:1", "▼", "Move down") + '<span class="edsep"></span>' +
+    (edCanW(key) && !ph ? b("w:-1", "W−", "Narrower") + b("w:1", "W+", "Wider") : "") +
+    (edCanH(key) ? b("h:-1", "H−", isEmb(key) ? "Lower box" : "Shorter list") + b("h:1", "H+", isEmb(key) ? "Taller box" : "Taller list") : "") +
+    (isEmb(key) ? "" : b("f:-1", "T−", "Smaller text") + b("f:1", "T+", "Larger text")) + '<span class="edsep"></span>' +
+    '<span class="edsz">' + esc(edSizeText(key)) + "</span>" + hide + b("close", "✕", "Close these buttons");
+  if (ph) { tb.style.left = ""; tb.style.top = ""; tb.style.bottom = "calc(" + ($("edBar").offsetHeight + 16) + "px + env(safe-area-inset-bottom, 0px))"; return; }   // just above the bar, however tall it is
+  var r = it.getBoundingClientRect(), h = tb.offsetHeight, w = tb.offsetWidth;
+  var top = r.top + window.scrollY - h - 18;
+  if (r.top - h - 18 < 4) top = r.bottom + window.scrollY + 10;   // no room above the box: under it
+  tb.style.top = top + "px";
+  tb.style.left = Math.max(8, Math.min(r.left + window.scrollX, document.documentElement.clientWidth - w - 8)) + "px";
+}
+function edSelect(key) { ED.sel = key || ""; edRender(); if (ED.sel) edSay(edName(ED.sel) + " selected. " + edSizeText(ED.sel)); }
+// ---- The buttons ----
+function edVisible() { var out = []; Array.prototype.forEach.call($("grid").children, function (k) { var key = edKey(k); if (key) out.push(key); }); return out; }
+// write the order of the boxes on screen back into the saved order (boxes that are off keep their places)
+function edSetOrder(seq) { var L = LAY(), o = orderIds(), i = 0, on = {}; seq.forEach(function (k) { on[k] = 1; }); L.order = o.map(function (k) { return on[k] ? seq[i++] : k; }); }
+function edAct(a, k) {
+  var key = ED.sel, L = LAY();
+  if (a === "done") { edEnd(true); return; }
+  if (a === "cancel") { edEnd(false); return; }
+  if (a === "undo") { var p = ED.hist.pop(); if (p) { edRestore(p); edRender(); edSay("Undone."); } return; }
+  if (a === "show") { edPush(); setBoxOff(k, false); ED.sel = k === "menu" ? "live" : k; edRender(); return; }
+  if (a === "close") { edSelect(""); return; }
+  if (!key) return;
+  edPush();
+  if (a === "hide") { setBoxOff(key, true); ED.sel = ""; edRender(); edSay(edName(key) + " hidden. Bring it back from the bar."); return; }
+  var p2 = a.split(":"), d = +p2[1];
+  if (p2[0] === "mv") {
+    var v = edVisible(), i = v.indexOf(key), j = i + d;
+    if (j < 0 || j >= v.length) { ED.hist.pop(); return; }
+    v.splice(i, 1); v.splice(j, 0, key); edSetOrder(v);
+  } else if (p2[0] === "x") {
+    if (!L.x) edAdopt();
+    L.x[key] = Math.max(0, Math.min(12 - edCols(key), (+L.x[key] || 0) + d));
+  } else if (p2[0] === "w" && edCanW(key)) {
+    L.c[key] = Math.max(2, Math.min(12, edCols(key) + d));
+    if (L.x && (+L.x[key] || 0) + L.c[key] > 12) L.x[key] = 12 - L.c[key];
+  } else if (p2[0] === "h" && edCanH(key)) {
+    L.rows = L.rows || {};
+    if (isEmb(key)) L.rows[key] = Math.max(4, Math.min(30, (L.rows[key] || 10) + d * 2));
+    else L.rows[key] = Math.max(3, Math.min(20, (L.rows[key] || (key === "news" || key === "telegram" || key === "reddit" || key === "sports" ? 6 : 10)) + d));
+  } else if (p2[0] === "f") {
+    (key === "live" ? ["live", "menu"] : [key]).forEach(function (id) { L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100; });
+  }
+  edRender();
+  edSay(edName(key) + ". " + edSizeText(key));
+}
+// ---- Moving: hold the ⠿ tab and drag. The box's place stays open as an outlined gap that travels with you. ----
+function edMoveStart(e, key) {
+  var it = edItem(key);
+  if (!it) return;
+  if (!edPhone() && !LAY().x) edAdopt();
+  edPush();
+  var r = it.getBoundingClientRect(), g = it.cloneNode(true);
+  g.classList.add("edghost"); g.classList.remove("edsel");
+  Array.prototype.forEach.call(g.querySelectorAll(".edh,.edbadge,.edgrip"), function (x) { x.remove(); });
+  g.style.width = r.width + "px"; g.style.height = r.height + "px"; g.style.left = r.left + "px"; g.style.top = r.top + "px";
+  document.body.appendChild(g);
+  ED.drag = { key: key, ghost: g, dx: e.clientX - r.left, dy: e.clientY - r.top, last: 0 };
+  ED.hold = true;
+  edRender();
+  edSay("Moving " + edName(key) + ". Esc puts it back.");
+}
+function edMoveTo(e) {
+  var D = ED.drag;
+  D.ghost.style.left = e.clientX - D.dx + "px"; D.ghost.style.top = e.clientY - D.dy + "px";
+  edAuto(e.clientY);
+  var now = Date.now();
+  if (now - D.last < 90) return;   // give the boxes time to slide before deciding again
+  // The column comes straight from where you hold the copy (snapped to the 12 columns). Then every place in the order is
+  // tried out on paper with the page's own placing, and the one where the box would land closest to the copy wins.
+  var g = $("grid"), gr = g.getBoundingClientRect(), colW = (gr.width - 11 * 14) / 12, ph = edPhone(), L = LAY();
+  var gTop = e.clientY - D.dy - gr.top, keys = [], H = {};
+  Array.prototype.forEach.call(g.children, function (k) { var key = edKey(k); if (!key) return; keys.push(key); H[key] = k.offsetHeight + 14; });
+  var X = Object.assign({}, L.x || {}), ox = +X[D.key] || 0;
+  var nx = ph ? ox : Math.max(0, Math.min(12 - edCols(D.key), Math.round((e.clientX - D.dx - gr.left) / (colW + 14))));
+  X[D.key] = nx;
+  var others = keys.filter(function (k) { return k !== D.key; }), cur = keys.indexOf(D.key), best = cur, bestD = Infinity, curD = Infinity;
+  for (var k = 0; k <= others.length; k++) {
+    var seq = others.slice(0, k).concat([D.key], others.slice(k)), y = 0;
+    if (ph) { for (var q = 0; q < k; q++) y += H[seq[q]]; } else y = layPlace(seq, H, X)[D.key].y;
+    var dist = Math.abs(y - gTop);
+    if (k === cur) curD = dist;
+    if (dist < bestD - 0.5) { bestD = dist; best = k; }
+  }
+  if (best === cur && nx === ox) return;
+  if (nx === ox && bestD > curD - 24) return;   // only a clearly better place, so it does not flicker
+  D.last = now;
+  if (!ph) L.x[D.key] = nx;
+  edSetOrder(others.slice(0, best).concat([D.key], others.slice(best)));
+  edRender();
+}
+function edMoveEnd(cancel) {
+  var D = ED.drag;
+  if (!D) return;
+  if (cancel) { var p = ED.hist.pop(); if (p) edRestore(p); }
+  ED.drag = null; ED.hold = false; ED.pending = false;
+  ED.sel = D.key;
+  edRender();
+  var it = edItem(D.key), done = false, fin = function () { if (done) return; done = true; D.ghost.remove(); };
+  if (it) {
+    var r = it.getBoundingClientRect();
+    try { var an = D.ghost.animate([{ left: D.ghost.style.left, top: D.ghost.style.top }, { left: r.left + "px", top: r.top + "px" }], { duration: 140, easing: "ease-out" }); an.onfinish = fin; } catch (x) {}
+  }
+  setTimeout(fin, 220);
+  edSay(cancel ? "Move cancelled." : edName(D.key) + " moved.");
+}
+var edScrollT = 0;
+function edAuto(y) {
+  cancelAnimationFrame(edScrollT);
+  var edge = 70, v = y < edge ? -(edge - y) / 4 : y > window.innerHeight - edge ? (y - (window.innerHeight - edge)) / 4 : 0;
+  if (!v) return;
+  (function step() { if (!ED.drag && !ED.size) return; window.scrollBy(0, v); edScrollT = requestAnimationFrame(step); })();
+}
+// ---- Resizing: drag the right edge, the bottom edge or the corner of the selected box. Width snaps to the 12 columns,
+// height to whole list rows (two at a time for web page boxes). The box changes as you drag and the others make room. ----
+function edSizeStart(e, key, h) {
+  var it = edItem(key);
+  if (!it) return;
+  edPush();
+  var list = it.querySelector(".list[data-list], .embph");
+  ED.size = { key: key, h: h, left: it.getBoundingClientRect().left, top0: list ? list.getBoundingClientRect().top : 0 };
+  ED.hold = true;
+  document.body.classList.add("edsizing");
+  edRender();
+}
+function edSizeTo(e) {
+  var S = ED.size, L = LAY(), key = S.key, gr = $("grid").getBoundingClientRect(), colW = (gr.width - 11 * 14) / 12;
+  var nc = edCols(key), r0 = (L.rows || {})[key], nr = r0;
+  if (S.h !== "b" && edCanW(key) && !edPhone()) nc = Math.max(2, Math.min(12, Math.round((e.clientX - S.left + 14) / (colW + 14))));
+  if (S.h !== "r" && edCanH(key) && S.top0) {
+    var emb = isEmb(key), unit = emb ? 32.4 : 32.4 * (P.fs || 1), n = (e.clientY - S.top0) / unit;
+    nr = emb ? Math.max(4, Math.min(30, Math.round(n / 2) * 2)) : Math.max(3, Math.min(20, Math.round(n)));
+  }
+  edAuto(e.clientY);
+  if (nc === edCols(key) && nr === r0) return;
+  if (edCanW(key)) { L.c[key] = nc; if (L.x && (+L.x[key] || 0) + nc > 12) L.x[key] = 12 - nc; }
+  if (nr !== r0 && nr != null) { L.rows = L.rows || {}; L.rows[key] = nr; }
+  edRender();
+  var it = edItem(key);
+  if (it) { S.left = it.getBoundingClientRect().left; var list = it.querySelector(".list[data-list], .embph"); if (list) S.top0 = list.getBoundingClientRect().top; }
+}
+function edSizeEnd() {
+  var S = ED.size;
+  if (!S) return;
+  ED.size = null; ED.hold = false; ED.pending = false;
+  document.body.classList.remove("edsizing");
+  edRender();
+  edSay(edName(S.key) + ". " + edSizeText(S.key));
+}
+// ---- Pointer, click and keyboard (mouse, pen and touch alike) ----
+$("grid").addEventListener("pointerdown", function (e) {
+  if (!edOn()) return;
+  var g = e.target.closest && e.target.closest("[data-edg]"), h = e.target.closest && e.target.closest("[data-edh]");
+  if (g) { e.preventDefault(); try { $("grid").setPointerCapture(e.pointerId); } catch (x) {} edMoveStart(e, g.dataset.edg); return; }
+  if (h) { var it = h.parentNode, key = edKey(it); if (key !== ED.sel) return; e.preventDefault(); try { $("grid").setPointerCapture(e.pointerId); } catch (x) {} edSizeStart(e, key, h.dataset.edh); }
+});
+$("grid").addEventListener("pointermove", function (e) { if (ED.drag) edMoveTo(e); else if (ED.size) edSizeTo(e); });
+$("grid").addEventListener("pointerup", function () { if (ED.drag) edMoveEnd(false); else if (ED.size) edSizeEnd(); });
+$("grid").addEventListener("pointercancel", function () { if (ED.drag) edMoveEnd(true); else if (ED.size) edSizeEnd(); });
+// A click on a box selects it. Its own controls that belong to editing (☆ and ✕ on a row, the divider between Radio and
+// Menu, the lists in its top line) keep working; links and posts do not open while editing.
+document.addEventListener("click", function (e) {
+  if (!edOn()) return;
+  var t = e.target;
+  if (t.closest && t.closest("#edBar,#edTb")) {
+    var b = t.closest("[data-ed]");
+    if (b) { e.preventDefault(); e.stopPropagation(); edAct(b.dataset.ed, b.dataset.k); }
+    return;
+  }
+  var item = t.closest && t.closest("#grid > *");
+  if (!item) { if (ED.sel && !(t.closest && t.closest("#panel,#modal,.menu"))) edSelect(""); return; }
+  if (t.closest("[data-edg],[data-edh]")) return;
+  if (t.closest('[data-a="fav"],[data-a="hide"],[data-a="paird"],select,input,textarea,label,.menu,[data-a$="menu2"],[data-a="bellmenu"],[data-a="filtmenu"]')) return;
+  e.preventDefault(); e.stopPropagation();
+  var key = edKey(item);
+  edSelect(key === ED.sel ? "" : key);
+}, true);
+document.addEventListener("keydown", function (e) {
+  if (!edOn()) return;
+  if (e.key === "Escape") { if (ED.drag) edMoveEnd(true); else if (ED.size) edSizeEnd(); else if (ED.sel) edSelect(""); return; }
+  var t = e.target;
+  if (!ED.sel || !/^Arrow/.test(e.key) || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
+  e.preventDefault();
+  var k = e.key, ph = edPhone();
+  if (e.shiftKey) edAct(k === "ArrowLeft" ? "w:-1" : k === "ArrowRight" ? "w:1" : k === "ArrowUp" ? "h:-1" : "h:1");
+  else edAct(k === "ArrowUp" ? "mv:-1" : k === "ArrowDown" ? "mv:1" : ph ? (k === "ArrowLeft" ? "mv:-1" : "mv:1") : k === "ArrowLeft" ? "x:-1" : "x:1");
+});
+window.addEventListener("scroll", function () { if (edOn() && !edPhone()) edTb(); }, { passive: true });
+window.addEventListener("resize", function () { if (edOn()) edTb(); });
+// Settings > Layout & boxes: the switch (shown to the admin only while this is being tried out), and the way back
+function renderEd2Set() {
+  var row = $("ed2Row");
+  if (!row) return;
+  row.hidden = !isAdmin();
+  $("ed2On").checked = !!P.ed2;
+  $("ed2Old").hidden = !(P.layout && P.layout.x);
+}
+$("ed2On").onchange = function () { P.ed2 = this.checked; if (!P.ed2 && ED.on) edEnd(true); persist(); renderEd2Set(); };
+$("ed2Old").onclick = function () { if (P.layout && P.layout.x) { delete P.layout.x; persist(); render(); renderEd2Set(); } };
 // Drag to rearrange: grab a box by its title in Edit mode
 var DRAG = null;
 $("grid").addEventListener("dragstart", function (e) {
@@ -2840,6 +3197,7 @@ function renderHidden() {
   $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu" && !isEmb(id); }).map(function (id) {
     return "<label>" + BOX_NAMES[id] + ' <input type="checkbox" data-a="boxtoggle" data-k="' + id + '"' + (boxOff(id) ? "" : " checked") + "></label>";
   }).join("");
+  renderEd2Set();
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
 var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports", tv: "TV shows" };
@@ -5289,7 +5647,7 @@ document.addEventListener("click", function (e) {
   if (a === "pvup" || a === "pvin") { ACCTMSG = ""; openAuth(a === "pvup" ? "up" : "in"); return; }
   if (a === "delacct") { deleteAccount(); return; }
   if (a === "signout") { signOut(); return; }
-  if (a === "editmode") { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); MENU_OPEN = ""; render(); return; }
+  if (a === "editmode") { MENU_OPEN = ""; toggleEdit(); return; }
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
@@ -8431,7 +8789,7 @@ function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fet
 var KEY_ACTS = [
   ["search", "/", "Jump to the search bar", function () { openSearch(); }],
   ["refresh", "r", "Refresh everything", function () { refreshAll(true); }],
-  ["edit", "e", "Edit the layout", function () { EDIT = !EDIT; document.body.classList.toggle("editing", EDIT); render(); }],
+  ["edit", "e", "Edit the layout", function () { toggleEdit(); }],
   ["notes", "n", "Notes and to-dos", function () { openNotes(); }],
   ["cal", "c", "Calendar", function () { CALV = null; openCal(); }],
   ["brief", "b", "Summary", function () { openBrief(); }],
