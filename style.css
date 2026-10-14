@@ -1514,3 +1514,10 @@ body.ed2 .row [data-a="fav"]{right:32px}
 body.ed2 .row [data-a="hide"]{right:0}
 body.ed2 .row:hover [data-a="fav"],body.ed2 .row:hover [data-a="hide"],body.ed2 .edsel .row [data-a="fav"],body.ed2 .edsel .row [data-a="hide"]{opacity:1;pointer-events:auto}
 #edBar .edwhich{font-size:12px;font-weight:600;color:var(--ac);white-space:nowrap}
+/* the buttons of the selected box, compact */
+#edTb{gap:2px;padding:3px;border-radius:10px}
+#edTb button{padding:0 6px;height:24px;min-width:24px;font-size:11px;line-height:1;border-radius:7px}
+#edTb .edname{font-size:11px;padding:0 4px 0 3px}
+#edTb .edsz{font-size:11px;padding:0 4px}
+#edTb .edsep{margin:3px 2px}
+@media(max-width:820px){#edTb{gap:3px;padding:4px}#edTb button{height:30px;min-width:30px;font-size:12px}}
