@@ -1,4 +1,4 @@
-var VERSION = 167;
+var VERSION = 168;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -526,24 +526,28 @@ function LAY() {
   if (!L.c) { L.c = {}; Object.keys(L.w || {}).forEach(function (k) { L.c[k] = L.w[k] * 3; }); }
   return L;
 }
+// ---- A phone has its own layout where you changed it there: P.layout.m = { order, rows, fs }. What was never changed on
+// a phone follows the computer's layout, so a page looks the same everywhere until you edit it on a phone. Widths and
+// columns only exist on a computer; hidden boxes are the same everywhere. ----
+function layM() { return window.innerWidth <= 820; }
+function layRows() { var L = LAY(); return layM() && L.m && L.m.rows ? Object.assign({}, L.rows || {}, L.m.rows) : L.rows || {}; }
+function layFs() { var L = LAY(); return layM() && L.m && L.m.fs ? Object.assign({}, L.fs || {}, L.m.fs) : L.fs || {}; }
+// where a change of list length or text size goes: the phone's own layout on a phone
+function laySet(kind, id, v) {
+  var L = LAY();
+  if (layM()) { L.m = L.m || {}; L.m[kind] = L.m[kind] || {}; L.m[kind][id] = v; }
+  else { L[kind] = L[kind] || {}; L[kind][id] = v; }
+}
 function orderIds() {
-  var L = LAY(), raw = L.order.slice(), TOP = ["weather", "mail", "live", "menu"];
+  var L = LAY(), TOP = ["weather", "mail", "live", "menu"];
   if (L.v !== 2) {
-    raw = TOP.concat(raw.filter(function (x) { return TOP.indexOf(x) < 0 && x !== "gmail1" && x !== "gmail2"; }));
-    L.order = raw; L.v = 2; persist();
+    L.order = TOP.concat(L.order.filter(function (x) { return TOP.indexOf(x) < 0 && x !== "gmail1" && x !== "gmail2"; }));
+    L.v = 2; persist();
   }
+  var raw = (layM() && L.m && Array.isArray(L.m.order) ? L.m.order : L.order).slice();
   var o = raw.filter(function (x, i) { return ALL_IDS.indexOf(x) >= 0 && raw.indexOf(x) === i; });
   ALL_IDS.forEach(function (x) { if (o.indexOf(x) < 0) o.push(x); });
   return o;
-}
-function adjust(a, id, d) {
-  var L = LAY();
-  if (a === "mv") { var o = orderIds(), i = o.indexOf(id), j = i + d; if (j < 0 || j >= o.length) return; o.splice(i, 1); o.splice(j, 0, id); L.order = o; }
-  else if (a === "w") L.c[id] = Math.max(2, Math.min(12, (L.c[id] || DEF_C[id] || 3) + d));
-  else if (a === "f") L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100;
-  else if (isEmb(id)) { L.rows = L.rows || {}; L.rows[id] = Math.max(4, Math.min(30, (L.rows[id] || 10) + d * 2)); }
-  else L.rows[id] = Math.max(3, Math.min(20, (L.rows[id] || (id === "news" || id === "telegram" || id === "reddit" || id === "sports" ? 6 : 10)) + d));
-  persist(); render();
 }
 // Every list box gets a small reload button in its top-right corner. To give a new box one, add its id and loader here.
 var REFRESH = {
@@ -616,23 +620,11 @@ function tile(id, title, body, click, hx) {
     var pr = typeof click === "string" ? click.split(":") : ["weather"];
     at = ' data-a="' + pr[0] + '"' + (pr[1] != null ? ' data-k="' + pr[1] + '"' : "") + ' tabindex="0" role="button"';
   }
-  var ed2 = EDIT && typeof ED !== "undefined" && ED && ED.on;   // the new Edit mode draws its own controls (edDecorate)
-  if (EDIT && !ed2) {
-    var bt = function (act, d, glyph, ttl, cls) { return '<button data-a="' + act + '" data-k="' + id + ":" + d + '" title="' + ttl + '" aria-label="' + ttl + '"' + (cls ? ' class="' + cls + '"' : "") + ">" + glyph + "</button>"; };
-    var noW = id === "live" || id === "menu";
-    // on a phone the boxes sit in one column: the arrows point up and down there, and the width buttons are left out (style.css)
-    // (not called "ad": ad blockers such as Brave Shields hide anything with that class name)
-    var arw = function (a, b) { return '<span class="mvh">' + a + '</span><span class="mvv">' + b + "</span>"; };
-    t = '<div class="tools">' + bt("mv", -1, arw("◀", "▲"), "Move earlier") + bt("mv", 1, arw("▶", "▼"), "Move later") +
-      (noW ? "" : bt("w", -1, "W−", "Narrower", "wbt") + bt("w", 1, "W+", "Wider", "wbt")) +
-      (isEmb(id) ? "" : bt("f", -1, "T−", "Smaller text") + bt("f", 1, "T+", "Larger text")) +
-      (LISTS.indexOf(id) >= 0 ? bt("h", -1, "H−", "Shorter list") + bt("h", 1, "H+", "Taller list") : isEmb(id) ? bt("h", -1, "H−", "Lower box") + bt("h", 1, "H+", "Taller box") : "") +
-      (id === "menu" ? "" : '<button data-a="boxoff" data-k="' + id + '" title="Hide this whole box. Bring it back in Settings, Layout.">Hide</button>') + "</div>";
-  }
-  var h3 = "<h3" + (EDIT && !ed2 ? ' class="grab" draggable="true" title="Drag to move"' : "") + ">" + title + "</h3>";
+  // (Edit mode draws its own controls over the boxes, after the page is drawn: edDecorate)
+  var h3 = "<h3>" + title + "</h3>";
   var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
   var errs = cp ? [] : boxErrs(id), eb = errs.length ? '<button class="ib sm errb" data-a="boxerr" data-k="' + id + '" title="' + esc(errs.length > 1 ? errs.length + " problems. Click for the details." : errs[0].what + ". Click for the details.") + '" aria-label="Problem in this box">!</button>' : "";
-  var head = cp ? (EDIT && !ed2 ? '<span class="grab dh" draggable="true" title="Drag to move">⠿</span>' : "") : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
+  var head = cp ? "" : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
   return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
@@ -646,11 +638,11 @@ function ico(id, logo) {
   return '<span class="ic" style="--h:' + h + '"><i>' + esc(t.replace(/[^A-Za-z0-9]/g, "").slice(0, 2)) + "</i>" + (src ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(src) + '">' : "") + "</span>";
 }
 function hd(t, n) { return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") + "…" : t; }
-function fsOf(id) { return (P.fs || 1) * (LAY().fs[id] || 1); }
+function fsOf(id) { return (P.fs || 1) * (layFs()[id] || 1); }
 function pairPct() { var p = P.layout && P.layout.pairPct; return p == null ? 65 : p; }
 // List height: one H step is the same number of pixels in every box (it follows the overall text size, not the box's
 // own T size), so boxes with different text sizes can be made exactly the same height. 32.4 = one row at the usual 0.9 text.
-function lst(id, html, def) { var r = LAY().rows[id] || def || 10; return '<div class="list" data-list="' + id + '" style="max-height:' + Math.round(r * 32.4 * (P.fs || 1)) + 'px">' + html + "</div>"; }
+function lst(id, html, def) { var r = layRows()[id] || def || 10; return '<div class="list" data-list="' + id + '" style="max-height:' + Math.round(r * 32.4 * (P.fs || 1)) + 'px">' + html + "</div>"; }
 function ago(ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; }
 
 function render() {
@@ -1258,7 +1250,7 @@ function emb(id) { var E = P.emb && typeof P.emb === "object" ? P.emb : {}; retu
 function embUrl(id) { var u = safeUrl(emb(id).u); return /^https:\/\//i.test(u) ? u : ""; }
 function embOn(id) { return !!emb(id).on && !!embUrl(id); }
 function embName(id) { return emb(id).t || bmHost(embUrl(id)) || "Web page"; }
-function embH(id) { return Math.round(((LAY().rows || {})[id] || 10) * 32.4); }
+function embH(id) { return Math.round((layRows()[id] || 10) * 32.4); }
 function embTile(id) {
   var u = embUrl(id);
   return tile(id, esc(embName(id)), '<div class="embph" data-emb="' + id + '" style="height:' + embH(id) + 'px"></div>', 0,
@@ -2818,7 +2810,7 @@ function rdrArt(key) {
   var it = RDR ? RDR.list.filter(function (x) { return x.k === key; })[0] : null;
   artLoad(key, it ? [key].concat(it.us) : [key]);
 }
-// ==== The new Edit mode (being tried out: Settings > Layout & boxes shows its switch only to the site's admin) ====
+// ==== Edit mode ====
 // Turning Edit on moves nothing: the boxes only get a dashed outline and a ⠿ tab on their top edge, and there are no rows
 // of buttons. Click a box for its buttons (they float over the page); drag its right edge, bottom edge or corner to
 // resize it; drag its ⠿ tab to move it. Every step is drawn by the page's own layout code at once, so what you see while
@@ -2869,7 +2861,7 @@ function edAdopt() {
   Object.keys(pos).forEach(function (k) { L.x[k] = pos[k].x; });
 }
 // what Cancel and Undo put back: the layout, and which boxes are on
-function edState() { return JSON.stringify({ layout: P.layout || null, tv: P.tv ? !!P.tv.on : null, emb: P.emb || null }); }
+function edState() { return JSON.stringify({ layout: P.layout || null, tv: P.tv ? !!P.tv.on : null, emb: P.emb || null }); }   // (P.layout.m, the phone's own layout, is part of it)
 function edRestore(s) {
   s = JSON.parse(s);
   if (s.layout) P.layout = s.layout; else delete P.layout;
@@ -2891,9 +2883,11 @@ function edRender() {
   });
 }
 function edSay(t) { if ($("edSay")) $("edSay").textContent = t; }
+function edRowsOf(key) { return layRows()[key] || (isEmb(key) ? 10 : key === "news" || key === "telegram" || key === "reddit" || key === "sports" ? 6 : 10); }
+// the box's text size, as a share of the normal size (the overall text size in Settings comes on top of it)
+function edTextOf(key) { return isEmb(key) ? "" : "text " + Math.round((layFs()[key === "live" ? "live" : key] || 1) * 100) + "%"; }
 function edSizeText(key) {
-  var L = LAY(), r = L.rows && L.rows[key];
-  return (edPhone() || !edCanW(key) ? "" : edCols(key) + " of 12 columns") + (edCanH(key) ? (edPhone() || !edCanW(key) ? "" : " · ") + (r || (isEmb(key) ? 10 : key === "news" || key === "telegram" || key === "reddit" || key === "sports" ? 6 : 10)) + " rows" : "");
+  return [edPhone() || !edCanW(key) ? "" : edCols(key) + " of 12 columns", edCanH(key) ? edRowsOf(key) + " rows" : "", edTextOf(key)].filter(Boolean).join(" · ");
 }
 // ---- Starting and ending ----
 function edStart() {
@@ -2904,7 +2898,7 @@ function edStart() {
   if (!$("edBar")) {
     var bar = document.createElement("div");
     bar.id = "edBar";
-    bar.innerHTML = '<span class="edhint">Drag ⠿ to move a box. Click a box for its buttons, and drag its edge or corner to resize it.</span><span id="edHidden" class="edchips"></span>' +
+    bar.innerHTML = '<span id="edWhich" class="edwhich"></span><span class="edhint">Drag ⠿ to move a box. Click a box for its buttons, and drag its edge or corner to resize it.</span><span id="edHidden" class="edchips"></span>' +
       '<button data-ed="undo">Undo</button><button data-ed="cancel">Cancel</button><button class="pri" data-ed="done">Done</button><span id="edSay" class="vis-hidden" aria-live="polite"></span>';
     document.body.appendChild(bar);
     var tb = document.createElement("div");
@@ -2934,7 +2928,7 @@ function edEnd(keep) {
 function toggleEdit() {
   if (EDIT) { if (ED.on) edEnd(true); else { EDIT = false; document.body.classList.remove("editing"); render(); } return; }
   EDIT = true; document.body.classList.add("editing");
-  if (P.ed2) edStart();
+  edStart();
   render();
 }
 // ---- After every redraw: the ⠿ tabs, the handles of the selected box, the toolbar and the bar ----
@@ -2952,6 +2946,8 @@ function edDecorate() {
     }
     if (ED.size && ED.size.key === key) { k.classList.add("edsizing"); var bd = k.querySelector(".edbadge"); if (bd) bd.textContent = edSizeText(key); }
   });
+  // which layout is being edited: a phone has its own (list lengths, text sizes and order)
+  if ($("edWhich")) { $("edWhich").textContent = layM() ? "Phone layout" : "Computer layout"; $("edWhich").title = layM() ? "Changes here are for phones only. What you never changed on a phone follows the computer layout." : "Changes here are for computers. Phones follow them, except what you changed on a phone itself."; }
   var off = ALL_IDS.filter(function (id) { return id !== "menu" && !isEmb(id) && boxOff(id); });
   if ($("edHidden")) $("edHidden").innerHTML = off.map(function (id) { return '<button class="edchip" data-ed="show" data-k="' + id + '" title="Bring this box back">+ ' + esc(BOX_NAMES[id] || id) + "</button>"; }).join("");
   edTb();
@@ -2980,7 +2976,12 @@ function edSelect(key) { ED.sel = key || ""; edRender(); if (ED.sel) edSay(edNam
 // ---- The buttons ----
 function edVisible() { var out = []; Array.prototype.forEach.call($("grid").children, function (k) { var key = edKey(k); if (key) out.push(key); }); return out; }
 // write the order of the boxes on screen back into the saved order (boxes that are off keep their places)
-function edSetOrder(seq) { var L = LAY(), o = orderIds(), i = 0, on = {}; seq.forEach(function (k) { on[k] = 1; }); L.order = o.map(function (k) { return on[k] ? seq[i++] : k; }); }
+function edSetOrder(seq) {
+  var L = LAY(), o = orderIds(), i = 0, on = {};
+  seq.forEach(function (k) { on[k] = 1; });
+  var n = o.map(function (k) { return on[k] ? seq[i++] : k; });
+  if (layM()) { L.m = L.m || {}; L.m.order = n; } else L.order = n;   // a phone keeps its own order
+}
 function edAct(a, k) {
   var key = ED.sel, L = LAY();
   if (a === "done") { edEnd(true); return; }
@@ -2993,7 +2994,7 @@ function edAct(a, k) {
   if (a === "hide") { setBoxOff(key, true); ED.sel = ""; edRender(); edSay(edName(key) + " hidden. Bring it back from the bar."); return; }
   var p2 = a.split(":"), d = +p2[1];
   if (p2[0] === "mv") {
-    var v = edVisible(), i = v.indexOf(key), j = i + d;
+    var v = edVisible(), i = v.indexOf(key), j = i + d;   // (on a phone this changes the phone's own order)
     if (j < 0 || j >= v.length) { ED.hist.pop(); return; }
     v.splice(i, 1); v.splice(j, 0, key); edSetOrder(v);
   } else if (p2[0] === "x") {
@@ -3003,11 +3004,10 @@ function edAct(a, k) {
     L.c[key] = Math.max(2, Math.min(12, edCols(key) + d));
     if (L.x && (+L.x[key] || 0) + L.c[key] > 12) L.x[key] = 12 - L.c[key];
   } else if (p2[0] === "h" && edCanH(key)) {
-    L.rows = L.rows || {};
-    if (isEmb(key)) L.rows[key] = Math.max(4, Math.min(30, (L.rows[key] || 10) + d * 2));
-    else L.rows[key] = Math.max(3, Math.min(20, (L.rows[key] || (key === "news" || key === "telegram" || key === "reddit" || key === "sports" ? 6 : 10)) + d));
+    laySet("rows", key, isEmb(key) ? Math.max(4, Math.min(30, edRowsOf(key) + d * 2)) : Math.max(3, Math.min(20, edRowsOf(key) + d)));
   } else if (p2[0] === "f") {
-    (key === "live" ? ["live", "menu"] : [key]).forEach(function (id) { L.fs[id] = Math.round(Math.max(0.7, Math.min(1.6, (L.fs[id] || 1) + d * 0.1)) * 100) / 100; });
+    var F = layFs();
+    (key === "live" ? ["live", "menu"] : [key]).forEach(function (id) { laySet("fs", id, Math.round(Math.max(0.7, Math.min(1.6, (F[id] || 1) + d * 0.1)) * 100) / 100); });
   }
   edRender();
   edSay(edName(key) + ". " + edSizeText(key));
@@ -3093,7 +3093,7 @@ function edSizeStart(e, key, h) {
 }
 function edSizeTo(e) {
   var S = ED.size, L = LAY(), key = S.key, gr = $("grid").getBoundingClientRect(), colW = (gr.width - 11 * 14) / 12;
-  var nc = edCols(key), r0 = (L.rows || {})[key], nr = r0;
+  var nc = edCols(key), r0 = edRowsOf(key), nr = r0;
   if (S.h !== "b" && edCanW(key) && !edPhone()) nc = Math.max(2, Math.min(12, Math.round((e.clientX - S.left + 14) / (colW + 14))));
   if (S.h !== "r" && edCanH(key) && S.top0) {
     var emb = isEmb(key), unit = emb ? 32.4 : 32.4 * (P.fs || 1), n = (e.clientY - S.top0) / unit;
@@ -3102,7 +3102,7 @@ function edSizeTo(e) {
   edAuto(e.clientY);
   if (nc === edCols(key) && nr === r0) return;
   if (edCanW(key)) { L.c[key] = nc; if (L.x && (+L.x[key] || 0) + nc > 12) L.x[key] = 12 - nc; }
-  if (nr !== r0 && nr != null) { L.rows = L.rows || {}; L.rows[key] = nr; }
+  if (nr !== r0 && nr != null) laySet("rows", key, nr);
   edRender();
   var it = edItem(key);
   if (it) { S.left = it.getBoundingClientRect().left; var list = it.querySelector(".list[data-list], .embph"); if (list) S.top0 = list.getBoundingClientRect().top; }
@@ -3155,37 +3155,10 @@ document.addEventListener("keydown", function (e) {
 });
 window.addEventListener("scroll", function () { if (edOn() && !edPhone()) edTb(); }, { passive: true });
 window.addEventListener("resize", function () { if (edOn()) edTb(); });
-// Settings > Layout & boxes: the switch (shown to the admin only while this is being tried out), and the way back
-function renderEd2Set() {
-  var row = $("ed2Row");
-  if (!row) return;
-  row.hidden = !isAdmin();
-  $("ed2On").checked = !!P.ed2;
-  $("ed2Old").hidden = !(P.layout && P.layout.x);
-}
-$("ed2On").onchange = function () { P.ed2 = this.checked; if (!P.ed2 && ED.on) edEnd(true); persist(); renderEd2Set(); };
-$("ed2Old").onclick = function () { if (P.layout && P.layout.x) { delete P.layout.x; persist(); render(); renderEd2Set(); } };
+// a phone and a computer have their own layouts: turning a phone sideways or resizing the window across the line draws again
+var LAYM = layM();
+window.addEventListener("resize", function () { if (layM() !== LAYM) { LAYM = layM(); render(); } });
 // Drag to rearrange: grab a box by its title in Edit mode
-var DRAG = null;
-$("grid").addEventListener("dragstart", function (e) {
-  var c = e.target.closest && e.target.closest("[data-id]");
-  if (!EDIT || !c) return;
-  DRAG = c.dataset.id; e.dataTransfer.effectAllowed = "move";
-  try { e.dataTransfer.setData("text/plain", DRAG); } catch (x) {}
-});
-$("grid").addEventListener("dragover", function (e) { if (DRAG) e.preventDefault(); });
-$("grid").addEventListener("dragend", function () { DRAG = null; });
-$("grid").addEventListener("drop", function (e) {
-  var c = e.target.closest("[data-id]");
-  if (!DRAG || !c) return;
-  e.preventDefault();
-  var o = orderIds(), from = DRAG, to = c.dataset.id;
-  DRAG = null;
-  var i = o.indexOf(from), j = o.indexOf(to);
-  if (i < 0 || j < 0 || i === j) return;
-  o.splice(i, 1); o.splice(j, 0, from);
-  LAY().order = o; persist(); render();
-});
 
 function renderHidden() {
   var keys = Object.keys(P.hidden).filter(function (k) { return P.hidden[k]; });
@@ -3197,7 +3170,6 @@ function renderHidden() {
   $("boxList").innerHTML = ALL_IDS.filter(function (id) { return id !== "menu" && !isEmb(id); }).map(function (id) {
     return "<label>" + BOX_NAMES[id] + ' <input type="checkbox" data-a="boxtoggle" data-k="' + id + '"' + (boxOff(id) ? "" : " checked") + "></label>";
   }).join("");
-  renderEd2Set();
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
 var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports", tv: "TV shows" };
@@ -5676,7 +5648,6 @@ document.addEventListener("click", function (e) {
   if (a === "filtmenu") { e.stopPropagation(); var m = $(k === "news" ? "filtNews" : k === "rd" ? "filtRd" : "filttg"); var open = m.hidden; closeMenus(); if (open) m.hidden = false; return; }
   if (a === "weather") { openWeather(); return; }
   if (a === "twConnect") { twConnect(); return; }
-  if (a === "mv" || a === "w" || a === "h" || a === "f") { var pp = k.split(":"); adjust(a, pp[0], +pp[1]); return; }
   if (/^city/.test(a)) { cityAct(a, k); return; }
   if (a === "clockmenu") { audio(); MENU_OPEN = ""; if (k === "s") startStopwatch(); else openClock(k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
@@ -5691,7 +5662,6 @@ document.addEventListener("click", function (e) {
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
   if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
-  if (a === "boxoff") { setBoxOff(k, true); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") { if (ES_CUR && !$("modal").hidden) { spToggleFav(k); esOpen(ES_CUR); } else spToggleFav(k, SP_OPEN); return; }
   if (a === "fighter") { openFighter(k); return; }
@@ -6219,7 +6189,7 @@ function openHelp() {
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
     '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for the episode&rsquo;s title and the channel, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
     '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode press <b>Hide</b> on it, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes or the calendar:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. Use ⇄ on a docked panel to move it to the other side and ✕ to turn it back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. To change an event afterwards, press ✎ on it: the same form then holds its name, day, time, reminder and repeat; press Save, or Cancel to leave it as it was. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +
@@ -6243,7 +6213,8 @@ function openHelp() {
 
   html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
 
-  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes themselves, click the cogwheel icon and choose <b>Edit</b>. Each box then shows small buttons: ◀ / ▶ move it earlier or later, W&minus; / W+ make it narrower or wider, T&minus; / T+ change that box\'s own text size, and (on lists) H&minus; / H+ show fewer or more rows. You can also drag a box by its title. Click <b>Done</b> in the same menu to finish. On a phone the boxes sit in one column, so the arrows point up and down (▲ / ▼) and the width buttons are left out.</p>';
+  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color, overall text size, the glow background and the shadows. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes, click the cogwheel icon and choose <b>Edit</b> (or press E). Nothing moves when Edit is turned on: the boxes get a dashed outline and a small ⠿ tab on their top edge, and a bar with <b>Undo</b>, <b>Cancel</b> and <b>Done</b> appears at the bottom of the screen. <b>Click a box</b> for its buttons: ◀ / ▶ move it one column, ▲ / ▼ move it up or down, W&minus; / W+ make it narrower or wider, H&minus; / H+ show fewer or more rows of a list, and T&minus; / T+ change that box&rsquo;s own text size. The buttons also show the box&rsquo;s size and its text size, and change with them. <b>Drag the edge or corner</b> of the selected box to resize it: the 12 columns appear and the width snaps to them, the height to whole rows, and the other boxes make room as you drag. <b>Drag the ⠿ tab</b> to move a box: its place stays open as an outlined gap so you see where it lands, and it stays in the column you drop it in (Esc puts it back). On a list, the ☆ and ✕ of a row show when you point at it, and on every row of the selected box. Hidden boxes come back from the chips in the bar. <b>Done</b> keeps the changes, <b>Cancel</b> puts everything back. With the keyboard: arrows move the selected box, Shift + arrows resize it.</p>' +
+    '<p><b>Phone and computer:</b> a phone has its own layout. List lengths, text sizes and the order you change on a phone apply to phones only (the bar says which layout you are editing); whatever you never changed on a phone follows the computer layout. On a phone the boxes sit in one column, so only ▲ / ▼, the height and the text size are offered, and both bars sit at the bottom within reach of your thumb. Hold the ⠿ tab to move a box, so scrolling works as usual everywhere else. Hidden boxes are the same on every device.</p>';
 
   html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone: <b>Dock to top</b>). It keeps playing in a strip on that side of the page while you use the rest of the site. You can dock up to 3 at once, and drag the edge of a strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
 
@@ -8191,7 +8162,7 @@ function wizPage(id) {
       '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="text" class="secret" id="wzT" placeholder="Token" autocomplete="off" spellcheck="false" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
       '<div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + '</div><p class="mut sn">A second inbox can be added the same way later, in Settings → Mail. The full written steps are in Help → Mail.</p>';
   }
-  return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its title; W / T / H change width, text size and list length.</li>" +
+  return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its ⠿ tab, click it for its buttons, or drag its edge to resize it. A phone keeps its own layout.</li>" +
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
     "<li><b>Notes, to-dos and calendar</b> are the icons in the menu box, and can be docked at the side of the page.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +

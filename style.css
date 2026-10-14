@@ -1513,3 +1513,4 @@ body.ed2 .row [data-a="fav"],body.ed2 .row [data-a="hide"]{position:absolute;top
 body.ed2 .row [data-a="fav"]{right:32px}
 body.ed2 .row [data-a="hide"]{right:0}
 body.ed2 .row:hover [data-a="fav"],body.ed2 .row:hover [data-a="hide"],body.ed2 .edsel .row [data-a="fav"],body.ed2 .edsel .row [data-a="hide"]{opacity:1;pointer-events:auto}
+#edBar .edwhich{font-size:12px;font-weight:600;color:var(--ac);white-space:nowrap}
