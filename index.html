@@ -46,7 +46,7 @@
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
   <section id="intro">
     <h1>OmniTree: your start page, everything in one tab</h1>
-    <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, the TV shows you follow, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
+    <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, the TV shows you follow, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio and podcasts, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
     <p>You decide what is on the page: switch boxes on and off, drag them where you want them, and pick colors and a wallpaper. A free account saves your setup and brings it to every device.</p>
   </section>
   <footer class="mut">OmniTree · v<span id="ver"></span> · <span id="who">not signed in</span> · <button class="lnk2" data-a="openhelp">Shortcuts &amp; help</button><span id="ftLinks"> · <a href="about">About</a> · <a href="features">Features</a> · <a href="help">Help page</a> · <a href="privacy">Privacy</a></span></footer>
@@ -104,6 +104,10 @@
     <div class="sub"><b>Notes and calendar</b>
       <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
       <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
+    </div>
+    <div class="sub" data-kw="interests starter country football news gaming investing tech music podcasts sources"><b>Add interests</b>
+      <div class="mut sn">Choose your country and what you are into: the boxes these need are switched on and good sources are added to the ones you have. Nothing is removed.</div>
+      <span><button data-a="sxopen">Add interests</button></span>
     </div>
     <div class="sub"><b>Start over</b>
       <div class="mut sn">The setup guide walks through the boxes, your city and each source again. It changes nothing until you do.</div>
@@ -318,6 +322,29 @@
     <span><button data-a="radreset">Back to the starting stations</button></span>
   </section>
 
+  <section class="setgrp" data-cat="Content" data-sec="Podcasts">
+    <div class="mut sn" data-kw="podcast podcasts episodes shows follow listen apple">The Podcasts box shows the newest episodes of the podcasts you follow. Choose <b>Popular</b> in the box for the most listened shows of a country, or press ⌕ to search every podcast. Episodes play in the Radio box: its first button switches between radio and podcasts. Where you stopped is remembered on every device.</div>
+    <label>Show the Podcasts box <input type="checkbox" id="podOn" data-a="boxtoggle" data-k="podcasts"></label>
+    <label data-kw="podcast speed faster slower">Playing speed <select id="podSpeedSet"><option value="0.8">0.8×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></label>
+    <label data-kw="podcast skip back rewind">Jump back <select id="podBackSet"><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option></select></label>
+    <label data-kw="podcast skip forward">Jump forward <select id="podFwdSet"><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option></select></label>
+    <label data-kw="podcast finished played episodes">Played episodes <select id="podDoneSet"><option value="dim">Stay in the list, dimmed</option><option value="hide">Leave the list</option></select></label>
+    <label data-kw="podcast new episode notification bell star">Notifications for new episodes of <select id="podNtfSet"><option value="star">Shows with a ☆</option><option value="all">Every show I follow</option></select></label>
+    <label data-kw="podcast popular chart country">Popular list from <select id="podCcSet"></select></label>
+    <div class="mut sn">Notifications for new episodes are switched on and off under Notifications. Put a ☆ on a show on its page in the box, or in the list below.</div>
+    <div class="sub" data-kw="podcast radio box progress line time left rolling scrolling title marquee jump buttons"><b>In the Radio box</b>
+      <label>Progress line under the episode <select id="podLineSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
+      <label>Time left <select id="podTimeSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
+      <label>Jump back and forward buttons <select id="podJumpSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
+      <label>Long titles <select id="podRollSet"><option value="cut">Cut short with …</option><option value="roll">Roll slowly across</option></select></label>
+      <div class="mut sn">The jump buttons are always in the player window (click the episode in the Radio box). In a narrow Radio box they step aside by themselves, so the title keeps its room.</div>
+    </div>
+    <div class="sub"><b>Podcasts you follow</b>
+      <div id="podSet"></div>
+    </div>
+    <div class="mut sn">Shows, episodes and the popular lists come from Apple's public podcast directory. The episode itself plays straight from the show's own address.</div>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Mail">
     <div class="mut sn">Shows your unread Gmail without giving this site your Google password. Step-by-step instructions are in Help → Mail (Gmail).</div>
     <div class="sub">
@@ -391,6 +418,7 @@
       <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
       <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
       <label data-kw="tv show series episode airs">New episode of a TV show I follow <input type="checkbox" id="nfTv"></label>
+      <label data-kw="podcast episode new">New episode of a podcast I follow <input type="checkbox" id="nfPod"></label>
       <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
       <label>New mail <input type="checkbox" id="nfMail"></label>
     </div>
@@ -409,6 +437,21 @@
     <div class="sub"><b>Last 5 notifications and why</b>
       <div class="mut sn">Every notification and alarm on this device, with what caused it and whether it made a sound. Use it when you heard something and saw nothing.</div>
       <div id="nfLog"></div>
+    </div>
+    <div class="sub" data-kw="tab title count number unread new browser tab favicon dot"><b>Count in the tab title</b>
+      <div class="mut sn">The page's tab shows how many new things are waiting, like “(5) OmniTree”, so you see it from other tabs.</div>
+      <label>Show a count in the tab title <select id="tabOn"><option value="1">On</option><option value="0">Off</option></select></label>
+      <div class="tabbx" id="tabBoxes">
+        <label>New mail <input type="checkbox" data-tab="mail"></label>
+        <label>New Telegram posts <input type="checkbox" data-tab="tg"></label>
+        <label>New headlines <input type="checkbox" data-tab="news"></label>
+        <label>New Reddit posts <input type="checkbox" data-tab="rd"></label>
+        <label>Streamers live on Twitch <input type="checkbox" data-tab="live"></label>
+        <label>New podcast episodes <input type="checkbox" data-tab="pod"></label>
+        <label>Unread notifications in the bell <input type="checkbox" data-tab="bell"></label>
+        <label>Also a dot on the tab's icon <input type="checkbox" id="tabDot"></label>
+      </div>
+      <div class="mut sn" id="tabPrev" role="status"></div>
     </div>
     <div class="mut sn">The summary window has its own section, right below this one.</div>
   </section>

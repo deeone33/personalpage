@@ -1,4 +1,4 @@
-var VERSION = 170;
+var VERSION = 171;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -506,8 +506,8 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 
 // embed1-3 are the web page boxes: off until you give one an address (Settings > Web page boxes)
 var EMB_IDS = ["embed1", "embed2", "embed3"];
-var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv"].concat(EMB_IDS);
-var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, tv: 4, embed1: 6, embed2: 6, embed3: 6 };
+var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv", "podcasts"].concat(EMB_IDS);
+var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, tv: 4, podcasts: 4, embed1: 6, embed2: 6, embed3: 6 };
 // The layout a new visitor or a new account starts with: sizes, text sizes, list lengths and order.
 // Top row of small boxes, News and Telegram side by side, then Stocks, Twitch, YouTube and (stacked) Reddit over Sports.
 var DEF_LAYOUT = {
@@ -518,7 +518,7 @@ var DEF_LAYOUT = {
   rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 4, sports: 3 }
 };
 var COMPACT = ["weather", "mail", "live", "menu"];
-var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv"];
+var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv", "podcasts"];
 function LAY() {
   if (!P.layout) P.layout = JSON.parse(JSON.stringify(DEF_LAYOUT));
   var L = P.layout;
@@ -611,7 +611,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet();
+  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -798,6 +798,7 @@ function render() {
 
   EMB_IDS.forEach(function (id) { T[id] = embOn(id) ? embTile(id) : ""; });
   T.tv = boxOff("tv") ? "" : tvTile();
+  T.podcasts = boxOff("podcasts") ? "" : podTile();
   var pp = pairPct();
   var liveBox = T.live.replace('style="--fs:', 'style="flex:' + pp + ' 1 0%;--fs:');
   var menuBox = T.menu.replace('style="--fs:', 'style="flex:' + (100 - pp) + ' 1 0%;--fs:');
@@ -839,11 +840,13 @@ function render() {
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   fitHeads();
   fltFit();
+  podRoll();
   packGrid();
   placeEmbeds();
   rdrSync();
   siteSync();
   edDecorate();
+  tabTitle();
   Object.keys(openFilt).forEach(function (id) { var m = $(id); if (m) { m.hidden = false; m.scrollTop = openFilt[id]; } });
   grid0.style.minHeight = "";
   if (sy0 > 0) {
@@ -1519,6 +1522,493 @@ function renderTvSet() {
     return '<div class="row"><span><button class="lnk" data-a="tvopen" data-k="' + s.id + '"><span class="bnm">' + esc((c && c.n) || s.n || "Show") + "</span></button> <small class=\"mut\">" + esc(c ? [c.net, c.next ? "next " + tvDayName(c.next.ts) : c.st === "Ended" ? "ended" : "no date yet"].filter(Boolean).join(" · ") : "") + '</small></span><button data-a="tvdel" data-k="' + s.id + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></div>';
   }).join("") : '<div class="mut sn">You follow no shows yet. Switch the box on, press ⌕ in it and type a name.</div>';
 }
+
+// ---- Podcasts: the newest episodes of the shows you follow, the popular shows of a country, and a search of every
+// podcast. Everything comes from Apple's public podcast directory, read straight from the browser (no sign-in there, no
+// server of ours in between); the episode itself plays straight from the show's own address, in the Radio box, which
+// switches between radio and podcasts. P.pod = { on, f: [{ id, n, a, img, g, since }], star, pos: { episode: [seconds,
+// when] }, done: { episode: when }, seen, cur, mode, view, cc, genre, speed, back, fwd, doneMode, ntf, line, time, jump, roll }.
+// The box is off until you switch it on (Settings > Layout & boxes, or Podcasts). ----
+var PODAPI = "https://itunes.apple.com/", PODC = load("sp_podc", {}), PODD = {}, PODQ = "", PODFIND = false, PODRES = null, PODRESQ = "", podBusy = false, PODERR = "";
+var PODSHOW = "", PODSH = {}, PODCHART = {}, PODMENU = false, PODMORE = {}, PODDESC = {};
+var POD_G = [["", "All topics"], ["1489", "News"], ["1303", "Comedy"], ["1545", "Sports"], ["1488", "True crime"], ["1321", "Business"], ["1318", "Technology"], ["1324", "Society & culture"], ["1487", "History"], ["1533", "Science"],
+  ["1512", "Health & fitness"], ["1304", "Education"], ["1301", "Arts"], ["1309", "TV & film"], ["1310", "Music"], ["1305", "Kids & family"], ["1483", "Fiction"], ["1502", "Leisure"]];
+var POD_CC = [["ee", "Estonia"], ["se", "Sweden"], ["fi", "Finland"], ["no", "Norway"], ["dk", "Denmark"], ["lv", "Latvia"], ["lt", "Lithuania"], ["pl", "Poland"], ["de", "Germany"], ["nl", "Netherlands"],
+  ["fr", "France"], ["es", "Spain"], ["it", "Italy"], ["gb", "United Kingdom"], ["ie", "Ireland"], ["us", "United States"], ["ca", "Canada"], ["au", "Australia"]];
+var POD_SPEEDS = [0.8, 1, 1.25, 1.5, 1.75, 2];
+function podp() {
+  if (!P.pod || typeof P.pod !== "object") P.pod = {};
+  var p = P.pod;
+  if (!Array.isArray(p.f)) p.f = [];
+  ["star", "pos", "done"].forEach(function (k) { if (!p[k] || typeof p[k] !== "object") p[k] = {}; });
+  return p;
+}
+function podO(k, d) { var v = P.pod && P.pod[k]; return v == null ? d : v; }
+function podF() { return (P.pod && Array.isArray(P.pod.f) ? P.pod.f : []).filter(function (s) { return s && /^\d{1,12}$/.test(String(s.id)); }).slice(0, 40); }
+function podShow(id) { return podF().filter(function (s) { return String(s.id) === String(id); })[0] || null; }
+function podHas(id) { return !!podShow(id); }
+function podCc() { var c = podO("cc", ""); return POD_CC.some(function (o) { return o[0] === c; }) ? c : stGuessCc().toLowerCase().replace("uk", "gb"); }
+function podGenre() { var g = String(podO("genre", "")); return POD_G.some(function (o) { return o[0] === g; }) ? g : ""; }
+function podSpeed() { var s = +podO("speed", 1); return POD_SPEEDS.indexOf(s) >= 0 ? s : 1; }
+function podBack() { var s = +podO("back", 15); return [10, 15, 30].indexOf(s) >= 0 ? s : 15; }
+function podFwd() { var s = +podO("fwd", 30); return [15, 30, 45, 60].indexOf(s) >= 0 ? s : 30; }
+function podFlag(k) { return podO(k, true) !== false; }   // line, time, jump: shown unless switched off
+function podMode() { return P.pod && P.pod.mode === "pod" && (podCur() || !boxOff("podcasts")) ? "pod" : "radio"; }
+// the switch in the Radio box is only there for people who use podcasts, so the box stays as it was for everyone else
+function podInUse() { return !boxOff("podcasts") || !!podCur(); }
+function podGet(path) { return fetch(PODAPI + path).then(function (r) { if (!r.ok) throw new Error("Apple answered " + r.status); return r.json(); }); }
+function podTxt(h) { var d = document.createElement("div"); d.innerHTML = String(h || "").replace(/<(br|\/p|\/li)[^>]*>/gi, "\n").replace(/<[^>]+>/g, " "); return (d.textContent || "").replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim(); }
+function podImg(x) { return safeUrl(String(x.artworkUrl160 || x.artworkUrl100 || x.artworkUrl600 || "").replace(/^http:/, "https:")); }
+// one episode from Apple's answer, kept small: the notes are cut short (and kept whole only in memory, for the player)
+function podEp(x) {
+  var d = podTxt(x.description || x.shortDescription || "");
+  var e = { id: String(x.trackId || ""), s: String(x.collectionId || ""), t: String(x.trackName || "").slice(0, 200), ts: Date.parse(x.releaseDate) || 0, len: Math.round((+x.trackTimeMillis || 0) / 1000), u: safeUrl(x.episodeUrl || ""), img: podImg(x), w: safeUrl(x.trackViewUrl || "") };
+  PODD[e.id] = d.slice(0, 1500);
+  e.d = d.slice(0, 300);
+  return e;
+}
+function podSaveC() {
+  var keep = {};
+  podF().forEach(function (s) { if (PODC[s.id]) keep[s.id] = PODC[s.id]; });
+  PODC = keep; save("sp_podc", PODC);
+}
+// the newest episodes of every show you follow: one request for ten shows at a time, every 30 minutes
+var PODAGAIN = false;
+function fetchPod(force) {
+  if (boxOff("podcasts")) return;
+  if (podBusy) { PODAGAIN = true; return; }   // asked again while a round is running (a show was just followed): one more round after it
+  var now = Date.now(), todo = podF().filter(function (s) { var c = PODC[s.id]; return force || !c || !s.n || now - c.t > 1800000; });   // (a show without its name yet gets it now)
+  if (!todo.length) return;
+  podBusy = true;
+  var chunks = [];
+  for (var i = 0; i < todo.length; i += 10) chunks.push(todo.slice(i, i + 10));
+  var next = function () {
+    var ch = chunks.shift();
+    if (!ch) { podBusy = false; podSaveC(); podNotify(); render(); if (PODAGAIN) { PODAGAIN = false; fetchPod(); } return; }
+    podGet("lookup?id=" + ch.map(function (s) { return s.id; }).join(",") + "&entity=podcastEpisode&limit=6").then(function (j) {
+      var by = {}, meta = {};
+      (j.results || []).forEach(function (x) {
+        if (x.kind === "podcast-episode" || x.wrapperType === "podcastEpisode") { var e = podEp(x); if (e.id && e.u) (by[e.s] = by[e.s] || []).push(e); }
+        else if (x.kind === "podcast") meta[x.collectionId] = x;
+      });
+      ch.forEach(function (s) {
+        PODC[s.id] = { t: Date.now(), eps: (by[s.id] || []).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 6) };
+        var m = meta[s.id];
+        if (m) { s.n = String(m.collectionName || s.n || "").slice(0, 100); s.a = String(m.artistName || s.a || "").slice(0, 80); s.img = podImg(m) || s.img; }
+      });
+      PODERR = "";
+    }).catch(function (e) { PODERR = String((e && e.message) || e); ch.forEach(function (s) { if (PODC[s.id]) PODC[s.id].t = Date.now() - 1500000; }); }).then(next);   // a failed one is tried again in five minutes
+  };
+  next();
+}
+// every episode the box knows of, newest first
+function podAll() {
+  var out = [];
+  podF().forEach(function (s) { ((PODC[s.id] || {}).eps || []).forEach(function (e) { out.push(e); }); });
+  return out.sort(function (a, b) { return b.ts - a.ts; });
+}
+function podPos(id) { var v = P.pod && P.pod.pos && P.pod.pos[id]; return Array.isArray(v) ? +v[0] || 0 : 0; }
+function podStarted(id) { return !!(P.pod && P.pod.pos && P.pod.pos[id]); }
+function podDone(id) { return !!(P.pod && P.pod.done && P.pod.done[id]); }
+// new: came out after you followed the show and after you last marked the box seen, and not started or played yet
+function podNew(e) { var s = podShow(e.s); return !!s && e.ts > Math.max(+podO("seen", 0) || 0, +s.since || 0) && !podStarted(e.id) && !podDone(e.id); }
+function podList() { var all = podAll(); return podO("doneMode", "dim") === "hide" ? all.filter(function (e) { return !podDone(e.id); }) : all; }
+function podNewN() { return boxOff("podcasts") ? 0 : podAll().filter(podNew).length; }
+// at most 80 places to resume from and 300 played episodes are kept with your account: the oldest go first
+function podCap(o, n, at) { var k = Object.keys(o); if (k.length > n) k.sort(function (a, b) { return at(o[a]) - at(o[b]); }).slice(0, k.length - n).forEach(function (x) { delete o[x]; }); }
+function podSetPos(id, sec) { var p = podp(); p.pos[id] = [Math.max(0, Math.round(sec)), Date.now()]; podCap(p.pos, 80, function (v) { return +v[1] || 0; }); }
+function podSetDone(id, on) {
+  var p = podp();
+  if (on) { p.done[id] = Date.now(); delete p.pos[id]; podCap(p.done, 300, function (v) { return +v || 0; }); } else delete p.done[id];
+}
+// a new episode of a show with a ☆ (or of any show you follow, Settings > Podcasts) is announced once
+function podNotify() {
+  var mode = podO("ntf", "star"), now = Date.now();
+  if (mode === "off") return;
+  podF().forEach(function (s) {
+    if (mode === "star" && !(P.pod.star && P.pod.star[s.id])) return;
+    ((PODC[s.id] || {}).eps || []).forEach(function (e) {
+      if (podNew(e) && now - e.ts < 86400000 && once("pod:" + e.id)) toast("pod", "New episode: " + (s.n || "a podcast"), e.t, { a: "podplay", k: e.id }, false, false, e.ts);
+    });
+  });
+}
+
+// ---- The Podcasts box ----
+function podCov(img, cls) { img = safeUrl(img); return img ? '<img class="pdc ' + (cls || "") + '" alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '">' : '<span class="pdc pdcx ' + (cls || "") + '">♪</span>'; }
+function podMins(sec) { var m = Math.round(sec / 60); return !sec ? "" : m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min"; }
+function podClock(sec) { sec = Math.max(0, Math.round(sec || 0)); var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ":" + pad2(m) : m) + ":" + pad2(s); }
+function podShort(sec) { return sec < 60 ? Math.max(0, Math.round(sec)) + "s" : Math.ceil(sec / 60) + "m"; }
+function podEqHtml() { return '<i class="pdeq" aria-label="Playing"><b></b><b></b><b></b></i>'; }
+// one line per episode: the title and (small) the show; on the right only what you need: time left or ✓, and the age
+function podRow(e, showName) {
+  var p = podPos(e.id), d = podDone(e.id), cur = podCur() && podCur().id === e.id, sn = (podShow(e.s) || {}).n || (PODSH[e.s] && PODSH[e.s].n) || "";
+  var left = e.len ? e.len - p : 0;
+  var right = (cur && PODST === "play" ? podEqHtml() : "") + (d ? '<span class="mut" title="Played">✓</span>' : p > 0 && left > 0 ? '<span class="pdleft" title="Where you stopped">' + Math.max(1, Math.round(left / 60)) + "m left</span>" : "") + '<span class="mut">' + ago(e.ts) + "</span>";
+  return '<div class="row pdr' + (podNew(e) ? " new" : "") + (d ? " rd" : "") + (cur ? " pdcur" : "") + '" title="' + esc(e.t + (sn ? " · " + sn : "") + (e.len ? " · " + podMins(e.len) : "")) + '">' +
+    '<span><button class="lnk" data-a="podplay" data-k="' + esc(e.id) + '">' + esc(e.t) + "</button>" +
+    (showName && sn ? ' <small><button class="pdsn" data-a="podshow" data-k="' + esc(e.s) + '">' + esc(sn) + "</button></small>" : e.len ? " <small>" + podMins(e.len) + "</small>" : "") + "</span>" +
+    '<span class="r">' + right + "</span>" + (p > 0 && !d && e.len ? '<i class="pdp" style="width:' + Math.min(100, p / e.len * 100).toFixed(1) + '%"></i>' : "") + "</div>";
+}
+function podFolBtn(s) {
+  var f = podHas(s.id);
+  return '<button class="pdf' + (f ? " on" : "") + '" data-a="podfol" data-k="' + esc(String(s.id)) + '" title="' + (f ? "Following. Click to stop following" : "Follow") + '" aria-label="' + (f ? "Stop following " : "Follow ") + esc(s.n) + '">' + (f ? "✓" : "+") + "</button>";
+}
+function podShowRow(s, rank) {
+  return '<div class="row pdr"><span>' + (rank ? '<i class="pdrk">' + rank + "</i>" : "") + '<button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '">' + esc(s.n) + "</button>" + (s.a ? " <small>" + esc(s.a) + "</small>" : "") + "</span>" +
+    '<span class="r">' + podFolBtn(s) + "</span></div>";
+}
+// shows seen in a list (chart, search) are remembered for a while, so following one or opening its page needs no new request
+var PODKNOWN = {};
+function podKnow(s) { if (s && s.id) PODKNOWN[s.id] = Object.assign({}, PODKNOWN[s.id] || {}, s); return s; }
+function podChartKey() { return podCc() + "/" + podGenre(); }
+function fetchPodChart() {
+  var k = podChartKey(), c = PODCHART[k];
+  if (c && (c.busy || Date.now() - c.t < 3600000)) return;
+  PODCHART[k] = { t: Date.now(), busy: 1, list: c ? c.list : null };
+  podGet(podCc() + "/rss/toppodcasts/limit=25" + (podGenre() ? "/genre=" + podGenre() : "") + "/json").then(function (j) {
+    var list = (((j || {}).feed || {}).entry || []);
+    if (!Array.isArray(list)) list = [list];
+    PODCHART[k] = { t: Date.now(), list: list.map(function (x) {
+      var im = x["im:image"] || [], s = { id: String(((x.id || {}).attributes || {})["im:id"] || ""), n: String((x["im:name"] || {}).label || "").slice(0, 100), a: String((x["im:artist"] || {}).label || "").slice(0, 80), img: safeUrl(String((im[im.length - 1] || {}).label || "")), g: String(((x.category || {}).attributes || {}).label || "") };
+      if (x.summary && x.summary.label) PODDESC[s.id] = podTxt(x.summary.label).slice(0, 600);
+      return podKnow(s);
+    }).filter(function (s) { return s.id && s.n; }) };
+    render();
+  }).catch(function () { PODCHART[k] = { t: Date.now() - 3300000, list: [] }; render(); });   // tried again in five minutes
+}
+function podSearch() {
+  var q = PODQ;
+  if (!q) { PODRES = null; render(); return; }
+  podGet("search?media=podcast&entity=podcast&limit=20&country=" + podCc() + "&term=" + encodeURIComponent(q)).then(function (j) {
+    if (PODQ !== q) return;
+    PODRES = (j.results || []).map(function (x) { return podKnow({ id: String(x.collectionId || ""), n: String(x.collectionName || "").slice(0, 100), a: String(x.artistName || "").slice(0, 80), img: podImg(x), g: String(x.primaryGenreName || "") }); }).filter(function (s) { return s.id && s.n; });
+    PODRESQ = q; render();
+  }).catch(function () { if (PODQ === q) { PODRES = []; PODRESQ = q; render(); } });
+}
+// a show's own page inside the box: its latest episodes, 20 more each time you ask, up to the 200 Apple gives
+function fetchPodShow(id, n) {
+  podGet("lookup?id=" + id + "&entity=podcastEpisode&limit=" + n).then(function (j) {
+    var eps = [], meta = null;
+    (j.results || []).forEach(function (x) { if (x.kind === "podcast-episode" || x.wrapperType === "podcastEpisode") { var e = podEp(x); if (e.id && e.u) eps.push(e); } else if (x.kind === "podcast") meta = x; });
+    var s = podKnow({ id: String(id), n: String((meta && meta.collectionName) || (PODKNOWN[id] || {}).n || "").slice(0, 100), a: String((meta && meta.artistName) || (PODKNOWN[id] || {}).a || "").slice(0, 80), img: (meta && podImg(meta)) || (PODKNOWN[id] || {}).img || "", g: String((meta && meta.primaryGenreName) || "") });
+    PODSH[id] = { t: Date.now(), n: s.n, a: s.a, img: s.img, g: s.g, cnt: meta ? +meta.trackCount || 0 : 0, eps: eps.sort(function (a, b) { return b.ts - a.ts; }), want: n, ok: 1 };
+    render(); podPlayerRefresh();
+  }).catch(function () { PODSH[id] = Object.assign(PODSH[id] || {}, { t: Date.now(), err: 1, want: n }); render(); });
+}
+function openPodShow(id) {
+  id = String(id);
+  if (!/^\d{1,12}$/.test(id)) return;
+  PODSHOW = id; PODMENU = false; PODFIND = false; PODQ = ""; PODRES = null;
+  if (!PODSH[id] || !PODSH[id].ok || Date.now() - PODSH[id].t > 3600000) { PODSH[id] = Object.assign(PODSH[id] || {}, { want: 20 }); fetchPodShow(id, 20); }
+  render();
+  var l = document.querySelector('[data-list="podcasts"]'); if (l) l.scrollTop = 0;
+}
+function podShowPage(id) {
+  var c = PODSH[id] || {}, k = PODKNOWN[id] || podShow(id) || {}, n = c.n || k.n || "", desc = PODDESC[id] || "", open = PODMORE[id];
+  if (!c.ok) return '<div class="empty">' + (c.err ? "Could not load this show right now." : "Loading…") + "</div>";
+  return '<div class="pdhd">' + podCov(c.img || k.img, "l") + '<div class="pdhi"><b>' + esc(n) + "</b><small>" + esc([c.a || k.a, c.g, c.cnt ? c.cnt + " episodes" : ""].filter(Boolean).join(" · ")) + "</small>" +
+    (desc ? '<div class="pdds' + (open ? " open" : "") + '">' + esc(desc) + (desc.length > 80 ? ' <button class="lnk2" data-a="podmore" data-k="' + esc(id) + '">' + (open ? "less" : "more") + "</button>" : "") + "</div>" : "") + "</div></div>" +
+    (c.eps.length ? c.eps.map(function (e) { return podRow(e, false); }).join("") : '<div class="empty">No episodes to play.</div>') +
+    (c.eps.length >= c.want && c.want < 200 ? '<button class="more" data-a="podolder" data-k="' + esc(id) + '">Older episodes</button>' : "");
+}
+// The box is always exactly as tall as its list length (H in Edit mode): a bar on top (back, search, country and topic)
+// takes its height from the list under it, so opening a show, searching or a short list never changes the box's size.
+function podTile() {
+  var view = podO("view", "f") === "p" ? "p" : "f", bar = "", body, all = podList();
+  if (PODSHOW) {
+    var fs = podShow(PODSHOW), sh = PODSH[PODSHOW] || {}, kn = PODKNOWN[PODSHOW] || {};
+    bar = '<div class="pdbar"><button class="ib sm" data-a="podback">← Back</button><span class="pdgap"></span>' +
+      (fs ? '<button class="ib sm pdst' + (P.pod.star[PODSHOW] ? " on" : "") + '" data-a="podstar" data-k="' + esc(PODSHOW) + '" title="' + (P.pod.star[PODSHOW] ? "You get a notification for new episodes. Click to stop" : "Get a notification for new episodes") + '" aria-label="Notification for new episodes">' + (P.pod.star[PODSHOW] ? "★" : "☆") + "</button>" : "") +
+      '<button class="ib sm pdw' + (fs ? " on" : "") + '" data-a="podfol" data-k="' + esc(PODSHOW) + '"' + (sh.n || kn.n ? "" : " disabled") + ">" + (fs ? "✓ Following" : "+ Follow") + "</button></div>";
+    body = podShowPage(PODSHOW);
+  } else if (PODFIND || PODQ) {
+    bar = '<div class="pdbar"><input type="search" id="podQ" class="flt" placeholder="Search all podcasts…" aria-label="Search all podcasts" autocomplete="off"></div>';
+    if (!PODQ) body = '<div class="empty">Search every podcast by its name, a topic or a person.</div>';
+    else if (PODRESQ !== PODQ || !PODRES) body = '<div class="empty">Searching…</div>';
+    else {
+      var w = sWords(PODQ), eps = all.filter(function (e) { return sHit(w, e.t); }).slice(0, 8);
+      body = (PODRES.length ? '<div class="pdh">Shows</div>' + PODRES.map(function (s) { return podShowRow(s); }).join("") : "") +
+        (eps.length ? '<div class="pdh">Episodes of your shows</div>' + eps.map(function (e) { return podRow(e, true); }).join("") : "") +
+        (!PODRES.length && !eps.length ? '<div class="empty">No podcast found for “' + esc(PODQ) + "”.</div>" : "");
+    }
+  } else if (view === "p") {
+    bar = '<div class="pdbar"><select data-s="podcc" aria-label="Country">' + opts(POD_CC, podCc()) + '</select><select data-s="podgenre" aria-label="Topic">' + opts(POD_G, podGenre()) + "</select></div>";
+    var ch = PODCHART[podChartKey()];
+    if (!ch || !ch.list) { fetchPodChart(); body = '<div class="empty">Loading the popular shows…</div>'; }
+    else body = ch.list.length ? ch.list.map(function (s, i) { return podShowRow(s, i + 1); }).join("") : '<div class="empty">No popular list for this country and topic right now. Try another topic.</div>';
+  } else if (!podF().length) body = '<div class="empty">You follow no podcasts yet. Choose <b>Popular</b> above, or search with ⌕.</div>';
+  else body = all.length ? all.slice(0, 60).map(function (e) { return podRow(e, true); }).join("") : '<div class="empty">' + (podBusy ? "Loading your shows…" : PODERR ? "Podcasts unavailable: " + esc(PODERR) : "No episodes yet.") + "</div>";
+  var H = Math.round((layRows().podcasts || 8) * 32.4 * (P.fs || 1)), lh = Math.max(60, H - (bar ? 32 : 0));
+  var list = '<div class="list pdlist" data-list="podcasts" style="height:' + lh + "px;max-height:" + lh + 'px">' + body + "</div>";
+  var shows = '<div class="dd"><button class="ib sm pdw" data-a="podmenu" aria-haspopup="true" aria-expanded="' + PODMENU + '" title="The shows you follow">Shows</button>' + (PODMENU ? '<div class="menu pdmenu" id="podMenu">' +
+    (podF().length ? podF().map(function (s) {
+      return '<div class="pdmr"><button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '">' + esc(s.n || "Podcast") + '</button><span><button class="pdi' + (P.pod.star[s.id] ? " on" : "") + '" data-a="podstar" data-k="' + esc(String(s.id)) + '" title="Notification for new episodes" aria-label="Notification for new episodes">' + (P.pod.star[s.id] ? "★" : "☆") + '</button><button class="pdi" data-a="podfol" data-k="' + esc(String(s.id)) + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
+    }).join("") : '<div class="mut sn">You follow no shows yet.</div>') + "</div>" : "") + "</div>";
+  var n = podNewN(), nb = n ? '<button class="pill ac" data-a="podseen" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : "";
+  var sel = '<select data-s="podview" aria-label="What the box shows">' + opts([["f", "Following"], ["p", "Popular"]], view) + "</select>";
+  var sb = '<button class="ib sm' + (PODFIND || PODQ ? " on" : "") + '" data-a="podfind" title="Search all podcasts" aria-label="Search all podcasts">⌕</button>';
+  return tile("podcasts", "Podcasts", bar + list, 0, nb + sel + sb + shows);
+}
+function podFollow(id) {
+  id = String(id);
+  var p = podp(), i = -1;
+  p.f.forEach(function (s, n) { if (String(s.id) === id) i = n; });
+  var k = PODKNOWN[id] || PODSH[id] || {}, name = (i >= 0 ? p.f[i].n : k.n) || "this podcast";
+  if (i >= 0) { p.f.splice(i, 1); delete p.star[id]; delete PODC[id]; podSaveC(); podNote("Stopped following " + name); }
+  else if (p.f.length >= 40) { podNote("You follow 40 podcasts", "That is the most the box takes. Stop following one first."); return; }
+  else { p.f.push({ id: id, n: String(k.n || "").slice(0, 100), a: String(k.a || "").slice(0, 80), img: safeUrl(k.img || ""), since: Date.now() }); podNote("Following " + name, "Its newest episodes are in your list now."); }
+  persist(); render(); renderPodSet(); fetchPod();
+}
+// A short note for something you just did (following a show): it shows on the right for a moment and is not kept in the bell
+function podNote(title, body) {
+  var box = $("toasts"), el = document.createElement("div");
+  el.className = "toast k-pod pdnote";
+  el.innerHTML = '<div class="tb"><b><i>' + TICON.pod + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + "</div>";
+  box.appendChild(el);
+  setTimeout(function () { el.classList.add("pdgo"); setTimeout(function () { el.remove(); }, 300); }, 3500);
+}
+
+// ---- Playing: one episode at a time, in the Radio box; the radio and a podcast never play together ----
+var PODA = null, PODST = "", PODSAVED = 0;   // PODST: "" stopped, "load" connecting, "play" playing, "pause" paused, "err" could not play
+function podCur() { var c = P.pod && P.pod.cur; return c && c.id && safeUrl(c.u) ? c : null; }
+function podFind(id) {
+  var e = null;
+  podAll().concat(Object.keys(PODSH).reduce(function (a, k) { return a.concat(PODSH[k].eps || []); }, [])).some(function (x) { if (x.id === id) { e = x; return true; } return false; });
+  return e;
+}
+function podAudio() {
+  if (PODA) return PODA;
+  PODA = new Audio(); PODA.preload = "none";
+  var set = function (st) { return function () { if (PODST !== st && PODST) { PODST = st; render(); podPlayerRefresh(); } }; };
+  PODA.addEventListener("playing", set("play")); PODA.addEventListener("waiting", set("load"));
+  PODA.addEventListener("error", function () { if (PODST) { PODST = "err"; render(); podPlayerRefresh(); } });
+  PODA.addEventListener("timeupdate", podTick);
+  PODA.addEventListener("ended", function () { var c = podCur(); if (c) podSetDone(c.id, true); PODST = ""; persist(); render(); podPlayerRefresh(); });
+  return PODA;
+}
+function podPlay(id) {
+  var p = podp(), e = id ? podFind(id) : null;
+  if (id && !e) return;
+  if (e) p.cur = { id: e.id, s: e.s, t: e.t, sn: ((podShow(e.s) || PODSH[e.s] || PODKNOWN[e.s] || {}).n || "").slice(0, 100), u: e.u, len: e.len, img: e.img || ((podShow(e.s) || {}).img || ""), ts: e.ts, w: e.w };
+  var c = podCur();
+  if (!c) return;
+  if (RAD.state) radioStop();
+  p.mode = "pod";
+  if (podDone(c.id)) podSetDone(c.id, false);
+  if (!podStarted(c.id)) podSetPos(c.id, 0);
+  var a = podAudio(), at = podPos(c.id);
+  if (a.dataset.id !== c.id) {
+    a.src = c.u; a.dataset.id = c.id;
+    if (at > 5) a.addEventListener("loadedmetadata", function seek() { a.removeEventListener("loadedmetadata", seek); try { a.currentTime = at; } catch (x) {} });
+  }
+  a.playbackRate = podSpeed(); a.volume = radioVol() / 100;
+  PODST = "load";
+  var pr = a.play();
+  if (pr && pr.catch) pr.catch(function () { if (PODST === "load") { PODST = "err"; render(); podPlayerRefresh(); } });
+  try {
+    if (navigator.mediaSession && window.MediaMetadata) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: c.t, artist: c.sn || "Podcast", artwork: c.img ? [{ src: c.img, sizes: "160x160" }] : [] });
+      navigator.mediaSession.setActionHandler("play", function () { podPlay(); });
+      navigator.mediaSession.setActionHandler("pause", function () { podPause(); });
+      navigator.mediaSession.setActionHandler("seekbackward", function () { podSkip(-podBack()); });
+      navigator.mediaSession.setActionHandler("seekforward", function () { podSkip(podFwd()); });
+    }
+  } catch (x) {}
+  persist(); render(); podPlayerRefresh();
+}
+function podPause() {
+  if (PODA) PODA.pause();
+  if (PODST) PODST = "pause";
+  var c = podCur(); if (c && PODA && PODA.dataset.id === c.id) podSetPos(c.id, PODA.currentTime);
+  persist(); render(); podPlayerRefresh();
+}
+function podToggle() { if (PODST === "play" || PODST === "load") podPause(); else podPlay(); }
+function podSkip(d) {
+  var c = podCur(); if (!c) return;
+  if (PODA && PODA.dataset.id === c.id && PODA.src) { try { PODA.currentTime = Math.max(0, Math.min((PODA.duration || c.len || 1e9) - 1, PODA.currentTime + d)); } catch (x) {} podSetPos(c.id, PODA.currentTime); }
+  else podSetPos(c.id, Math.max(0, Math.min((c.len || 1e9) - 1, podPos(c.id) + d)));
+  podLive(); persist();
+}
+function podSeekTo(sec) {
+  var c = podCur(); if (!c) return;
+  if (PODA && PODA.dataset.id === c.id && PODA.src) { try { PODA.currentTime = sec; } catch (x) {} }
+  podSetPos(c.id, sec); podLive();
+}
+// while it plays: where you are is noted all the time, saved with your account every 30 seconds (and on pause)
+function podTick() {
+  var c = podCur();
+  if (!c || !PODA || PODA.dataset.id !== c.id || !PODA.currentTime) return;
+  if (!c.len && PODA.duration && isFinite(PODA.duration)) c.len = Math.round(PODA.duration);
+  podSetPos(c.id, PODA.currentTime);
+  if (Date.now() - PODSAVED > 30000) { PODSAVED = Date.now(); persist(); }
+  podLive();
+}
+function podCurLen() { var c = podCur(); return c ? c.len || (PODA && isFinite(PODA.duration) ? Math.round(PODA.duration) : 0) : 0; }
+// the few things that change every second, without redrawing the page
+function podLive() {
+  var c = podCur(); if (!c) return;
+  var p = podPos(c.id), len = podCurLen();
+  if ($("podProg")) $("podProg").style.width = (len ? Math.min(100, p / len * 100) : 0).toFixed(2) + "%";
+  if ($("podTm")) $("podTm").textContent = len ? podShort(len - p) : podClock(p);
+  if ($("podSeek") && podPlayerOpen()) {
+    if (document.activeElement !== $("podSeek")) { $("podSeek").max = len || 1; $("podSeek").value = Math.round(p); }
+    $("podA").textContent = podClock(p); $("podB").textContent = len ? "−" + podClock(len - p) : "";
+  }
+}
+
+// ---- The Radio box while podcasts are on: the switch, the episode (click it for the player), jump back, play, jump forward, volume ----
+var RADIO_SVG = 'viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+var POD_IC = {
+  radio: "<svg " + RADIO_SVG + '><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l10-5"/><circle cx="15.500" cy="14" r="2.500"/><path d="M6.500 12.500h4M6.500 15.500h4"/></svg>',
+  mic: "<svg " + RADIO_SVG + '><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0"/><path d="M12 17.500V21"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5.500v13l10.500-6.500z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="6.500" y="5.500" width="4" height="13" rx="1"/><rect x="13.500" y="5.500" width="4" height="13" rx="1"/></svg>',
+  back: "<svg " + RADIO_SVG + '><path d="M4 12a8 8 0 1 0 2.500-5.800"/><path d="M4 4v4.500h4.500"/></svg>',
+  fwd: "<svg " + RADIO_SVG + '><path d="M20 12a8 8 0 1 1-2.500-5.800"/><path d="M20 4v4.500h-4.500"/></svg>'
+};
+function podSwitch() {
+  if (!podInUse()) return "";
+  var pod = podMode() === "pod";
+  return '<button class="ib pdsw" data-a="podmode" title="' + (pod ? "Podcasts. Click for the radio" : "Radio. Click for podcasts") + '" aria-label="' + (pod ? "Switch to the radio" : "Switch to podcasts") + '">' + (pod ? POD_IC.mic : POD_IC.radio) + "</button>";
+}
+function podRadioHtml() {
+  var c = podCur(), st = PODST, playing = st === "play" || st === "load";
+  if (!c) return '<div class="mrow radio">' + podSwitch() + '<span class="mut pdnone">No episode yet. Pick one in the Podcasts box.</span>' + radVolHtml() + "</div>";
+  var p = podPos(c.id), len = podCurLen(), sp = podSpeed() !== 1 ? '<b class="pdspd">' + podSpeed() + "×</b>" : "";
+  var tm = podFlag("time") ? '<span class="pdtm"><span id="podTm">' + (len ? podShort(len - p) : podClock(p)) + "</span>" + (sp ? " " + sp : "") + "</span>" : sp ? '<span class="pdtm">' + sp + "</span>" : "";
+  var tip = st === "err" ? "This episode could not be played right now" : c.t + (c.sn ? " · " + c.sn : "") + ". Click for the player";
+  return '<div class="mrow radio pod">' + podSwitch() +
+    '<button class="pdnow' + (st === "err" ? " bad" : "") + '" data-a="podplayer" title="' + esc(tip) + '"><span class="pdnt"><span class="pdnti">' + esc(c.t) + "</span></span>" + tm + "</button>" +
+    (podFlag("jump") ? '<button class="ib" data-a="podback15" title="Back ' + podBack() + ' seconds" aria-label="Back ' + podBack() + ' seconds">' + POD_IC.back + "</button>" : "") +
+    '<button class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" data-a="podtoggle" title="' + (playing ? "Pause" : "Play") + '" aria-label="' + (playing ? "Pause" : "Play") + '">' + (playing ? POD_IC.pause : POD_IC.play) + "</button>" +
+    (podFlag("jump") ? '<button class="ib" data-a="podfwd" title="Forward ' + podFwd() + ' seconds" aria-label="Forward ' + podFwd() + ' seconds">' + POD_IC.fwd + "</button>" : "") +
+    radVolHtml() +
+    (podFlag("line") ? '<i class="pdprog" aria-hidden="true"><i id="podProg" style="width:' + (len ? Math.min(100, p / len * 100) : 0).toFixed(2) + '%"></i></i>' : "") + "</div>";
+}
+// Long titles: cut with … (standard), or rolled slowly across and back when they do not fit (Settings > Podcasts)
+function podRoll() {
+  var o = document.querySelector("#grid .pdnt"), i = o && o.firstElementChild, row = o && o.closest(".mrow");
+  if (!o || !i) return;
+  // a narrow Radio box gives the title its room first: the jump buttons step aside (they stay in the player)
+  row.classList.remove("tight");
+  if (o.clientWidth < 56 && row.querySelector('[data-a="podfwd"]')) row.classList.add("tight");
+  o.classList.remove("roll");
+  if (!podO("roll", false)) return;
+  var d = i.scrollWidth - o.clientWidth;
+  if (d > 2) { o.classList.add("roll"); o.style.setProperty("--d", -(d + 4) + "px"); o.style.setProperty("--t", Math.max(6, d / 18 + 4).toFixed(1) + "s"); }
+}
+
+// ---- The player window: cover, position, jump back and forward, speed, volume, the notes and what comes next ----
+var POD_T = "Podcast";
+function podPlayerOpen() { return !$("modal").hidden && $("mTitle").textContent === POD_T; }
+function podUpNext() {
+  var cur = podCur(), unfinished = [], fresh = [];
+  podAll().forEach(function (e) { if ((cur && e.id === cur.id) || podDone(e.id)) return; if (podPos(e.id) > 0) unfinished.push(e); else if (podNew(e)) fresh.push(e); });
+  return unfinished.concat(fresh).slice(0, 5);
+}
+function podPlayerHtml() {
+  var c = podCur();
+  if (!c) return '<p class="mut">Nothing chosen yet. Click an episode in the Podcasts box.</p>';
+  var p = podPos(c.id), len = podCurLen(), playing = PODST === "play" || PODST === "load", notes = PODD[c.id] || "", open = PODMORE["n:" + c.id], up = podUpNext();
+  return '<div class="rnp">' + podCov(c.img, "xl") + '<div><h2 class="mh">' + esc(c.t) + "</h2>" + (c.sn ? '<div class="rnpa"><button class="lnk" data-a="podshowx" data-k="' + esc(c.s) + '">' + esc(c.sn) + "</button></div>" : "") +
+    '<div class="mut sn">' + esc([c.ts ? new Date(c.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "", podMins(len)].filter(Boolean).join(" · ")) + "</div>" +
+    (PODST === "err" ? '<p class="mut sn">This episode could not be played right now. Try again later, or open it on the show’s page.</p>' : "") +
+    '<div class="pdseek"><span id="podA">' + podClock(p) + '</span><input type="range" id="podSeek" min="0" max="' + (len || 1) + '" step="1" value="' + Math.round(p) + '" aria-label="Position in the episode"><span id="podB">' + (len ? "−" + podClock(len - p) : "") + "</span></div>" +
+    '<div class="pdctl"><button class="ib" data-a="podback15" title="Back ' + podBack() + ' seconds" aria-label="Back ' + podBack() + ' seconds">' + POD_IC.back + "<span>" + podBack() + "</span></button>" +
+    '<button class="ib pdbig' + (playing ? " on" : "") + '" data-a="podtoggle" aria-label="' + (playing ? "Pause" : "Play") + '">' + (playing ? POD_IC.pause : POD_IC.play) + "</button>" +
+    '<button class="ib" data-a="podfwd" title="Forward ' + podFwd() + ' seconds" aria-label="Forward ' + podFwd() + ' seconds">' + POD_IC.fwd + "<span>" + podFwd() + "</span></button>" +
+    '<select id="podSpeed" aria-label="Speed">' + POD_SPEEDS.map(function (v) { return '<option value="' + v + '"' + (v === podSpeed() ? " selected" : "") + ">" + v + "×</option>"; }).join("") + "</select>" +
+    '<label class="pdvol" title="Volume"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/><path d="M15.500 9a4 4 0 0 1 0 6"/></svg><input type="range" min="0" max="100" value="' + radioVol() + '" id="podVol" aria-label="Volume"></label></div>' +
+    '<p class="tools"><button class="btn pl" data-a="poddone" data-k="' + esc(c.id) + '">' + (podDone(c.id) ? "Mark as not played" : "Mark as played") + "</button>" + (c.w ? linkBtn(c.w, "Open on Apple Podcasts", true) : "") + "</p></div></div>" +
+    (notes ? '<h3>About this episode</h3><div class="pdnotes' + (open ? " open" : "") + '">' + notes.split(/\n\n+/).map(function (x) { return "<p>" + esc(x) + "</p>"; }).join("") + "</div>" + (notes.length > 240 ? '<button class="lnk2" data-a="podmore" data-k="' + esc("n:" + c.id) + '">' + (open ? "Less" : "More") + "</button>" : "") : "") +
+    (up.length ? "<h3>Up next</h3>" + up.map(function (x) {
+      var pp = podPos(x.id), sn = (podShow(x.s) || {}).n || "";
+      return '<div class="row rnph pdun"><span><button class="lnk" data-a="podplay" data-k="' + esc(x.id) + '">' + esc(x.t) + "</button>" + (sn ? ' <small class="mut">' + esc(sn) + "</small>" : "") + '</span><span class="r mut">' + (pp && x.len ? Math.max(1, Math.round((x.len - pp) / 60)) + "m left" : "new" + (x.len ? " · " + podMins(x.len) : "")) + "</span></div>";
+    }).join("") : "");
+}
+function openPodPlayer() { openModal(POD_T, podPlayerHtml()); }
+function podPlayerRefresh() { if (podPlayerOpen()) { var sc = document.querySelector("#modal .mbox"), t = sc ? sc.scrollTop : 0; $("mBody").innerHTML = podPlayerHtml(); if (sc) sc.scrollTop = t; } }
+
+function podAct(a, k) {
+  if (a === "podplay") { podPlay(k); return; }
+  if (a === "podtoggle") { podToggle(); return; }
+  if (a === "podback15") { podSkip(-podBack()); return; }
+  if (a === "podfwd") { podSkip(podFwd()); return; }
+  if (a === "podplayer") { openPodPlayer(); return; }
+  if (a === "podmode") {
+    var p = podp();
+    if (podMode() === "pod") { if (PODST === "play" || PODST === "load") podPause(); p.mode = "radio"; } else p.mode = "pod";
+    persist(); render(); return;
+  }
+  if (a === "podshow") { openPodShow(k); return; }
+  if (a === "podshowx") { closeModal(); openPodShow(k); var c = document.querySelector('[data-id="podcasts"]'); if (c) c.scrollIntoView({ block: "nearest" }); return; }
+  if (a === "podback") { PODSHOW = ""; render(); return; }
+  if (a === "podmore") { PODMORE[k] = !PODMORE[k]; if (/^n:/.test(k)) podPlayerRefresh(); else render(); return; }
+  if (a === "podolder") { var s = PODSH[k]; if (s) { s.want = Math.min(200, (s.want || 20) + 20); fetchPodShow(k, s.want); } return; }
+  if (a === "podmenu") { PODMENU = !PODMENU; render(); return; }
+  if (a === "podfol") { podFollow(k); return; }
+  if (a === "podstar") {
+    var pp = podp(), sh = podShow(k);
+    if (!sh) return;
+    if (pp.star[k]) { delete pp.star[k]; podNote("No more notifications", sh.n); } else { pp.star[k] = 1; podNote("You will be told about new episodes", sh.n); }
+    persist(); render(); renderPodSet(); return;
+  }
+  if (a === "podseen") { podp().seen = Date.now(); persist(); render(); return; }
+  if (a === "podfind") { PODFIND = !(PODFIND || PODQ); PODSHOW = ""; if (!PODFIND) { PODQ = ""; PODRES = null; } render(); var q = $("podQ"); if (q) { q.value = ""; q.focus(); } return; }
+  if (a === "poddone") { podSetDone(k, !podDone(k)); var cc = podCur(); if (cc && cc.id === k && podDone(k) && (PODST === "play" || PODST === "load")) { if (PODA) PODA.pause(); PODST = ""; } persist(); render(); podPlayerRefresh(); return; }
+  if (a === "poddel") { podFollow(k); }
+}
+document.addEventListener("click", function (e) {
+  // the Shows list closes when you click anywhere else
+  if (PODMENU && !(e.target.closest && e.target.closest("#podMenu, [data-a=podmenu]"))) { PODMENU = false; setTimeout(render, 0); }
+}, true);
+document.addEventListener("input", function (e) {
+  var t = e.target;
+  if (t.id === "podQ") debounced("podQ", function () { PODQ = $("podQ") ? $("podQ").value.trim().slice(0, 60) : ""; render(); podSearch(); });
+  else if (t.id === "podSeek") podSeekTo(+t.value);
+  else if (t.id === "podVol") { var v = +t.value; if (RAD.a) RAD.a.volume = v / 100; if (PODA) PODA.volume = v / 100; P.radio = P.radio || {}; P.radio.vol = v; debounced("radVol", function () { persist(); }); }
+});
+document.addEventListener("keydown", function (e) {
+  if (e.target.id === "podQ" && e.key === "Escape") { e.stopPropagation(); PODQ = ""; PODFIND = false; PODRES = null; render(); }
+}, true);
+document.addEventListener("change", function (e) {
+  var t = e.target, s = t && t.dataset && t.dataset.s;
+  if (s === "podview") { podp().view = t.value; PODSHOW = ""; PODFIND = false; PODQ = ""; persist(); render(); }
+  else if (s === "podcc") { podp().cc = t.value; persist(); render(); }
+  else if (s === "podgenre") { podp().genre = t.value; persist(); render(); }
+  else if (t.id === "podSpeed") { podp().speed = +t.value; if (PODA) PODA.playbackRate = podSpeed(); persist(); render(); renderPodSet(); }
+});
+REFRESH.podcasts = function () { fetchPod(true); if (podO("view", "f") === "p") { delete PODCHART[podChartKey()]; render(); } };
+setInterval(function () { if (!document.hidden) fetchPod(); }, 600000);
+window.addEventListener("resize", function () { setTimeout(podRoll, 60); });
+// Settings > Podcasts
+var POD_SET = [["podSpeedSet", "speed"], ["podBackSet", "back"], ["podFwdSet", "fwd"], ["podDoneSet", "doneMode"], ["podNtfSet", "ntf"], ["podCcSet", "cc"], ["podLineSet", "line"], ["podTimeSet", "time"], ["podJumpSet", "jump"], ["podRollSet", "roll"]];
+function renderPodSet() {
+  if (!$("podSet")) return;
+  $("podOn").checked = !boxOff("podcasts");
+  $("podSpeedSet").value = String(podSpeed()); $("podBackSet").value = String(podBack()); $("podFwdSet").value = String(podFwd());
+  $("podDoneSet").value = podO("doneMode", "dim") === "hide" ? "hide" : "dim";
+  $("podNtfSet").value = ["star", "all", "off"].indexOf(podO("ntf", "star")) >= 0 ? podO("ntf", "star") : "star";
+  $("podCcSet").innerHTML = opts(POD_CC, podCc());
+  $("podLineSet").value = podFlag("line") ? "1" : "0"; $("podTimeSet").value = podFlag("time") ? "1" : "0"; $("podJumpSet").value = podFlag("jump") ? "1" : "0";
+  $("podRollSet").value = podO("roll", false) ? "roll" : "cut";
+  var mine = podF();
+  $("podSet").innerHTML = mine.length ? mine.map(function (s) {
+    return '<div class="row"><span><button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '"><span class="bnm">' + esc(s.n || "Podcast") + "</span></button>" + (s.a ? ' <small class="mut">' + esc(s.a) + "</small>" : "") + "</span>" +
+      '<span class="r"><button data-a="podstar" data-k="' + esc(String(s.id)) + '" title="Notification for new episodes" aria-label="Notification for new episodes">' + (P.pod.star[s.id] ? "★" : "☆") + '</button><button data-a="poddel" data-k="' + esc(String(s.id)) + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
+  }).join("") : '<div class="mut sn">You follow no podcasts yet. Switch the box on and choose Popular in it, or search with ⌕.</div>';
+}
+POD_SET.forEach(function (o) {
+  $(o[0]).onchange = function () {
+    var v = this.value, p = podp();
+    if (o[1] === "line" || o[1] === "time" || o[1] === "jump") p[o[1]] = v === "1";
+    else if (o[1] === "roll") p.roll = v === "roll";
+    else if (o[1] === "speed" || o[1] === "back" || o[1] === "fwd") p[o[1]] = +v;
+    else p[o[1]] = v;
+    if (o[1] === "speed" && PODA) PODA.playbackRate = podSpeed();
+    persist(); render(); renderPodSet(); podPlayerRefresh();
+  };
+});
 
 // ---- Radio: your own stations, found by name or genre in the Radio Browser catalogue (a free, public list of stations) ----
 // P.radio.mine = [[id, name, "My stations", stream address, country]], the same shape as the built-in list.
@@ -2497,6 +2987,8 @@ function siteGroups(q) {
     return sRow("open", "s:" + x.id, esc(tk(x.id)), x.name || "", qt && qt.c != null ? (qt.c >= 0 ? "+" : "") + qt.c.toFixed(2) + "%" : "");
   }));
   if (!boxOff("tv")) add("tv", "TV shows", tvShows().filter(function (s) { return hit(s.n); }).map(function (s) { return sRow("tvopen", String(s.id), cut(s.n, 120), "", ""); }));
+  if (!boxOff("podcasts")) add("pod", "Podcasts", podF().filter(function (s) { return hit((s.n || "") + " " + (s.a || "")); }).map(function (s) { return sRow("podshow", String(s.id), cut(s.n, 120), s.a || "", "show"); })
+    .concat(podAll().filter(function (e) { return hit(e.t); }).map(function (e) { return sRow("podplay", e.id, cut(e.t, 140), (podShow(e.s) || {}).n || "", ago(e.ts)); })));
   if (!boxOff("youtube")) add("yt", "YouTube", (YTV || []).filter(function (v) { return shown("y:" + v.n) && hit(v.t + " " + v.n); }).map(function (v) { return sRow("open", "v:" + v.id, cut(v.t, 140), v.n, ago(v.ts)); }));
   if (!boxOff("twitch")) add("tw", "Twitch", (TWC ? TW || [] : []).filter(function (x) { return hit((x.name || "") + " " + x.id + " " + (x.sub || "") + " " + (x.title || "")); }).map(function (x) { return sRow("open", "t:" + x.id, cut(x.name || x.id, 60), x.sub || "", (+x.v || 0).toLocaleString("en-GB") + " watching"); }));
   add("notes", "Notes and to-dos", (P.notes || []).filter(function (n) { return hit(n.t); }).map(function (n) { return sRow("opennotes", "", cut(n.t, 160), n.todo ? (n.done ? "to-do, done" : "to-do") : "note", ""); }));
@@ -2923,6 +3415,7 @@ function edEnd(keep) {
   if (keep || edState() !== ED.base) persist();
   render(); renderHidden();
   if (typeof renderTvSet === "function") renderTvSet();
+  if (typeof renderPodSet === "function") renderPodSet();
   if (typeof renderEmbSet === "function") renderEmbSet();
 }
 // Edit on and off, from the cogwheel menu and the E key
@@ -3173,11 +3666,14 @@ function renderHidden() {
   }).join("");
 }
 // ---- Whole boxes can be switched off (Edit mode: Hide; Settings > Layout brings them back) ----
-var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports", tv: "TV shows" };
-function boxOff(id) { if (isEmb(id)) return !embOn(id); if (id === "tv") return !(P.tv && P.tv.on); var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
+var BOX_NAMES = { weather: "Weather", mail: "Mail", live: "Radio", menu: "Menu", news: "News", telegram: "Telegram", twitch: "Twitch", youtube: "YouTube", stocks: "Stocks", reddit: "Reddit", sports: "Sports", tv: "TV shows", podcasts: "Podcasts" };
+function boxOff(id) { if (isEmb(id)) return !embOn(id); if (id === "tv") return !(P.tv && P.tv.on); if (id === "podcasts") return !(P.pod && P.pod.on); var L = P.layout; return id !== "menu" && !!(L && L.off && L.off[id]); }
 function setBoxOff(id, off) {
   if (id === "tv") { tvp().on = !off; if (!off && !LAY().fs.tv) LAY().fs.tv = 0.9;   // the same starting text size as the other list boxes
     persist(); render(); renderTvSet(); if (!off) fetchTv(true); return; }
+  if (id === "podcasts") { podp().on = !off; if (!off && !LAY().fs.podcasts) LAY().fs.podcasts = 0.9;
+    if (off && P.pod.mode === "pod" && !podCur()) P.pod.mode = "radio";
+    persist(); render(); renderPodSet(); if (!off) fetchPod(true); return; }
   if (isEmb(id)) { P.emb = P.emb && typeof P.emb === "object" ? P.emb : {}; P.emb[id] = Object.assign({}, emb(id), { on: !off }); persist(); render(); renderEmbSet(); return; }
   var L = LAY();
   L.off = L.off || {};
@@ -4545,7 +5041,8 @@ document.addEventListener("click", function () { audio(); }, { once: true });
 // could be heard. Shown under Settings > Notifications, so a sound without a visible card can be traced.
 var SNDLOG = load("sp_sndlog", []);
 var SND_WHY = { news: "Big news: several of your sources reported the same story", words: "A headline or post contained one of your highlight words", stock: "A stock on your list moved more than your limit", live: "A streamer you starred went live",
-  cal: "A calendar reminder or a special day you asked to be reminded of", mail: "New email arrived", sport: "A team, fighter or player you starred: start, goal or result" };
+  cal: "A calendar reminder or a special day you asked to be reminded of", mail: "New email arrived", sport: "A team, fighter or player you starred: start, goal or result",
+  tv: "A new episode of a TV show you follow", pod: "A new episode of a podcast you follow" };
 function sndLog(title, why, heard) {
   SNDLOG.push({ ts: Date.now(), t: String(title || "").slice(0, 120), why: String(why || ""), snd: heard, bg: !!document.hidden });
   if (SNDLOG.length > 15) SNDLOG = SNDLOG.slice(-15);
@@ -5092,6 +5589,7 @@ function radioPlay() {
   var s = radioCur();
   if (!s) return;
   radTryStop();
+  if (PODST === "play" || PODST === "load") podPause();   // the radio and a podcast never play at the same time
   if (!RAD.a) {
     RAD.a = new Audio(); RAD.a.preload = "none";
     var set = function (st) { return function () { if (RAD.state && RAD.state !== st) { RAD.state = st; render(); } }; };
@@ -5109,17 +5607,23 @@ function radioStop() {
   if (RAD.a) { RAD.state = ""; RAD.a.pause(); RAD.a.removeAttribute("src"); RAD.a.load(); }   // dropping the address really ends the stream
   RAD.state = ""; render();
 }
+// the volume button and its slider: one volume for the radio and for podcasts
+function radVolHtml() {
+  var v = radioVol();
+  return '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
+    (MENU_OPEN === "vol" ? '<div class="menu volpop"><input type="range" id="radVol" min="0" max="100" step="1" value="' + v + '" aria-label="Volume"><span id="radVolN">' + v + "</span></div>" : "") + "</div>";
+}
 function radioHtml() {
-  var list = radioIds(), cur = radioCur(), RI = 'viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"', v = radioVol();
-  if (!list.length) return '<div class="mrow radio"><span class="mut">No stations chosen. Pick some in Settings, Radio.</span></div>';
+  if (podMode() === "pod") return podRadioHtml();   // the box is playing podcasts (its first button switches)
+  var list = radioIds(), cur = radioCur(), RI = 'viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"';
+  if (!list.length) return '<div class="mrow radio">' + podSwitch() + '<span class="mut">No stations chosen. Pick some in Settings, Radio.</span></div>';
   var st = RAD.state, tip = st === "play" ? "Playing " + cur[1] : st === "load" ? "Connecting…" : st === "err" ? "Could not play this station right now" : "Play";
-  return '<div class="mrow radio">' +
+  return '<div class="mrow radio">' + podSwitch() +
     // a plain list, in the same genre order as the settings (the browser draws group headings too heavily to use them here)
     '<select id="radSel" aria-label="Radio station" title="' + esc(cur[1] + " · " + cur[2] + " · " + cur[4]) + '">' + list.map(function (r) { return '<option value="' + r[0] + '"' + (r[0] === cur[0] ? " selected" : "") + ">" + esc(r[1]) + "</option>"; }).join("") + "</select>" +
     '<button data-a="radplay" class="ib' + (st === "play" ? " on" : st === "load" ? " on busy" : st === "err" ? " bad" : "") + '" aria-label="Play" title="' + tip + '"><svg ' + RI + '><path d="M8 5.500v13l10.500-6.500z"/></svg></button>' +
     '<button data-a="radstop" class="ib" aria-label="Stop" title="Stop"><svg ' + RI + '><rect x="6.500" y="6.500" width="11" height="11" rx="1.500"/></svg></button>' +
-    '<div class="dd"><button data-a="radvol" class="ib" aria-label="Volume" title="Volume ' + v + '%" aria-haspopup="true" aria-expanded="' + (MENU_OPEN === "vol") + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/>' + (v ? '<path d="M15.500 9a4 4 0 0 1 0 6"/>' + (v > 50 ? '<path d="M18 6.500a7.500 7.500 0 0 1 0 11"/>' : "") : '<path d="M16 9.500l5 5M21 9.500l-5 5"/>') + "</svg></button>" +
-    (MENU_OPEN === "vol" ? '<div class="menu volpop"><input type="range" id="radVol" min="0" max="100" step="1" value="' + v + '" aria-label="Radio volume"><span id="radVolN">' + v + "</span></div>" : "") + "</div>" +
+    radVolHtml() +
     // the same window a click on the box opens, as a button of its own (the box is small to hit, on a phone above all)
     '<button data-a="radinfob" class="ib" aria-label="What is playing, and about this station" title="What is playing, and about this station"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.500h.01"/></svg></button></div>';
 }
@@ -5132,6 +5636,7 @@ document.addEventListener("input", function (e) {
   if (e.target.id !== "radVol") return;
   var v = +e.target.value;
   if (RAD.a) RAD.a.volume = v / 100;
+  if (PODA) PODA.volume = v / 100;
   if ($("radVolN")) $("radVolN").textContent = v;
   P.radio = P.radio || {}; P.radio.vol = v; debounced("radVol", function () { persist(); });
 });
@@ -5263,6 +5768,7 @@ function radStInfo(st) {
   }).catch(function () { return {}; });
 }
 function openRadioInfo() {
+  if (podMode() === "pod") { openPodPlayer(); return; }   // while the box plays podcasts, it opens the podcast player
   openModal(RAD_T, radioInfoHtml());
   var st0 = radioCur();
   if (st0) radStInfo(st0).then(function (v) { var now = radioCur(); if (now && now[0] === st0[0] && !$("modal").hidden && $("mTitle").textContent === RAD_T && $("rnpSt")) $("rnpSt").innerHTML = radStHtml(st0, v); });
@@ -5284,7 +5790,7 @@ function radioRefresh() {
 // hover card: small cover, song, artist, album
 function showRadioPeek(el) {
   var st = radioCur();
-  if (!st || EDIT || !USER) return;
+  if (!st || EDIT || !USER || podMode() === "pod") return;
   var draw = function (info) {
     var x = radSong();
     if (peekKey !== "radio" || !document.contains(el)) return;
@@ -5596,6 +6102,9 @@ document.addEventListener("click", function (e) {
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
   if (a === "sumshow" || a === "sumpick" || a === "summv") { sumAct(a, k); return; }
   if (/^tv(open|filt|fav|del)$/.test(a)) { tvAct(a, k); return; }
+  if (a === "sxopen") { $("panel").hidden = true; openSxSet(); return; }
+  if (a === "sxint" || a === "sxgo") { sxAct(a, k); return; }
+  if (/^pod/.test(a)) { podAct(a, k); return; }
   if (/^rad(go|add|addurl|try|del|tick)$/.test(a)) { radAct(a, k); return; }
   if (a === "mkopen" || a === "mkrow") { mkAct(a, k); return; }
   if (a === "bmimpgo") { bmImpGo(); return; }
@@ -5624,7 +6133,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); return; }
   if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
@@ -5927,6 +6436,7 @@ function renderAccount() {
   // the introduction, the links to the plain pages and the long title are for visitors; signed in, the page is just yours
   $("intro").hidden = !!USER; $("ftLinks").hidden = !!USER;
   document.title = USER ? "OmniTree" : TITLE0;
+  tabTitle();
   buildSetNav();
 }
 function onUser(u) {
@@ -6088,7 +6598,7 @@ var GS_CODE = '// Paste this whole file into your Apps Script project (replace w
 function openHelp() {
   var toc = [
     ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
-    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"],
+    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"], ["pod", "Podcasts"],
     ["timers", "Timers, countdowns &amp; stopwatch"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
     ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["tv", "TV shows"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
   ];
@@ -6097,7 +6607,7 @@ function openHelp() {
 
   html += '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide walks you through the boxes you want; you can run it again from <b>Settings &rarr; Layout &amp; boxes</b>. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
+  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
 
   html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Date &amp; time</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
@@ -6176,7 +6686,7 @@ function openHelp() {
 
   html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list, press ▶ to play and ■ to stop; the speaker button opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. A station that is already in the list, also when the catalogue has it under another address, is not added a second time: it is ticked instead. The song that is playing shows for your own stations too, whenever the station sends it along with the music (most do; some only send their own name or nothing). A red play button means that station could not be reached just now. <b>What is playing:</b> press the ⓘ button after the volume button (or click the box itself; hovering it shows the song, artist and album cover) for the song with album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Under them is a short note about the station: its genre, language and country, its sound quality, a few of its own tags and a link to its website, as far as the public station catalogue knows them. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p>';
 
-  html += '<h3 id="help-timers">Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p>';
+  html += '<h3 id="help-pod">Podcasts</h3><p>A box for the podcasts you follow. It is off at first: switch it on under <b>Settings &rarr; Podcasts</b> (or Layout &amp; boxes).</p><p><b>Find shows:</b> choose <b>Popular</b> in the list at the top of the box for the most listened shows of a country, by topic (choose both right under it), or press ⌕ and type a name, a topic or a person to search every podcast. Press <b>+</b> to follow a show; ✓ means you follow it. Click a show&rsquo;s name for its page in the box: its latest episodes (<b>Older episodes</b> loads 20 more), <b>+ Follow</b>, and ☆ for a notification when a new episode comes out. <b>&larr; Back</b> returns to the list. The box always keeps its size; a long list scrolls inside it.</p><p><b>Following</b> lists the newest episodes of your shows, newest first. New ones are marked, and the number at the top marks them all seen. Click an episode to play it. One you started shows how much is left and a thin line for how far you got; ✓ means played. <b>Shows</b> lists the shows you follow, with ☆ and ✕ (stop following).</p><p><b>Playing:</b> episodes play in the Radio box. Its first button switches between the radio and podcasts (that button is only there while you use podcasts). With podcasts the box shows the title and the time left, jump back, play and pause, jump forward and the volume button (one volume for the radio and podcasts). Click the title for the player: the cover, a bar to jump to any point, the jump buttons, the speed (0.8&times; to 2&times;), the volume, <b>Mark as played</b>, the notes of the episode and <b>Up next</b> (episodes you started, then new ones). The radio and a podcast never play at the same time. Where you stopped is saved with your account, so you can go on on another device. On a phone it keeps playing with the screen off and can be paused from the lock screen.</p><p><b>Settings &rarr; Podcasts:</b> the speed, how far the jump buttons go, whether played episodes stay in the list (dimmed) or leave it, notifications for ☆ shows or for every show you follow (switched on and off under Notifications), the country of the Popular list, and how the Radio box looks while it plays podcasts: the progress line, the time left, the jump buttons (in a narrow box they step aside by themselves; they are always in the player) and whether a long title is cut short or rolls slowly across. Shows and episodes come from Apple&rsquo;s public podcast directory, read straight from your browser; a few shows that are only on one app are not in it.</p>Timers, countdowns &amp; stopwatch</h3><p>Click the clock icon and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p>';
 
   html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or use its shortcut). There are two tabs. <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text to edit it in place, and hover for pin ★ and delete ✕. The number on the icon is how many to-dos are open.</p>' +
     '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
@@ -6200,14 +6710,14 @@ function openHelp() {
     '<p><b>Taking your events elsewhere:</b> in the same place in Settings, <b>Download my events as an .ics file</b> saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</p><p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
     '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
-  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
+  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, a new episode of a podcast you follow, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
     '<p><b>Good to know:</b> a card goes away by itself after 20 seconds, counted only while you are looking at the page, so one that arrived while the tab was in the background is still there when you come back. The ping can only play once you have clicked somewhere on the page; that is a rule of the browser. Heard something and saw nothing? <b>Settings &rarr; Notifications</b> ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.</p>' +
     '<p><b>On all your devices:</b> pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing its history are saved to your account. Do it on the computer and the phone shows the same within a minute, and nothing is announced twice.</p>' +
     '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
     '<p><b>Summary:</b> one small window with what happened lately. Open it any time from the cogwheel menu or with <code>b</code>. Everything about it is set under <b>Settings → Summary</b>:</p><ul>' +
     '<li><b>When it opens by itself:</b> never, on the first visit of the day, when you come back after being away, or both. You choose how long &ldquo;away&rdquo; is (30 minutes to 8 hours); away means the page was closed or its tab was in the background for that long.</li>' +
     '<li><b>How far back it looks:</b> the last 6, 12 or 24 hours, or the last 2 days.</li>' +
-    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, TV episodes of your shows, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
+    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, TV episodes of your shows, new podcast episodes, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
     '<li><b>Narrowing a part down:</b> press <b>Choose…</b> on a part to pick which news sources, Telegram channels, subreddits or sports it uses, or to keep it to your ★ channels and ★ teams only. New sources you add later are included by themselves.</li>' +
     '<li><b>How it looks:</b> a list, cards side by side, or a compact version, and how many items each part shows at most (3 to 15).</li></ul>' +
     '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
@@ -6234,7 +6744,7 @@ function acctHtml() {
 }
 
 // ---- Notifications: small cards in the bottom-right corner ----
-function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sport: true, tv: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
+function NTF() { return Object.assign({ news: true, words: true, stock: true, live: true, cal: true, mail: true, sport: true, tv: true, pod: true, sound: true, desktop: false, email: false, srcN: 2, pct: 3, day: 5 }, P.ntf || {}); }
 var NOTIFIED = load("sp_notified", {});
 // true the first time a key is seen, so the same thing is never announced twice (also after a reload)
 function once(key) {
@@ -6247,7 +6757,7 @@ function once(key) {
   save("sp_notified", NOTIFIED);
   return true;
 }
-var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉", sport: "⚑", tv: "▣" };
+var TOASTS = {}, toastN = 0, TICON = { news: "●", words: "★", stock: "↕", live: "▶", cal: "◷", mail: "✉", sport: "⚑", tv: "▣", pod: "♪" };
 // What clicking a notification does. Kept as plain data (not a function) so the history still works after a reload.
 function runAct(act) {
   if (!act) return;
@@ -6260,6 +6770,7 @@ function runAct(act) {
   else if (a === "mail") { if (MAIL[+k] && !MAIL[+k].error) openMail(+k); }
   else if (a === "sport") openSport(k);
   else if (a === "tv") openTv(k);
+  else if (a === "podplay") podPlay(k);
   else if (a === "settings") $("panel").hidden = false;
 }
 // History of the last 30 notifications (on this device). "seen" = you clicked or dismissed it, or opened the bell.
@@ -6822,6 +7333,7 @@ var SUM_PARTS = [
   ["live", "Live now on Twitch", "Channels you follow that are live right now", 1],
   ["waslive", "Streamers you missed", "Your ★ streamers who were live while you were away and are offline now", 1],
   ["tv", "TV episodes", "Episodes of your shows that just aired or air within a day", 1],
+  ["pod", "Podcasts", "New episodes of the podcasts you follow", 1],
   ["spres", "Sports results", "Games, fights and races that finished", 1],
   ["spnext", "Sports coming up", "What is on now and in the next 24 hours", 1]
 ];
@@ -6891,6 +7403,9 @@ function sumParts(S) {
     if (c.prev && c.prev.ts > cut) tvr.push({ id: s.id, n: c.n || s.n, ep: c.prev, past: 1 });
     if (c.next && c.next.ts < now + 86400000) tvr.push({ id: s.id, n: c.n || s.n, ep: c.next, past: c.next.ts <= now ? 1 : 0 });
   });
+  out.pod = boxOff("podcasts") ? "" : podAll().filter(function (e) { return e.ts > cut && !podDone(e.id); }).slice(0, N).map(function (e) {
+    return '<div class="row"><span><button class="lnk" data-a="podplay" data-k="' + esc(e.id) + '">' + esc(e.t) + "</button> <small>" + esc((podShow(e.s) || {}).n || "") + '</small></span><span class="r mut">' + ago(e.ts) + "</span></div>";
+  }).join("");
   out.tv = tvr.sort(function (a, b) { return a.ep.ts - b.ep.ts; }).slice(0, N).map(function (r) {
     return '<div class="row"><span><button class="lnk" data-a="tvopen" data-k="' + r.id + '"><b>' + esc(r.n) + "</b>" + (tvCode(r.ep) ? " <small>" + esc(tvCode(r.ep)) + "</small>" : "") + '</button></span><span class="r mut">' + (r.past ? "aired " + ago(r.ep.ts) + " ago" : tvDayName(r.ep.ts) + " " + tvTime(r.ep.ts)) + "</span></div>";
   }).join("");
@@ -8065,6 +8580,178 @@ function openFighter(aid) {
   }).catch(function () { openModal("Fighter", '<p class="mut">No details available for this fighter.</p>'); });
 }
 
+// ---- Starter setups: the country you confirm and what you are into fill the page with good sources at once, instead of
+// starting empty. Used by the setup guide, and by Settings > Layout & boxes > Add interests later. Every source here was
+// checked by hand: the news feeds answer and post every day, the subreddits are large and active, and the Telegram
+// channels are the official channels of news outlets (open to read without an account, posting every day). The podcasts
+// are not a fixed list: they are the shows at the top of Apple's chart for your country and topic at that moment. ----
+// [code, name, [news name, feed, website], subreddit, football league, Apple / TV country]
+var SX_C = [
+  ["EE", "Estonia", [["ERR", "https://www.err.ee/rss", "err.ee"], ["Postimees", "https://www.postimees.ee/rss", "postimees.ee"]], "Eesti", "", "ee"],
+  ["SE", "Sweden", [["SVT Nyheter", "https://www.svt.se/rss.xml", "svt.se"], ["Dagens Nyheter", "https://www.dn.se/rss/", "dn.se"]], "sweden", "soccer/swe.1", "se"],
+  ["FI", "Finland", [["Yle", "https://yle.fi/rss/uutiset/paauutiset", "yle.fi"], ["Helsingin Sanomat", "https://www.hs.fi/rss/tuoreimmat.xml", "hs.fi"]], "Finland", "soccer/fin.1", "fi"],
+  ["NO", "Norway", [["NRK", "https://www.nrk.no/toppsaker.rss", "nrk.no"], ["VG", "https://www.vg.no/rss/feed/", "vg.no"]], "Norway", "soccer/nor.1", "no"],
+  ["DK", "Denmark", [["DR", "https://www.dr.dk/nyheder/service/feeds/senestenyt", "dr.dk"], ["Politiken", "https://politiken.dk/rss/senestenyt.rss", "politiken.dk"]], "Denmark", "soccer/den.1", "dk"],
+  ["LV", "Latvia", [["LSM", "https://www.lsm.lv/rss/", "lsm.lv"], ["TVNET", "https://www.tvnet.lv/rss", "tvnet.lv"]], "latvia", "", "lv"],
+  ["LT", "Lithuania", [["LRT", "https://www.lrt.lt/?rss", "lrt.lt"], ["15min", "https://www.15min.lt/rss", "15min.lt"]], "lithuania", "", "lt"],
+  ["PL", "Poland", [["TVN24", "https://tvn24.pl/najnowsze.xml", "tvn24.pl"], ["RMF24", "https://www.rmf24.pl/feed", "rmf24.pl"]], "Polska", "", "pl"],
+  ["DE", "Germany", [["Tagesschau", "https://www.tagesschau.de/index~rss2.xml", "tagesschau.de"], ["Der Spiegel", "https://www.spiegel.de/schlagzeilen/index.rss", "spiegel.de"]], "de", "soccer/ger.1", "de"],
+  ["NL", "Netherlands", [["NOS", "https://feeds.nos.nl/nosnieuwsalgemeen", "nos.nl"], ["NU.nl", "https://www.nu.nl/rss/Algemeen", "nu.nl"]], "thenetherlands", "soccer/ned.1", "nl"],
+  ["FR", "France", [["Le Monde", "https://www.lemonde.fr/rss/une.xml", "lemonde.fr"], ["franceinfo", "https://www.francetvinfo.fr/titres.rss", "francetvinfo.fr"]], "france", "soccer/fra.1", "fr"],
+  ["ES", "Spain", [["El País", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada", "elpais.com"], ["El Mundo", "https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml", "elmundo.es"]], "spain", "soccer/esp.1", "es"],
+  ["IT", "Italy", [["ANSA", "https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml", "ansa.it"], ["la Repubblica", "https://www.repubblica.it/rss/homepage/rss2.0.xml", "repubblica.it"]], "italy", "soccer/ita.1", "it"],
+  ["UK", "United Kingdom", [["BBC News", "https://feeds.bbci.co.uk/news/rss.xml", "bbc.com"], ["The Guardian", "https://www.theguardian.com/uk/rss", "theguardian.com"]], "unitedkingdom", "soccer/eng.1", "gb"],
+  ["US", "United States", [["NPR", "https://feeds.npr.org/1001/rss.xml", "npr.org"], ["The New York Times", "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "nytimes.com"]], "news", "soccer/usa.1", "us"],
+  ["", "Another country", [], "", "", "us"]
+];
+// a country's own Telegram channel, where its big news outlet has an active one
+var SX_TG = { UK: ["guardian"], ES: ["elpais"] };
+// what each interest adds: [id, name, boxes, news [name, feed, website], subreddits, Telegram channels, sports leagues, Apple podcast topic]
+var SX_I = [
+  ["news", "News", ["news", "telegram", "reddit"], [["Reuters", "", "reuters.com"], ["AP", "", "apnews.com"], ["Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml", "aljazeera.com"]], ["worldnews"], ["AJENews_Official", "FRANCE24_en"], [], "1489"],
+  ["football", "Football", ["sports", "reddit"], [["BBC Sport Football", "https://feeds.bbci.co.uk/sport/football/rss.xml", "bbc.com/sport/football"]], ["soccer"], ["FabrizioRomano"], ["soccer/uefa.champions", "soccer/eng.1", "soccer/esp.1", "soccer/ita.1", "soccer/ger.1", "soccer/fra.1", "soccer/uefa.europa"], "1545"],
+  ["sports", "Other sports", ["sports"], [], ["sports", "formula1"], [], ["basketball/nba", "hockey/nhl", "racing/f1", "tennis/atp", "mma/ufc"], "1545"],
+  ["invest", "Investing", ["stocks", "reddit"], [["CNBC Markets", "https://www.cnbc.com/id/10000664/device/rss/rss.html", "cnbc.com"]], ["investing", "stocks"], ["Cointelegraph"], [], "1321"],
+  ["gaming", "Gaming", ["twitch", "youtube", "reddit"], [["PC Gamer", "https://www.pcgamer.com/rss/", "pcgamer.com"]], ["gaming", "Games", "pcgaming"], [], ["x/cs2", "x/lol"], "1509"],
+  ["tech", "Tech", ["news", "reddit"], [["The Verge", "https://www.theverge.com/rss/index.xml", "theverge.com"], ["Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "arstechnica.com"]], ["technology", "gadgets"], [], [], "1318"],
+  ["music", "Music", ["live", "reddit"], [], ["Music", "listentothis"], [], [], "1310"],
+  ["pods", "Podcasts", ["podcasts", "live"], [], [], [], [], ""]
+];
+var SX_EXTRA = { US: ["football/nfl", "baseball/mlb"], SE: ["x/shl"] };   // big leagues of a country that are not football
+function sxCountry(code) { return SX_C.filter(function (c) { return c[0] === code; })[0] || SX_C[SX_C.length - 1]; }
+// the country, guessed from the time zone your device is set to (and its language) until you have confirmed one
+function sxGuess() {
+  var z = BTZ || "", m = {
+    "Europe/Tallinn": "EE", "Europe/Stockholm": "SE", "Europe/Helsinki": "FI", "Europe/Oslo": "NO", "Europe/Copenhagen": "DK", "Europe/Riga": "LV", "Europe/Vilnius": "LT", "Europe/Warsaw": "PL",
+    "Europe/Berlin": "DE", "Europe/Amsterdam": "NL", "Europe/Paris": "FR", "Europe/Madrid": "ES", "Europe/Rome": "IT", "Europe/London": "UK"
+  };
+  if (m[z]) return m[z];
+  if (/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Indiana|Kentucky|Juneau|Adak)|^Pacific\/Honolulu/.test(z)) return "US";
+  return "";
+}
+function sxCc() { var c = P.country; return typeof c === "string" && SX_C.some(function (x) { return x[0] === c && c; }) ? c : sxGuess(); }
+function stGuessCc() { return sxCountry(sxCc())[5]; }
+// the boxes the chosen interests need (the setup guide ticks them; you can untick any)
+function sxBoxes(ints) {
+  var b = { weather: 1 };
+  SX_I.forEach(function (i) { if (ints[i[0]]) i[2].forEach(function (x) { b[x] = 1; }); });
+  return b;
+}
+// What would be added for this country and these interests, limited to the boxes that are on.
+function sxPlan(code, ints, on) {
+  var C = sxCountry(code), plan = { news: [], tg: [], rd: [], lg: [], pods: [], fav: "" };
+  var addN = function (n) { if (!plan.news.some(function (x) { return x[0] === n[0]; })) plan.news.push(n); };
+  var addR = function (r) { if (r && plan.rd.indexOf(r) < 0) plan.rd.push(r); };
+  var addT = function (t) { if (t && plan.tg.indexOf(t) < 0) plan.tg.push(t); };
+  var addL = function (l) { if (l && plan.lg.indexOf(l) < 0) plan.lg.push(l); };
+  if (ints.news) { C[2].forEach(addN); addR(C[3]); (SX_TG[C[0]] || []).forEach(addT); }
+  SX_I.forEach(function (i) {
+    if (!ints[i[0]]) return;
+    i[3].forEach(addN); i[4].forEach(addR); i[5].forEach(addT); i[6].forEach(addL);
+    if (i[7]) plan.pods.push(i[7]);
+  });
+  if (ints.football) { addL(C[4]); plan.fav = "football"; }
+  if (ints.sports) (SX_EXTRA[C[0]] || []).forEach(addL);
+  if (!on.news) plan.news = [];
+  if (!on.telegram) plan.tg = [];
+  if (!on.reddit) plan.rd = [];
+  if (!on.sports) plan.lg = [];
+  if (!on.podcasts) plan.pods = [];
+  return plan;
+}
+// Put the plan in place. A list that still holds the sample sources gets exactly the plan; a list you made yourself keeps
+// everything it has and gets the new sources added, never more than each box takes. keep: true = always add.
+function sxApply(plan, code, keep) {
+  var C = sxCountry(code), added = { news: 0, tg: 0, rd: 0, lg: 0 }, own = function (k) { return keep === true || !!P[k]; };
+  P.country = C[0] || "";
+  if (plan.news.length) {
+    var mine = own("news") ? newsSrc().slice() : [];
+    plan.news.forEach(function (n) {
+      if (mine.length >= 15 || mine.some(function (x) { return x.name.toLowerCase() === n[0].toLowerCase(); })) return;
+      mine.push({ name: n[0], urls: (n[1] ? [n[1]] : []).concat(siteUrls(n[2])) }); added.news++;
+    });
+    P.news = mine; NEWS = []; TGP = []; NEWSV++;
+  }
+  if (plan.tg.length) {
+    var tg = own("tg") ? tgSrc().slice() : [];
+    plan.tg.forEach(function (t) { if (tg.length < 8 && !tg.some(function (x) { return x.toLowerCase() === t.toLowerCase(); })) { tg.push(t); added.tg++; } });
+    P.tg = tg; TGX = []; TGEND = {};
+  }
+  if (plan.rd.length) {
+    var rd = own("rd") ? rdSrc().slice() : [];
+    plan.rd.forEach(function (r) { if (rd.length < 12 && !rd.some(function (x) { return x.toLowerCase() === r.toLowerCase(); })) { rd.push(r); added.rd++; } });
+    P.rd = rd; RD = [];
+  }
+  if (plan.lg.length) {
+    var lg = P.spLeagues ? P.spLeagues.slice() : spLeagues().map(function (l) { return l.id; });
+    plan.lg.forEach(function (l) { if (lg.indexOf(l) < 0 && SP_CATALOG.some(function (x) { return x.id === l; })) { lg.push(l); added.lg++; } });
+    P.spLeagues = lg;
+    if (plan.fav && !P.spFavSport) P.spFavSport = plan.fav;
+  }
+  var p = podp();
+  p.cc = C[5];
+  if (C[5] && TV_CC.some(function (o) { return o[0] === C[5].toUpperCase(); })) tvp().cc = C[5].toUpperCase();
+  persist();
+  if (plan.pods.length) sxPods(plan.pods, C[5]);
+  return added;
+}
+// the podcasts: the show at the top of the chart for each topic you chose, and the top two overall, at most five
+function sxPods(genres, cc) {
+  var want = [""].concat(genres.filter(Boolean)), picks = [], done = 0;
+  want.forEach(function (g) {
+    podGet(cc + "/rss/toppodcasts/limit=5" + (g ? "/genre=" + g : "") + "/json").then(function (j) {
+      var list = ((j || {}).feed || {}).entry || [];
+      (Array.isArray(list) ? list : [list]).slice(0, g ? 1 : 2).forEach(function (x) {
+        var im = x["im:image"] || [];
+        picks.push({ id: String(((x.id || {}).attributes || {})["im:id"] || ""), n: String((x["im:name"] || {}).label || "").slice(0, 100), a: String((x["im:artist"] || {}).label || "").slice(0, 80), img: safeUrl(String((im[im.length - 1] || {}).label || "")) });
+      });
+    }).catch(function () {}).then(function () {
+      if (++done < want.length) return;
+      var p = podp(), n = 0;
+      picks.forEach(function (s) { if (n < 5 && s.id && s.n && !podHas(s.id) && p.f.length < 40) { p.f.push({ id: s.id, n: s.n, a: s.a, img: s.img, since: Date.now() - 7 * 86400000 }); n++; } });
+      persist(); render(); renderPodSet(); fetchPod(true);
+    });
+  });
+}
+// the country question and the interests, as one block (the setup guide and Settings use the same)
+function sxPickHtml(code, ints, guessed) {
+  return '<div class="sxq"><label class="sxc">' + (guessed ? "It looks like you are in" : "Your country") + ' <select id="sxCountry">' + SX_C.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === code ? " selected" : "") + ">" + c[1] + "</option>"; }).join("") + "</select></label>" +
+    (guessed ? '<p class="mut sn">A guess from the time zone your device is set to. Is that right? If not, choose your country. It decides which national news, football league and popular podcasts you start with.</p>' : "") + "</div>" +
+    "<p>What are you into? Choose as many as you like.</p>" +
+    '<div class="chips sxints">' + SX_I.map(function (i) { return '<button class="' + (ints[i[0]] ? "on" : "") + '" data-a="sxint" data-k="' + i[0] + '" aria-pressed="' + !!ints[i[0]] + '">' + (ints[i[0]] ? "✓ " : "") + i[1] + "</button>"; }).join("") + "</div>";
+}
+// Settings > Layout & boxes > Add interests: the same choice, for a page that is already set up. Nothing is removed.
+var SXSET = null;
+function openSxSet() {
+  SXSET = { code: sxCc(), ints: {} };
+  sxSetRender();
+}
+function sxSetRender(msg) {
+  var any = SX_I.some(function (i) { return SXSET.ints[i[0]]; });
+  openModal("Add interests", '<div class="wiz">' + sxPickHtml(SXSET.code, SXSET.ints, !P.country) +
+    '<p class="mut sn">The boxes these need are switched on, and their sources are added to the ones you have. Nothing you have is removed.</p>' +
+    '<p class="tools"><button class="pri" data-a="sxgo"' + (any ? "" : " disabled") + ">Add</button></p>" + (msg ? '<p class="sn" role="status">' + msg + "</p>" : "") + "</div>");
+}
+function sxAct(a, k) {
+  var st = WIZ && $("wzPage") && $("wzPage").dataset.p === "start" ? WIZ : SXSET;
+  if (!st) return;
+  if (a === "sxint") { st.ints = st.ints || {}; st.ints[k] = !st.ints[k]; if (st === WIZ) wizRender(); else sxSetRender(); return; }
+  if (a === "sxgo" && st === SXSET) {
+    var on = sxBoxes(SXSET.ints), L = LAY(); L.off = L.off || {};
+    Object.keys(on).forEach(function (b) { if (b === "tv") return; if (b === "podcasts") podp().on = true; else delete L.off[b]; });
+    var cur = {}; ALL_IDS.forEach(function (b) { cur[b] = !boxOff(b); });
+    var r = sxApply(sxPlan(SXSET.code, SXSET.ints, cur), SXSET.code, true);
+    srcChanged(); rdChanged(); render(); refreshAll(true);
+    var parts = [r.news ? r.news + " news sources" : "", r.tg ? r.tg + " Telegram channels" : "", r.rd ? r.rd + " subreddits" : "", r.lg ? r.lg + " sports leagues" : ""].filter(Boolean);
+    SXSET.ints = {};
+    sxSetRender((parts.length ? "Added " + parts.join(", ") + "." : "Done. You already had these sources.") + (cur.podcasts ? " Popular podcasts that fit are being followed in the Podcasts box." : ""));
+  }
+}
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "sxCountry") return;
+  if (WIZ && $("wzPage") && $("wzPage").dataset.p === "start") WIZ.code = e.target.value; else if (SXSET) SXSET.code = e.target.value;
+});
+
 // ---- First-time setup guide: pick your boxes, then one page per box that needs setting up ----
 var WIZ = null, WIZMSG = "";
 var WIZ_BOXES = [
@@ -8078,7 +8765,8 @@ var WIZ_BOXES = [
   ["sports", "Sports", "Live football, NBA and UFC scores and fixtures."],
   ["mail", "Mail", "Unread counts for up to two Gmail inboxes."],
   ["live", "Radio", "Internet radio: pick a station and press play."],
-  ["tv", "TV shows", "New episodes of the shows you follow, and what is on today."]
+  ["tv", "TV shows", "New episodes of the shows you follow, and what is on today."],
+  ["podcasts", "Podcasts", "New episodes of the podcasts you follow; they play in the Radio box."]
 ];
 var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "tv", "twitch", "youtube", "mail"];
 var WIZCITY = [];
@@ -8094,13 +8782,17 @@ function wizCityGo() {
     }).join("") : '<p class="mut">No city found.</p>';
   }).catch(function () { if ($("wzCityRes")) $("wzCityRes").innerHTML = '<p class="mut">Search failed. Try again.</p>'; });
 }
-function wizPages() { return ["pick", "city"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
+function wizPages() { return ["start", "pick", "city"].concat(WIZ_SETUP.filter(function (id) { return WIZ.sel[id]; }), ["done"]); }
 function openWizard(resume) {
   WIZMSG = "";
-  if (resume && resume.sel) WIZ = { step: resume.step || 0, sel: resume.sel };
-  else { WIZ = { step: 0, sel: {} }; WIZ_BOXES.forEach(function (b) { WIZ.sel[b[0]] = !boxOff(b[0]); }); }
+  if (resume && resume.sel) WIZ = { step: resume.step || 0, sel: resume.sel, code: resume.code != null ? resume.code : sxCc(), ints: resume.ints || {}, snap: resume.snap || null };
+  else { WIZ = { step: 0, sel: {}, code: sxCc(), ints: {}, snap: null }; WIZ_BOXES.forEach(function (b) { WIZ.sel[b[0]] = !boxOff(b[0]); }); }
   wizRender();
 }
+// the sources as they were before the guide added any, so going back and choosing other interests starts from them again
+var WIZ_SNAP = ["news", "tg", "rd", "spLeagues", "spFavSport"];
+function wizSnapTake() { var s = {}; WIZ_SNAP.forEach(function (k) { if (P[k] !== undefined) s[k] = JSON.parse(JSON.stringify(P[k])); }); s.podf = P.pod && P.pod.f ? JSON.parse(JSON.stringify(P.pod.f)) : []; return s; }
+function wizSnapBack(s) { WIZ_SNAP.forEach(function (k) { if (s[k] === undefined) delete P[k]; else P[k] = JSON.parse(JSON.stringify(s[k])); }); podp().f = JSON.parse(JSON.stringify(s.podf || [])); }
 // Small drawn pictures of the screens you will see (simplified, so they stay correct when the real sites restyle)
 function mock(title, body) { return '<div class="mock"><div class="mockbar"><i></i><i></i><i></i><span>' + title + '</span></div><div class="mockbody">' + body + "</div></div>"; }
 function mkb(t, hl) { return '<span class="mkb' + (hl ? " hl" : "") + '">' + t + "</span>"; }
@@ -8108,7 +8800,9 @@ function mkl(w) { return '<span class="mkl" style="width:' + w + '%"></span>'; }
 function wizChips(list) { return list.length ? '<div class="chips wizchips">' + list.slice(0, 14).map(function (x) { return "<span>" + esc(x) + "</span>"; }).join("") + (list.length > 14 ? "<span>+" + (list.length - 14) + " more</span>" : "") + "</div>" : ""; }
 function wizAddRow(kind, ph, btn) { return '<div class="add"><input type="text" id="wzIn" placeholder="' + ph + '" autocomplete="off"><button class="pri" data-a="wizadd" data-k="' + kind + '">' + (btn || "Add") + '</button></div><div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + "</div>"; }
 function wizPage(id) {
-  if (id === "pick") return '<p>Choose what you want on your page. Nothing is final: you can switch boxes on and off later in <b>Settings → Layout &amp; boxes</b>.</p><div class="wizgrid">' + WIZ_BOXES.map(function (b) {
+  if (id === "start") return "<p>Two quick questions, so your page starts with things you like instead of empty boxes. You can change everything later.</p>" + sxPickHtml(WIZ.code, WIZ.ints, !P.country) +
+    '<p class="mut sn">Nothing that fits? Press Continue anyway: you then pick the boxes and add your own sources on the next pages.</p>';
+  if (id === "pick") return "<p>" + (SX_I.some(function (i) { return WIZ.ints[i[0]]; }) ? "These boxes fit what you chose. Untick any you do not want, or tick more." : "Choose what you want on your page.") + ' Nothing is final: you can switch boxes on and off later in <b>Settings → Layout &amp; boxes</b>.</p><div class="wizgrid">' + WIZ_BOXES.map(function (b) {
     return '<button class="wizbox' + (WIZ.sel[b[0]] ? " on" : "") + '" data-a="wizpick" data-k="' + b[0] + '" role="checkbox" aria-checked="' + !!WIZ.sel[b[0]] + '"><span class="chk' + (WIZ.sel[b[0]] ? " on" : "") + '"></span><span><b>' + b[1] + "</b><small>" + b[2] + "</small></span></button>";
   }).join("") + "</div>";
   if (id === "city") {
@@ -8172,19 +8866,21 @@ function wizPage(id) {
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
     "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
+    "<li><b>Podcasts:</b> choose Popular in the Podcasts box, or search with ⌕, and press + to follow a show. Episodes play in the Radio box; its first button switches between radio and podcasts.</li>" +
+    "<li><b>More interests later:</b> Settings → Layout &amp; boxes → Add interests adds the boxes and sources for another interest, without removing anything.</li>" +
     "<li><b>Bring your things along:</b> the bookmarks of your browser (Settings → Bookmarks), a Google, Outlook or Apple calendar (Settings → Calendar) and a portfolio file from your broker (Settings → Stocks) can all be imported.</li>" +
     "<li><b>Summary:</b> a small window with what happened while you were away. Choose what is in it and when it opens in Settings → Summary.</li>" +
     "<li><b>Web page boxes:</b> up to three web pages of your choice can get a box of their own (Settings → Web page boxes).</li><li><b>Help:</b> press <code>?</code>, or use the link at the bottom of the page, for the full guide.</li></ul>";
 }
-var WIZ_TITLES = { pick: "Welcome to OmniTree", city: "Your city", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", tv: "TV shows", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
+var WIZ_TITLES = { start: "Welcome to OmniTree", pick: "Your boxes", city: "Your city", news: "News", telegram: "Telegram", reddit: "Reddit", stocks: "Stocks", tv: "TV shows", twitch: "Twitch", youtube: "YouTube", mail: "Mail (Gmail)", done: "All done" };
 function wizRender() {
   var pages = wizPages();
   WIZ.step = Math.max(0, Math.min(pages.length - 1, WIZ.step));
   var id = pages[WIZ.step], last = WIZ.step === pages.length - 1, keepScroll = $("wzPage") && $("wzPage").dataset.p === id ? document.querySelector("#modal .mbox").scrollTop : 0;
-  openModal(WIZ_TITLES[id] + (id !== "pick" && id !== "done" ? " · step " + WIZ.step + " of " + (pages.length - 2) : ""),
+  openModal(WIZ_TITLES[id] + (id !== "start" && id !== "done" ? " · step " + WIZ.step + " of " + (pages.length - 2) : ""),
     '<div class="wiz" id="wzPage" data-p="' + id + '">' + wizPage(id) + '</div><div class="wiznav"><button data-a="wizback"' + (WIZ.step ? "" : " disabled") + ">Back</button>" +
     '<span class="wizdots">' + pages.map(function (_, i) { return "<i" + (i === WIZ.step ? ' class="on"' : "") + "></i>"; }).join("") + "</span>" +
-    (last ? "" : '<button class="lnk2" data-a="wizskip">Skip the guide</button>') + '<button class="pri" data-a="wiznext">' + (last ? "Finish" : id === "pick" ? "Continue" : "Next") + "</button></div>");
+    (last ? "" : '<button class="lnk2" data-a="wizskip">Skip the guide</button>') + '<button class="pri" data-a="wiznext">' + (last ? "Finish" : id === "start" ? "Continue" : "Next") + "</button></div>");
   document.querySelector("#modal .mbox").scrollTop = keepScroll;
 }
 function wizAct(a, k) {
@@ -8194,11 +8890,25 @@ function wizAct(a, k) {
   if (a === "wizpick") WIZ.sel[k] = !WIZ.sel[k];
   else if (a === "wizback") { WIZ.step--; WIZMSG = ""; }
   else if (a === "wiznext" && WIZ.step < pages.length - 1) {
+    // the country is now confirmed; the interests tick the boxes they need on the next page
+    if (id === "start") {
+      P.country = WIZ.code || "";
+      var want = sxBoxes(WIZ.ints);
+      if (SX_I.some(function (i) { return WIZ.ints[i[0]]; })) WIZ_BOXES.forEach(function (b) { WIZ.sel[b[0]] = b[0] === "mail" ? WIZ.sel.mail : !!want[b[0]]; });
+      persist();
+    }
     if (id === "pick") {
       var L = LAY(); L.off = L.off || {};
       WIZ_BOXES.forEach(function (b) { if (WIZ.sel[b[0]]) delete L.off[b[0]]; else L.off[b[0]] = 1; });
       tvp().on = !!WIZ.sel.tv; delete L.off.tv;
+      podp().on = !!WIZ.sel.podcasts; delete L.off.podcasts;
+      // the sources for the interests, in the boxes you kept (going back and changing them starts from the old sources again)
+      if (WIZ.snap) wizSnapBack(WIZ.snap); else WIZ.snap = wizSnapTake();
+      var plan = sxPlan(WIZ.code, WIZ.ints, WIZ.sel);
+      sxApply(plan, WIZ.code);
       persist(); render();
+      if (plan.news.length || plan.tg.length) srcChanged();
+      if (plan.rd.length) rdChanged();
     }
     // pressing Next on the city page confirms the guessed city, so it stays even if the device's time zone changes later
     if (id === "city" && AUTOCITY && (!P.home || !P.loc)) {
@@ -8259,6 +8969,61 @@ function wizAct(a, k) {
   }
   wizRender();
 }
+
+// ---- Count in the tab title (Settings > Notifications): "(5) OmniTree" while new things wait, so you see it from other
+// tabs, and if you like a small dot on the tab's icon. P.tabc = { on, b: { mail, tg, news, rd, live, pod, bell }, dot }.
+// You choose which boxes count; the numbers are the same ones the boxes themselves show. ----
+var TAB_DEF = { mail: 1, tg: 1, news: 0, rd: 0, live: 1, pod: 1, bell: 1 }, TABDOT = null, TABICON = "";
+function tabc() { var t = P.tabc && typeof P.tabc === "object" ? P.tabc : {}; return { on: t.on !== false, b: Object.assign({}, TAB_DEF, t.b && typeof t.b === "object" ? t.b : {}), dot: !!t.dot }; }
+function tabCounts() {
+  return {
+    mail: [0, 1].reduce(function (s, i) { var c = P.mail && P.mail[i], m = MAIL[i]; return s + (c && c.url && m && !m.error ? +mailN(i).n || 0 : 0); }, 0),
+    tg: boxOff("telegram") ? 0 : +NEWPN.tg || 0,
+    news: boxOff("news") ? 0 : +NEWPN.news || 0,
+    rd: boxOff("reddit") ? 0 : +NEWPN.rd || 0,
+    live: boxOff("twitch") || !TWC ? 0 : (TW || []).filter(function (x) { return x.live && shown("t:" + x.id); }).length,
+    pod: podNewN(),
+    bell: missed()
+  };
+}
+function tabTitle() {
+  var t = tabc(), c = tabCounts(), n = 0, base = USER ? "OmniTree" : TITLE0;
+  if (t.on) Object.keys(c).forEach(function (k) { if (t.b[k]) n += c[k]; });
+  var want = (n ? "(" + (n > 99 ? "99+" : n) + ") " : "") + base;
+  if (document.title !== want) document.title = want;
+  var dot = t.on && t.dot && n > 0;
+  if (dot !== TABDOT) { TABDOT = dot; tabIcon(dot); }
+  if ($("tabPrev")) $("tabPrev").textContent = t.on ? "Your tab now: " + want : "The tab now: " + base;
+}
+// the site's own icon with a small dot in your accent color in its corner, drawn when it is needed
+function tabIcon(on) {
+  var link = document.querySelector('link[rel="icon"]');
+  if (!link) return;
+  if (!TABICON) TABICON = link.getAttribute("href");
+  if (!on) { link.setAttribute("href", TABICON); return; }
+  var img = new Image();
+  img.onload = function () {
+    if (!TABDOT) return;
+    var cv = document.createElement("canvas"), x;
+    cv.width = cv.height = 64; x = cv.getContext("2d");
+    x.drawImage(img, 0, 0, 64, 64);
+    x.beginPath(); x.arc(47, 17, 14, 0, Math.PI * 2); x.fillStyle = P.accent || DEFAULT_ACCENT; x.fill(); x.lineWidth = 4; x.strokeStyle = "#0b0e14"; x.stroke();
+    try { link.setAttribute("href", cv.toDataURL("image/png")); } catch (e) {}
+  };
+  img.src = TABICON;
+}
+function renderTabSet() {
+  if (!$("tabOn")) return;
+  var t = tabc();
+  $("tabOn").value = t.on ? "1" : "0";
+  Array.prototype.forEach.call(document.querySelectorAll("#tabBoxes [data-tab]"), function (el) { el.checked = !!t.b[el.dataset.tab]; el.disabled = !t.on; el.closest("label").classList.toggle("rowoff", !t.on); });
+  $("tabDot").checked = t.dot; $("tabDot").disabled = !t.on; $("tabDot").closest("label").classList.toggle("rowoff", !t.on);
+  tabTitle();
+}
+function tabSet(k, v) { var t = tabc(); P.tabc = { on: t.on, b: t.b, dot: t.dot }; if (k === "on" || k === "dot") P.tabc[k] = v; else P.tabc.b[k] = v ? 1 : 0; persist(); renderTabSet(); }
+$("tabOn").onchange = function () { tabSet("on", this.value === "1"); };
+$("tabDot").onchange = function () { tabSet("dot", this.checked); };
+Array.prototype.forEach.call(document.querySelectorAll("#tabBoxes [data-tab]"), function (el) { el.onchange = function () { tabSet(el.dataset.tab, el.checked); }; });
 
 // ---- Usage counters for the site owner's admin overview ----
 // Only two things are counted, and only while signed in: seconds the page was open and visible, and how many times
@@ -8474,7 +9239,7 @@ function searchHelpHtml() {
     row("reuters.com", "A site name opens the site.") +
     row("!yt lofi", "Search one site: <code>!yt</code> YouTube, <code>!tw</code> Twitch, <code>!r</code> Reddit, <code>!w</code> Wikipedia, <code>!gh</code> GitHub, <code>!maps</code> Maps, <code>!news</code> Google News, <code>!tv</code> TradingView, <code>!a</code> Amazon, <code>!g</code> Google, <code>!ddg</code> DuckDuckGo. The <code>!</code> word can also go last.") +
     "<tr><th colspan=\"2\">Search this page</th></tr>" +
-    row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, videos, streams, notes, calendar, bookmarks, read later, mail and settings. The boxes with a search of their own (News, Telegram, Reddit and Sports) follow while you type, letter by letter; Enter opens a window that lists everything found, box by box. Taking the words away, Esc, or closing that window ends the search in the boxes too." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
+    row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, podcasts, videos, streams, notes, calendar, bookmarks, read later, mail and settings. The boxes with a search of their own (News, Telegram, Reddit and Sports) follow while you type, letter by letter; Enter opens a window that lists everything found, box by box. Taking the words away, Esc, or closing that window ends the search in the boxes too." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
     "<tr><th colspan=\"2\">Answers (Enter copies the answer)</th></tr>" +
     row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
     row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
@@ -8567,7 +9332,7 @@ function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi")
 $("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
 $("twPopOn").onchange = function () { P.twPop = this.checked; persist(); };
 // Notification settings: [input id, name in P.ntf, (for numbers) lowest, highest]
-var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSport", "sport"], ["nfTv", "tv"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
+var NF_BOX = [["nfNews", "news"], ["nfWords", "words"], ["nfStock", "stock"], ["nfLive", "live"], ["nfCal", "cal"], ["nfMail", "mail"], ["nfSport", "sport"], ["nfTv", "tv"], ["nfPod", "pod"], ["nfSound", "sound"], ["nfDesktop", "desktop"], ["nfEmail", "email"]];
 var NF_NUM = [["nfSrcN", "srcN", 2, 6], ["nfPct", "pct", 0.5, 50], ["nfDay", "day", 1, 90]];
 function setNtf() {
   var n = {};
@@ -8755,7 +9520,7 @@ $("bkFile").onchange = function (e) {
 };
 
 // ---- Keyboard shortcuts (when you are not typing in a box) ----
-function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); }
+function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); fetchPod(force); }
 // Every shortcut: [name, standard key, what it does, the action]. Your own keys are in P.keys (name -> key, "" = no key);
 // change them in Settings > Keyboard shortcuts.
 var KEY_ACTS = [
@@ -8849,7 +9614,7 @@ document.addEventListener("visibilitychange", function () {
 });
 
 $("ver").textContent = VERSION;
-applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs(); fetchTv();
+applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs(); fetchTv(); fetchPod();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
 every(900000, fetchWeather); every(300000, fetchRates);
