@@ -1,4 +1,4 @@
-var VERSION = 185;
+var VERSION = 186;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4280,11 +4280,48 @@ function cntOf(box) { var v = P.cnt && +P.cnt[box]; return (v >= 10 && v <= 200 
 function moreBtn(box, label) { return '<button class="more" data-a="more" data-k="' + box + '">' + label + "</button>"; }
 var TGX = [], TGEND = {}, tgOldBusy = false;   // older posts fetched so far; channels that have no older posts left
 function tgPostId(u) { var m = /\/(\d+)$/.exec(u || ""); return m ? +m[1] : 0; }
-// a refresh brings the newest posts; the older ones fetched earlier are kept under them
+// a refresh brings the newest posts; everything the box already had (and the older ones fetched earlier) stays under them,
+// so a post never drops out just because newer ones pushed it off the channel's first page
 function tgMerge(fresh) {
   var have = {}, src = tgSrc();
   fresh.forEach(function (x) { have[x.u] = 1; });
-  return fresh.concat(TGX.filter(function (x) { return !have[x.u] && src.indexOf(x.s) >= 0; })).sort(function (a, b) { return b.ts - a.ts; });
+  var keep = TGX.concat(TGP).filter(function (x) { if (have[x.u] || src.indexOf(x.s) < 0) return false; have[x.u] = 1; return true; });
+  return fresh.concat(keep).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 800);
+}
+// The newest post number the box has per channel, taken before a refresh (Telegram numbers a channel's posts upwards)
+function tgTops() { var t = {}; TGP.forEach(function (x) { var id = tgPostId(x.u); if (id && id > (t[x.s] || 0)) t[x.s] = id; }); return t; }
+// A refresh only brings each channel's first page (about 20 posts). After a long time away a channel may have posted
+// more than that: the posts between that page and what the box had are fetched here, page by page going back, until
+// they meet (at most 5 pages, about 100 posts, per channel). They count as new like any post seen for the first time.
+var tgGapBusy = false;
+function tgFillGaps(tops) {
+  if (!sb || !USER || tgGapBusy || !tops) return;
+  var pages = {}, step = function () {
+    var ask = Object.keys(tops).filter(function (n) { return tgSrc().indexOf(n) >= 0 && (pages[n] || 0) < 5; }).map(function (n) {
+      var ids = TGP.filter(function (x) { return x.s === n; }).map(function (x) { return tgPostId(x.u); }).filter(function (id) { return id > tops[n]; });
+      if (!ids.length) return null;
+      var low = Math.min.apply(null, ids);
+      // the post just under the lowest new one is already in the box: no gap (numbers also skip for deleted posts and albums)
+      if (low <= tops[n] + 1 || TGP.some(function (x) { var id = tgPostId(x.u); return x.s === n && id < low && id > tops[n]; })) return null;
+      return { n: n, before: low };
+    }).filter(Boolean);
+    if (!ask.length) { tgGapBusy = false; return; }
+    tgGapBusy = true;
+    sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tgOld: ask } }).then(function (r) {
+      var got = r.data && r.data.tgOld, have = {};
+      TGP.forEach(function (x) { have[x.u] = 1; });
+      var add = unentAll(Array.isArray(got) ? got : [], ["t", "tx"]).filter(function (x) { return x.u && !have[x.u]; });
+      ask.forEach(function (a) {
+        pages[a.n] = (pages[a.n] || 0) + 1;
+        var mine = add.filter(function (x) { return x.s === a.n; });
+        // nothing came back, or the page reached posts the box already had: this channel's gap is closed
+        if (!mine.length || mine.some(function (x) { return tgPostId(x.u) <= tops[a.n]; })) pages[a.n] = 99;
+      });
+      if (add.length) { stampFirst(add, "tg"); TGP = TGP.concat(add).sort(function (a, b) { return b.ts - a.ts; }); render(); }
+      step();
+    }).catch(function () { tgGapBusy = false; });
+  };
+  step();
 }
 function tgVisible() { var mute = wordList(NW().mute); return TGP.filter(function (g) { return shown("g:" + g.s) && !(mute.length && hasWord(g.tx || g.t, mute)); }); }
 function tgCanOlder() { return tgSrc().some(function (n) { return !TGEND[n] && shown("g:" + n) && TGP.some(function (x) { return x.s === n; }); }); }
@@ -4317,9 +4354,19 @@ function fetchTG() {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tg: tgSrc() } }).then(function (r) {
     tgBusy = false;
     if (r.error || !r.data || !r.data.tg || nBusy) return;
-    TGP = unentAll(r.data.tg, ["t", "tx"]); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
-    newsAlerts(); render(); tgTopUp();
+    var tops = tgTops(), fresh = unentAll(r.data.tg, ["t", "tx"]); stampFirst(fresh, "tg"); TGP = tgMerge(fresh);
+    newsAlerts(); render(); tgTopUp(); tgFillGaps(tops);
   }).catch(function () { tgBusy = false; });
+}
+// A refresh brings each source's newest 30-40 headlines. A busy source can publish more than that while you are away,
+// so headlines the box already had stay (for two days, and only while their source is still on your list) instead of
+// being swapped out for the latest batch.
+function newsMerge(fresh) {
+  var have = {}, names = {}, old = Date.now() - 172800000;
+  newsSrc().forEach(function (x) { names[x.name] = 1; });
+  fresh.forEach(function (x) { have[x.u] = 1; });
+  var keep = NEWSALL.filter(function (x) { if (!x.u || have[x.u] || !names[x.s] || !(x.ts > old)) return false; have[x.u] = 1; return true; });
+  return fresh.concat(keep).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 1200);
 }
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
@@ -4328,9 +4375,10 @@ function fetchNews() {
     nBusy = false;
     if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
     else {
-      NEWSALL = cleanLinks(unentAll(r.data.news, ["t", "d"])); NEWS = langFilter(NEWSALL.slice()); TGP = unentAll(r.data.tg, ["t", "tx"]); NEWSV++; NLAST = Date.now();
-      stampFirst(NEWS, "news"); stampFirst(TGP, "tg"); TGP = tgMerge(TGP);
-      setTimeout(tgTopUp, 0);
+      var tops = tgTops(), freshN = cleanLinks(unentAll(r.data.news, ["t", "d"])), freshT = unentAll(r.data.tg, ["t", "tx"]);
+      NEWSALL = newsMerge(freshN); NEWS = langFilter(NEWSALL.slice()); NEWSV++; NLAST = Date.now();
+      stampFirst(NEWS, "news"); stampFirst(freshT, "tg"); TGP = tgMerge(freshT);
+      setTimeout(tgTopUp, 0); setTimeout(function () { tgFillGaps(tops); }, 0);
       var ne = r.data.news_err || {};
       NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
       NERRK = Object.keys(ne);
@@ -4802,6 +4850,17 @@ function addRdSrc(v) {
   if (P.rd.some(function (x) { return x.toLowerCase() === m[1].toLowerCase(); })) { srcMsg("Already added."); return false; }
   P.rd.push(m[1]); srcMsg("Added r/" + m[1] + "."); return true;
 }
+// Sorted by New, one refresh brings the newest 60 posts of all your subreddits together; busy ones can post more than
+// that while you are away. So in that order the posts the box already had stay under the new ones (for two days, while
+// their subreddit is on your list). Hot and Top are Reddit's own rankings of the moment and are shown just as they come.
+function rdMerge(fresh, subs) {
+  if (rdSort() !== "new") return fresh;
+  var have = {}, on = {}, old = Date.now() - 172800000;
+  subs.forEach(function (s) { on[String(s).toLowerCase()] = 1; });
+  fresh.forEach(function (x) { have[x.u] = 1; });
+  var keep = RD.filter(function (x) { if (!x.u || have[x.u] || !on[String(x.s).toLowerCase()] || !(x.ts > old)) return false; have[x.u] = 1; return true; });
+  return fresh.concat(keep).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 400);
+}
 function fetchReddit() {
   if (!sb || !USER || rBusy || boxOff("reddit")) return;
   var subs = rdSrc();
@@ -4812,7 +4871,7 @@ function fetchReddit() {
     var v = r.data && r.data.reddit;
     if (r.error) RDERR = r.error.message;
     else if (!v) RDERR = "it needs the updated feeds function (redeploy super-function in Supabase)";
-    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { RD = cleanLinks(unentAll(v.items, ["t", "d"])); stampFirst(RD, "rd"); } }
+    else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { var fresh = cleanLinks(unentAll(v.items, ["t", "d"])); stampFirst(fresh, "rd"); RD = rdMerge(fresh, subs); } }
     render();
   }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
 }
@@ -7367,7 +7426,7 @@ function openHelp() {
     '<p><b>Taking your events elsewhere:</b> in the same place in Settings, <b>Download my events as an .ics file</b> saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</p><p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
     '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
     '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
-  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, a new episode of a podcast you follow, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps news, stocks, sports and Twitch updating while the tab is in the background).</p>' +
+  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, a new episode of a podcast you follow, new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound and whether to also send desktop notifications (which also keeps the boxes that notify you at their usual pace while the tab is in the background).</p><p><b>While the tab is in the background</b> (another tab is selected, or the window is minimized), everything still updates, in calmer steps the longer you are away: after 10 minutes, then 15, then 30, then every hour. The boxes, the bell and the count in the tab&rsquo;s title stay current. When you come back and the last update is more than 15 minutes old, everything is fetched at once and the gaps are filled: Telegram fetches back to the posts it already had (up to about 100 per channel), and News and Reddit (sorted by New) keep what they had, so nothing posted while you were away is skipped and there is no need to reload the page.</p>' +
     '<p><b>Good to know:</b> a card goes away by itself after 20 seconds, counted only while you are looking at the page, so one that arrived while the tab was in the background is still there when you come back. The ping can only play once you have clicked somewhere on the page; that is a rule of the browser. Heard something and saw nothing? <b>Settings &rarr; Notifications</b> ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.</p>' +
     '<p><b>On all your devices:</b> pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing its history are saved to your account. Do it on the computer and the phone shows the same within a minute, and nothing is announced twice.</p><p><b>Count in the tab title:</b> the page&rsquo;s tab shows how many new things are waiting, like &ldquo;(5) OmniTree&rdquo;, so you see it from other tabs. Under <b>Settings &rarr; Notifications &rarr; Count in the tab title</b> you switch it on or off and tick what counts: new mail, new Telegram posts, new headlines, new Reddit posts, streamers live on Twitch, new podcast episodes and unread notifications in the bell (mail, Telegram, Twitch, podcasts and the bell to begin with). It can also put a small dot on the tab&rsquo;s icon. The numbers are the same ones the boxes show.</p>' +
     '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
@@ -10230,7 +10289,7 @@ $("bkFile").onchange = function (e) {
 };
 
 // ---- Keyboard shortcuts (when you are not typing in a box) ----
-function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); fetchPod(force); }
+function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); fetchPod(force); fetchTv(); fetchIcs(); }
 // Every shortcut: [name, standard key, what it does, the action]. Your own keys are in P.keys (name -> key, "" = no key);
 // change them in Settings > Keyboard shortcuts.
 var KEY_ACTS = [
@@ -10309,16 +10368,26 @@ document.addEventListener("keydown", function (e) {
   act[3]();
 });
 
-// ---- Only poll while the page is visible (saves your Supabase / API quotas); catch up when you come back ----
-var HIDDEN_AT = 0;
+// ---- Refreshing: every box on its own timer while the tab is in view. In the background everything is refreshed together,
+// in calmer steps the longer you are away (10, 15, 30, then every 60 minutes), so the boxes, the bell and the count in the
+// tab's title stay current without many calls. Boxes that send you desktop or email notifications keep their own pace. ----
+var HIDDEN_AT = 0, LASTFULL = Date.now(), BG_T = 0, BG_N = 0, BG_STEPS = [10, 15, 30, 60];
 function every(ms, fn, inBackground) { setInterval(function () { if (!document.hidden || (inBackground && inBackground())) fn(); }, ms); }
+function bgNext() {
+  clearTimeout(BG_T);
+  var min = BG_STEPS[Math.min(BG_N, BG_STEPS.length - 1)]; BG_N++;
+  BG_T = setTimeout(function () { if (!document.hidden) return; refreshAll(); LASTFULL = Date.now(); bgNext(); }, min * 60000);
+}
 document.addEventListener("visibilitychange", function () {
-  if (document.hidden) { HIDDEN_AT = Date.now(); return; }
+  if (document.hidden) { HIDDEN_AT = Date.now(); BG_N = 0; bgNext(); return; }
+  clearTimeout(BG_T);
   tick(); tickClocks(); syncPull();
-  // Away for more than 2 minutes: everything is fetched again. Posts you have not read stay new (they are read in the box or
-  // the reader, or all marked seen with the count). Only with Settings > News, Telegram & Reddit > "When you come back" set
-  // that way does what was on screen when you left count as seen, as it used to.
-  if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000) { if (P.awaySeen === "seen") markSeen("", HIDDEN_AT); refreshAll(); }
+  // Posts you have not read stay new (they are read in the box or the reader, or all marked seen with the count). Only with
+  // Settings > News, Telegram & Reddit > "When you come back" set that way does what was on screen when you left count as seen.
+  if (HIDDEN_AT && Date.now() - HIDDEN_AT > 120000 && P.awaySeen === "seen") markSeen("", HIDDEN_AT);
+  // The last refresh is more than 15 minutes old: everything is fetched now, and the gaps are filled (Telegram fetches
+  // back to what it had; News and Reddit keep what they had), so nothing is missing and no reload is needed.
+  if (HIDDEN_AT && Date.now() - Math.max(LASTFULL, HIDDEN_AT) > 900000) { refreshAll(); LASTFULL = Date.now(); }
   else render();
   HIDDEN_AT = 0;
 });
@@ -10327,7 +10396,7 @@ $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs(); fetchTv(); fetchPod();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
-every(900000, fetchWeather); every(300000, fetchRates);
+every(900000, fetchWeather, function () { var n = NTF(); return !!(n.desktop || n.email); }); every(300000, fetchRates);
 // With desktop notifications on, the things that can notify keep updating while the tab is in the background
 function bg(kind) { return function () { var n = NTF(); return !!(n.desktop || n.email) && n[kind] !== false; }; }
 every(60000, fetchTwitch, bg("live"));
