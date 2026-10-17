@@ -1,4 +1,4 @@
-var VERSION = 188;
+var VERSION = 189;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1834,7 +1834,7 @@ function podTile() {
     else body = ch.list.length ? ch.list.map(function (s, i) { return podShowRow(s, i + 1); }).join("") : '<div class="empty">No popular list for this country and topic right now. Try another topic.</div>';
   } else if (!podF().length) body = '<div class="empty">You follow no podcasts yet. Choose <b>Popular</b> above, or search with ⌕.</div>';
   else body = all.length ? all.slice(0, 60).map(function (e) { return podRow(e, true); }).join("") : '<div class="empty">' + (podBusy ? "Loading your shows…" : PODERR ? "Podcasts unavailable: " + esc(PODERR) : "No episodes yet.") + "</div>";
-  var H = Math.round((layRows().podcasts || 10) * 32.4 * gfs()), lh = Math.max(60, H - (bar ? 32 : 0));
+  var H = Math.round((layRows().podcasts || 10) * 32.4 * gfs()), lh = Math.max(Math.round(30 * gfs()), H - (bar ? 32 : 0));   // at least one row
   var list = '<div class="list pdlist" data-list="podcasts" style="height:' + lh + "px;max-height:" + lh + 'px">' + body + "</div>";
   var shows = '<div class="dd"><button class="ib sm pdw" data-a="podmenu" aria-haspopup="true" aria-expanded="' + PODMENU + '" title="The shows you follow">Shows</button>' + (PODMENU ? '<div class="menu pdmenu" id="podMenu">' +
     (podF().length ? podF().map(function (s) {
@@ -3481,7 +3481,7 @@ function edRowsOf(key) { return layRows()[key] || (isEmb(key) ? 10 : key === "ne
 // the box's text size, as a share of the normal size (the overall text size in Settings comes on top of it)
 function edTextOf(key) { return isEmb(key) ? "" : "text " + Math.round((layFs()[key === "live" ? "live" : key] || 1) * 100) + "%"; }
 function edSizeText(key) {
-  return [edPhone() || !edCanW(key) ? "" : edCols(key) + " of 12 columns", edCanH(key) ? edRowsOf(key) + " rows" : "", edTextOf(key)].filter(Boolean).join(" · ");
+  return [edPhone() || !edCanW(key) ? "" : edCols(key) + " of 12 columns", edCanH(key) ? edRowsOf(key) + (edRowsOf(key) === 1 ? " row" : " rows") : "", edTextOf(key)].filter(Boolean).join(" · ");
 }
 // ---- Starting and ending ----
 function edStart() {
@@ -3600,7 +3600,7 @@ function edAct(a, k) {
     L.c[key] = Math.max(2, Math.min(12, edCols(key) + d));
     if (L.x && (+L.x[key] || 0) + L.c[key] > 12) L.x[key] = 12 - L.c[key];
   } else if (p2[0] === "h" && edCanH(key)) {
-    laySet("rows", key, isEmb(key) ? Math.max(4, Math.min(30, edRowsOf(key) + d * 2)) : Math.max(3, Math.min(20, edRowsOf(key) + d)));
+    laySet("rows", key, isEmb(key) ? Math.max(4, Math.min(30, edRowsOf(key) + d * 2)) : Math.max(1, Math.min(20, edRowsOf(key) + d)));   // a list can be as short as one row
   } else if (p2[0] === "f") {
     var F = layFs();
     (key === "live" ? ["live", "menu"] : [key]).forEach(function (id) { laySet("fs", id, Math.round(Math.max(0.7, Math.min(1.6, (F[id] || 1) + d * 0.1)) * 100) / 100); });
@@ -3693,7 +3693,7 @@ function edSizeTo(e) {
   if (S.h !== "b" && edCanW(key) && !edPhone()) nc = Math.max(2, Math.min(12, Math.round((e.clientX - S.left + 14) / (colW + 14))));
   if (S.h !== "r" && edCanH(key) && S.top0) {
     var emb = isEmb(key), unit = emb ? 32.4 : 32.4 * gfs(), n = (e.clientY - S.top0) / unit;
-    nr = emb ? Math.max(4, Math.min(30, Math.round(n / 2) * 2)) : Math.max(3, Math.min(20, Math.round(n)));
+    nr = emb ? Math.max(4, Math.min(30, Math.round(n / 2) * 2)) : Math.max(1, Math.min(20, Math.round(n)));
   }
   edAuto(e.clientY);
   if (nc === edCols(key) && nr === r0) return;
