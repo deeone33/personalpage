@@ -1,4 +1,4 @@
-var VERSION = 174;
+var VERSION = 175;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5323,30 +5323,36 @@ function sideList(side) {
   var o = Array.isArray(dlP().o) ? dlP().o : [];
   return all.filter(function (w) { return sideOf(w) === side; }).sort(function (a, b) { var i = o.indexOf(a), j = o.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
 }
-// A side without a video docked on it is "slim": its panels have the width you gave that side (standard 320px) and can sit
-// away from the screen's edge, closer to the boxes (P.dl.x: the gap at the outer side). A side with a video follows the
-// video's width, and its panels fill it.
+// Each side of the page is a column as wide as its widest docked panel (a computer only). Every panel has a width of its
+// own (P.dl.w, standard 304px, set with its inner edge in Edit mode); a narrower panel can sit anywhere across the column
+// (P.dl.x, its distance from the screen's edge), so you can put it right next to the boxes without making the column, and
+// so the page, any wider. A side with a video docked on it follows the video's width, and its panels fill it.
+var SW_PAD = 16;   // the column's own padding, left and right together
 function slimSide(side) { return !DOCK.some(function (d) { return side === "right" ? d.side === "r" : d.side !== "r"; }); }
-function swW(side) { var v = +dlP()[side === "left" ? "wl" : "wr"]; return v >= 200 ? Math.round(v) : 320; }
-function swX(w) { var v = dlP().x && +dlP().x[w]; return v > 0 ? Math.round(v) : 0; }
-function swMaxX(side, skip) { return sideList(side).reduce(function (m, w) { return w === skip ? m : Math.max(m, swX(w)); }, 0); }
+function swPW(w, side) {
+  var v = dlP().w && +dlP().w[w];
+  if (v >= 200) return Math.round(v);
+  var old = +dlP()[side === "left" ? "wl" : "wr"];   // (a side width set before panels had their own)
+  return old >= 216 ? Math.round(old - SW_PAD) : 304;
+}
+function swColW(side) { return sideList(side).reduce(function (m, w) { return Math.max(m, swPW(w, side)); }, 0) || 304; }
+function swX(w, side) { var v = dlP().x && +dlP().x[w]; return v > 0 ? Math.round(Math.min(v, swColW(side) - swPW(w, side))) : 0; }
 function swHtml(w, side) {
   var pc = !layM(), D = dlP(), ed = pc && typeof edOn === "function" && edOn(), fs = (D.fs && +D.fs[w]) || 1, st = [], slim = pc && slimSide(side);
   if (pc && D.y && +D.y[w]) st.push("margin-top:" + Math.round(+D.y[w]) + "px");
   if (pc && D.h && +D.h[w]) st.push("height:" + Math.round(+D.h[w]) + "px");
-  if (slim) { st.push("width:" + swW(side) + "px"); if (swX(w)) st.push("margin-" + side + ":" + swX(w) + "px"); }
+  if (slim) { st.push("width:" + swPW(w, side) + "px"); if (swX(w, side)) st.push("margin-" + side + ":" + swX(w, side) + "px"); }
   return '<div class="sw' + (ed ? " swed" : "") + (slim ? " swx " + side : "") + (pc && D.h && +D.h[w] ? " swfixh" : "") + '" data-sw="' + w + '"' + (st.length ? ' style="' + st.join(";") + '"' : "") + ">" +
-    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it: up, down, toward the boxes or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b><span>" +
+    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it: up, down, across or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b><span>" +
     (ed ? '<button data-a="swfs" data-k="' + w + ':-1" title="Smaller text" aria-label="Smaller text">T&minus;</button><i class="swfsn">' + Math.round(fs * 100) + '%</i><button data-a="swfs" data-k="' + w + ':1" title="Larger text" aria-label="Larger text">T+</button>' : "") +
     (pc ? '<button data-a="sidedock" data-k="' + w + ":" + (side === "left" ? "right" : "left") + '" title="Move to the other side" aria-label="Move to the other side">⇄</button>' : "") +
     '<button data-a="sidedock" data-k="' + w + ':" title="Undock (it opens as a window again)" aria-label="Undock">✕</button></span></div>' +
     '<div class="swb">' + WIDGETS[w].html() + "</div>" +
     (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to fit the content again."></i>' + (slim ? '<i class="swg swgw ' + (side === "left" ? "r" : "l") + '" data-swg="w" title="Drag to change the width. Double-click for the standard width."></i>' : "") : "") + "</div>";
 }
-// the width of each slim side: its panels' width plus the largest gap you left at the outer edge (a computer only)
 function dlApply() {
-  var r = document.documentElement, pc = !layM();
-  if (pc) { r.style.setProperty("--dockr-w", swW("right") + swMaxX("right") + "px"); r.style.setProperty("--dockls-w", swW("left") + swMaxX("left") + "px"); }
+  var r = document.documentElement;
+  if (!layM()) { r.style.setProperty("--dockr-w", swColW("right") + SW_PAD + "px"); r.style.setProperty("--dockls-w", swColW("left") + SW_PAD + "px"); }
   else { r.style.removeProperty("--dockr-w"); r.style.removeProperty("--dockls-w"); }
 }
 function renderSide() {
@@ -5357,39 +5363,39 @@ function renderSide() {
   syncDock();
   swFit();
 }
-// Everything in a docked panel always fits: a narrower or shorter panel shows all of its content smaller, instead of cutting
-// tabs and buttons off or scrolling. Each panel is laid out for a width of its own and scaled down from there; your text
-// size (T−/T+) is the most it is shown at. A computer only; on a phone the panels have the whole width.
-var SW_BASE = { notes: 300, cal: 300, calc: 270, adm: 400 }, swFitT = 0;
+// A docked panel shows its content at your text size (T−/T+). Only where something would not fit across (a row of tabs or
+// keys) does the whole panel get just as much smaller as it needs; and when you gave it a height, it gets smaller until
+// everything fits in it. It never goes below 60% of your size: past that, a long list scrolls. A computer only.
+var swFitT = 0;
 function swFit() {
   Array.prototype.forEach.call(document.querySelectorAll("#sideL .sw, #sideR .sw"), function (sw) {
     var b = sw.querySelector(".swb"), w = sw.dataset.sw;
     if (!b) return;
     if (layM()) { b.style.zoom = ""; b.style.overflowY = ""; return; }
-    var fs = (dlP().fs && +dlP().fs[w]) || 1, cs = getComputedStyle(sw), W = sw.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    var z = Math.max(0.4, Math.min(fs, W / (SW_BASE[w] || 300)));
+    var fs = (dlP().fs && +dlP().fs[w]) || 1, z = fs, min = fs * 0.6, need = 1;
     b.style.zoom = z; b.style.overflowY = "";
+    [b].concat(Array.prototype.slice.call(b.querySelectorAll(".seg, .admh, .admst, .cbar, .ckeys, .tadd"))).forEach(function (el) { if (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1) need = Math.max(need, el.scrollWidth / el.clientWidth); });
+    if (need > 1) { z = Math.max(min, fs / need); b.style.zoom = z; }
     if (!sw.classList.contains("swfixh")) return;
-    var head = sw.querySelector(".swh"), H = sw.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - head.offsetHeight - parseFloat(getComputedStyle(head).marginBottom), nat = 0;
+    var cs = getComputedStyle(sw), head = sw.querySelector(".swh"), H = sw.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - head.offsetHeight - parseFloat(getComputedStyle(head).marginBottom), nat = 0;
     for (var n = 0; n < 4; n++) {
       b.style.flex = "none"; b.style.height = "auto";
       nat = b.getBoundingClientRect().height;
       b.style.flex = ""; b.style.height = "";
-      if (nat <= H + 1 || z <= 0.4) break;
-      z = Math.max(0.4, z * H / nat); b.style.zoom = z;
+      if (nat <= H + 1 || z <= min) break;
+      z = Math.max(min, z * H / nat); b.style.zoom = z;
     }
-    b.style.overflowY = nat > H + 1 ? "auto" : "hidden";   // (only a very long list at the smallest size still scrolls)
+    b.style.overflowY = nat > H + 1 ? "auto" : "hidden";
   });
 }
 function swFitSoon() { clearTimeout(swFitT); swFitT = setTimeout(swFit, 30); }
 window.addEventListener("resize", swFitSoon);
-// whatever changes inside a docked panel (a note added, another month, a tab) fits again
 if (window.MutationObserver) ["sideL", "sideR"].forEach(function (id) { new MutationObserver(swFitSoon).observe($(id), { childList: true, subtree: true }); });
 function sideDock(w, side) {
   if (!widgetOk(w)) return;
   P.side = P.side || {};
   if (side) P.side[w] = side; else delete P.side[w];
-  // a panel that changes side goes to the end of the order, without gaps
+  // a panel that changes side goes to the end of the order, flush with the edge
   if (side && !layM()) { var o = (Array.isArray(dlP().o) ? dlP().o : []).filter(function (x) { return x !== w; }); o.push(w); P.dl = Object.assign({}, dlP(), { o: o }); dlSet("y", w, null); dlSet("x", w, null); }
   persist();
   if (!$("modal").hidden && $("mTitle").textContent === WIDGETS[w].t) closeModal();
@@ -5403,15 +5409,16 @@ function swFs(k) {
   dlSet("fs", w, v === 1 ? null : v);
   persist(); renderSide();
 }
-// Dragging a docked panel by its title (a computer only): it follows the mouse and the panels make room. Where you let go
-// it stays: on the side the mouse is on, in that place among the others, with the gap above it and the gap from the
-// screen's edge that you left (small gaps snap shut).
+// Dragging a docked panel by its title (a computer only). It follows the mouse and the panels of its column make room;
+// where you let go it stays: in that place among the others, with the gap above it you left, and as far across its
+// column as you put it. It only changes side when you take it well over to the other side of the screen, so the page
+// does not jump about while you drag it within one side.
 var SWDRAG = null;
 document.addEventListener("pointerdown", function (e) {
   var h = e.target.closest && e.target.closest(".sw .swh");
   if (!h || layM() || e.button !== 0 || e.target.closest("button")) return;
   var sw = h.closest(".sw");
-  SWDRAG = { w: sw.dataset.sw, el: sw, x0: e.clientX, y0: e.clientY, on: false };
+  SWDRAG = { w: sw.dataset.sw, el: sw, x0: e.clientX, y0: e.clientY, on: false, side: sideOf(sw.dataset.sw) };
 });
 document.addEventListener("pointermove", function (e) {
   var D = SWDRAG;
@@ -5427,29 +5434,30 @@ document.addEventListener("pointermove", function (e) {
     D.el.classList.add("swmoving"); document.body.classList.add("resizing");
   }
   e.preventDefault();
-  var gl = e.clientX - D.dx, top = e.clientY - D.dy;
+  var gl = e.clientX - D.dx, top = e.clientY - D.dy, vw = window.innerWidth;
   D.ghost.style.left = gl + "px"; D.ghost.style.top = top + "px";
-  // which side, and where among the panels of that side
-  var side = e.clientX < window.innerWidth / 2 ? "left" : "right", box = $(side === "left" ? "sideL" : "sideR");
-  if (sideOf(D.w) !== side) {
-    P.side[D.w] = side; box.appendChild(D.el); syncDock();
+  var side = e.clientX < vw * 0.35 ? "left" : e.clientX > vw * 0.65 ? "right" : D.side, box = $(side === "left" ? "sideL" : "sideR");
+  if (side !== D.side) {
+    D.side = side; P.side[D.w] = side; box.appendChild(D.el);
     D.el.className = D.el.className.replace(/\b(left|right)\b/, side);
     D.el.style.marginLeft = D.el.style.marginRight = "";
+    D.el.style.width = slimSide(side) ? swPW(D.w, side) + "px" : "";
+    dlApply(); syncDock();
   }
+  // where among the panels of the column
   var others = Array.prototype.filter.call(box.children, function (x) { return x !== D.el; }), before = null;
   others.some(function (x) { var rr = x.getBoundingClientRect(); if (top < rr.top + rr.height / 2) { before = x; return true; } return false; });
   if (before) { if (D.el.nextSibling !== before) box.insertBefore(D.el, before); } else if (box.lastChild !== D.el) box.appendChild(D.el);
-  // the gap above it: as far down as you dragged it, past the panel above
+  // the gap above it (small gaps snap shut)
   D.el.style.marginTop = "0";
   var gap = Math.round(top - D.el.getBoundingClientRect().top);
   D.gap = gap > 16 ? Math.min(gap, 2000) : 0;
   D.el.style.marginTop = D.gap ? D.gap + "px" : "";
-  // the gap from the screen's edge: how far in toward the boxes you dragged it (a side without a video only)
-  var gx = side === "left" ? gl - 10 : window.innerWidth - (gl + D.gw) - 10;
-  D.gx = slimSide(side) && gx > 16 ? Math.round(Math.min(gx, window.innerWidth * 0.35)) : 0;
-  D.side = side;
+  // across the column: never further than the column is wide, so the page stays as it is
+  var room = slimSide(side) ? swColW(side) - swPW(D.w, side) : 0, gx = side === "left" ? gl - SW_PAD / 2 : vw - (gl + D.gw) - SW_PAD / 2;
+  D.gx = room > 0 ? Math.round(Math.max(0, Math.min(room, gx))) : 0;
+  if (D.gx < 12) D.gx = 0; else if (room - D.gx < 12) D.gx = room;
   D.el.style["margin" + (side === "left" ? "Left" : "Right")] = D.gx ? D.gx + "px" : "";
-  if (slimSide(side)) document.documentElement.style.setProperty(side === "left" ? "--dockls-w" : "--dockr-w", swW(side) + Math.max(D.gx, swMaxX(side, D.w)) + "px");
 });
 document.addEventListener("pointerup", function () {
   var D = SWDRAG;
@@ -5469,30 +5477,32 @@ document.addEventListener("pointerdown", function (e) {
   if (!g || layM()) return;
   e.preventDefault(); e.stopPropagation();
   var sw = g.closest(".sw"), w = sw.dataset.sw, left = !!sw.closest("#dock"), side = left ? "left" : "right", r = sw.getBoundingClientRect(), isH = g.dataset.swg === "h", v = 0;
+  var otherW = sideList(side).reduce(function (m, x) { return x === w ? m : Math.max(m, swPW(x, side)); }, 0);
   if (typeof edPush === "function" && edOn()) edPush();
   try { g.setPointerCapture(e.pointerId); } catch (x) {}
   document.body.classList.add("resizing");
   function mv(ev) {
     if (isH) { v = Math.round(Math.max(120, Math.min(ev.clientY - r.top, window.innerHeight - 20))); sw.style.height = v + "px"; sw.classList.add("swfixh"); }
     else {
-      v = Math.round(Math.max(200, Math.min(left ? ev.clientX - r.left : r.right - ev.clientX, window.innerWidth * 0.5)));
-      Array.prototype.forEach.call($(left ? "sideL" : "sideR").children, function (x) { x.style.width = v + "px"; });
-      document.documentElement.style.setProperty(left ? "--dockls-w" : "--dockr-w", v + swMaxX(side) + "px");
+      v = Math.round(Math.max(200, Math.min(left ? ev.clientX - r.left : r.right - ev.clientX, window.innerWidth * 0.45)));
+      sw.style.width = v + "px";
+      document.documentElement.style.setProperty(left ? "--dockls-w" : "--dockr-w", Math.max(v, otherW) + SW_PAD + "px");
     }
     swFit();
   }
   function up() {
     g.removeEventListener("pointermove", mv); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
     document.body.classList.remove("resizing");
-    if (v) { if (isH) dlSet("h", w, v); else { P.dl = Object.assign({}, dlP()); P.dl[left ? "wl" : "wr"] = v; } persist(); renderSide(); }
+    if (v) dlSet(isH ? "h" : "w", w, v);
+    persist(); renderSide();
   }
   g.addEventListener("pointermove", mv); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
 }, true);
 document.addEventListener("dblclick", function (e) {
   var g = e.target.closest && e.target.closest(".sw .swg");
   if (!g) return;
-  var sw = g.closest(".sw");
-  if (g.dataset.swg === "h") dlSet("h", sw.dataset.sw, null); else { P.dl = Object.assign({}, dlP()); delete P.dl[sw.closest("#dock") ? "wl" : "wr"]; }
+  var w = g.closest(".sw").dataset.sw;
+  dlSet(g.dataset.swg === "h" ? "h" : "w", w, null);
   persist(); renderSide();
 });
 // ---- Calculator (Tools menu): the usual keys, and more functions behind "f(x)". Sums are worked out by a small parser of
@@ -7157,7 +7167,7 @@ function openHelp() {
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
     '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for a small card with what the show is about, where it runs and its next and latest episode, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
     '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes, the calendar or the calculator:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. On a computer, drag a docked panel by its title to move it up or down, in toward the boxes, or across to the other side (⇄ does that in one click); it stays where you let go. In <b>Edit</b> mode each docked panel also gets T&minus; / T+ for its largest text size, its bottom edge sets its height and its inner edge the width of the panels on that side (double-click an edge to undo it). A docked panel always shows all of its content: made narrower or shorter, everything in it gets smaller instead of being cut off or scrolling. This is kept for computers only. On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page, centered like the boxes. ✕ turns a panel back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes, the calendar or the calculator:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. On a computer, drag a docked panel by its title to move it up or down, in toward the boxes, or across to the other side (⇄ does that in one click); it stays where you let go. In <b>Edit</b> mode each docked panel also gets T&minus; / T+ for its text size, its bottom edge sets its height and its inner edge its own width (double-click an edge to undo it). Each side is as wide as its widest panel, so a narrower one can be dragged across, right next to the boxes, without the page moving. When a row of tabs or keys would not fit, or the panel is shorter than its content, the panel gets just as much smaller as it needs (to 60% at most; past that a long list scrolls). This is kept for computers only. On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page, centered like the boxes. ✕ turns a panel back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. To change an event afterwards, press ✎ on it: the same form then holds its name, day, time, reminder and repeat; press Save, or Cancel to leave it as it was. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +

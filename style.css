@@ -1709,4 +1709,17 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .admd{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;padding:6px 8px 8px;margin:0 0 6px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
 .admd>span{color:var(--mut);white-space:nowrap}
 .admd>b{font-weight:500;min-width:0;overflow-wrap:anywhere}
-.admd .lnk2{font-size:12px;padding:0;text-align:left}
+.admd .lnk2{font-size:12px;padding:0;text-align:left}/* (round 3) docked panels: the handles and the outline stay inside the panel, so the column never cuts them off */
+.swgh{bottom:0}
+.swgw.r{right:0}
+.swgw.l{left:0}
+.sw.swed{outline-offset:-1px}
+.sw.swmoving{outline-offset:-2px}
+/* the owner panel: tabs share the row and get narrower instead of running out of it; easier to read lines */
+.admh .seg{overflow:hidden}
+.admh .seg button{flex:1 1 auto;min-width:0;padding:3px 4px;font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+.arow{font-size:13px}
+.admd{font-size:12.5px}
+.admd .lnk2{font-size:12.5px}
+.admst b{font-size:16px}
+.admst small{font-size:11px}
