@@ -1,4 +1,4 @@
-var VERSION = 173;
+var VERSION = 174;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5323,23 +5323,31 @@ function sideList(side) {
   var o = Array.isArray(dlP().o) ? dlP().o : [];
   return all.filter(function (w) { return sideOf(w) === side; }).sort(function (a, b) { var i = o.indexOf(a), j = o.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
 }
+// A side without a video docked on it is "slim": its panels have the width you gave that side (standard 320px) and can sit
+// away from the screen's edge, closer to the boxes (P.dl.x: the gap at the outer side). A side with a video follows the
+// video's width, and its panels fill it.
+function slimSide(side) { return !DOCK.some(function (d) { return side === "right" ? d.side === "r" : d.side !== "r"; }); }
+function swW(side) { var v = +dlP()[side === "left" ? "wl" : "wr"]; return v >= 200 ? Math.round(v) : 320; }
+function swX(w) { var v = dlP().x && +dlP().x[w]; return v > 0 ? Math.round(v) : 0; }
+function swMaxX(side, skip) { return sideList(side).reduce(function (m, w) { return w === skip ? m : Math.max(m, swX(w)); }, 0); }
 function swHtml(w, side) {
-  var pc = !layM(), D = dlP(), ed = pc && typeof edOn === "function" && edOn(), fs = (D.fs && +D.fs[w]) || 1, st = [];
+  var pc = !layM(), D = dlP(), ed = pc && typeof edOn === "function" && edOn(), fs = (D.fs && +D.fs[w]) || 1, st = [], slim = pc && slimSide(side);
   if (pc && D.y && +D.y[w]) st.push("margin-top:" + Math.round(+D.y[w]) + "px");
   if (pc && D.h && +D.h[w]) st.push("height:" + Math.round(+D.h[w]) + "px");
-  return '<div class="sw' + (ed ? " swed" : "") + (pc && D.h && +D.h[w] ? " swfixh" : "") + '" data-sw="' + w + '"' + (st.length ? ' style="' + st.join(";") + '"' : "") + ">" +
-    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it up, down or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b><span>" +
+  if (slim) { st.push("width:" + swW(side) + "px"); if (swX(w)) st.push("margin-" + side + ":" + swX(w) + "px"); }
+  return '<div class="sw' + (ed ? " swed" : "") + (slim ? " swx " + side : "") + (pc && D.h && +D.h[w] ? " swfixh" : "") + '" data-sw="' + w + '"' + (st.length ? ' style="' + st.join(";") + '"' : "") + ">" +
+    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it: up, down, toward the boxes or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b><span>" +
     (ed ? '<button data-a="swfs" data-k="' + w + ':-1" title="Smaller text" aria-label="Smaller text">T&minus;</button><i class="swfsn">' + Math.round(fs * 100) + '%</i><button data-a="swfs" data-k="' + w + ':1" title="Larger text" aria-label="Larger text">T+</button>' : "") +
     (pc ? '<button data-a="sidedock" data-k="' + w + ":" + (side === "left" ? "right" : "left") + '" title="Move to the other side" aria-label="Move to the other side">⇄</button>' : "") +
     '<button data-a="sidedock" data-k="' + w + ':" title="Undock (it opens as a window again)" aria-label="Undock">✕</button></span></div>' +
-    '<div class="swb"' + (pc && fs !== 1 ? ' style="zoom:' + fs + '"' : "") + ">" + WIDGETS[w].html() + "</div>" +
-    (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to fit the content again."></i><i class="swg swgw ' + (side === "left" ? "r" : "l") + '" data-swg="w" title="Drag to change the width of this side. Double-click for the standard width."></i>' : "") + "</div>";
+    '<div class="swb">' + WIDGETS[w].html() + "</div>" +
+    (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to fit the content again."></i>' + (slim ? '<i class="swg swgw ' + (side === "left" ? "r" : "l") + '" data-swg="w" title="Drag to change the width. Double-click for the standard width."></i>' : "") : "") + "</div>";
 }
-// the width of each side while no video is docked there (a computer only)
+// the width of each slim side: its panels' width plus the largest gap you left at the outer edge (a computer only)
 function dlApply() {
-  var r = document.documentElement, D = dlP(), pc = !layM();
-  if (pc && +D.wr) r.style.setProperty("--dockr-w", Math.round(+D.wr) + "px"); else r.style.removeProperty("--dockr-w");
-  if (pc && +D.wl) r.style.setProperty("--dockls-w", Math.round(+D.wl) + "px"); else r.style.removeProperty("--dockls-w");
+  var r = document.documentElement, pc = !layM();
+  if (pc) { r.style.setProperty("--dockr-w", swW("right") + swMaxX("right") + "px"); r.style.setProperty("--dockls-w", swW("left") + swMaxX("left") + "px"); }
+  else { r.style.removeProperty("--dockr-w"); r.style.removeProperty("--dockls-w"); }
 }
 function renderSide() {
   dlApply();
@@ -5347,13 +5355,42 @@ function renderSide() {
     $(side === "left" ? "sideL" : "sideR").innerHTML = sideList(side).map(function (w) { return swHtml(w, side); }).join("");
   });
   syncDock();
+  swFit();
 }
+// Everything in a docked panel always fits: a narrower or shorter panel shows all of its content smaller, instead of cutting
+// tabs and buttons off or scrolling. Each panel is laid out for a width of its own and scaled down from there; your text
+// size (T−/T+) is the most it is shown at. A computer only; on a phone the panels have the whole width.
+var SW_BASE = { notes: 300, cal: 300, calc: 270, adm: 400 }, swFitT = 0;
+function swFit() {
+  Array.prototype.forEach.call(document.querySelectorAll("#sideL .sw, #sideR .sw"), function (sw) {
+    var b = sw.querySelector(".swb"), w = sw.dataset.sw;
+    if (!b) return;
+    if (layM()) { b.style.zoom = ""; b.style.overflowY = ""; return; }
+    var fs = (dlP().fs && +dlP().fs[w]) || 1, cs = getComputedStyle(sw), W = sw.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    var z = Math.max(0.4, Math.min(fs, W / (SW_BASE[w] || 300)));
+    b.style.zoom = z; b.style.overflowY = "";
+    if (!sw.classList.contains("swfixh")) return;
+    var head = sw.querySelector(".swh"), H = sw.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - head.offsetHeight - parseFloat(getComputedStyle(head).marginBottom), nat = 0;
+    for (var n = 0; n < 4; n++) {
+      b.style.flex = "none"; b.style.height = "auto";
+      nat = b.getBoundingClientRect().height;
+      b.style.flex = ""; b.style.height = "";
+      if (nat <= H + 1 || z <= 0.4) break;
+      z = Math.max(0.4, z * H / nat); b.style.zoom = z;
+    }
+    b.style.overflowY = nat > H + 1 ? "auto" : "hidden";   // (only a very long list at the smallest size still scrolls)
+  });
+}
+function swFitSoon() { clearTimeout(swFitT); swFitT = setTimeout(swFit, 30); }
+window.addEventListener("resize", swFitSoon);
+// whatever changes inside a docked panel (a note added, another month, a tab) fits again
+if (window.MutationObserver) ["sideL", "sideR"].forEach(function (id) { new MutationObserver(swFitSoon).observe($(id), { childList: true, subtree: true }); });
 function sideDock(w, side) {
   if (!widgetOk(w)) return;
   P.side = P.side || {};
   if (side) P.side[w] = side; else delete P.side[w];
-  // a panel that changes side goes to the end of the order, without a gap above it
-  if (side && !layM()) { var o = (Array.isArray(dlP().o) ? dlP().o : []).filter(function (x) { return x !== w; }); o.push(w); P.dl = Object.assign({}, dlP(), { o: o }); dlSet("y", w, null); }
+  // a panel that changes side goes to the end of the order, without gaps
+  if (side && !layM()) { var o = (Array.isArray(dlP().o) ? dlP().o : []).filter(function (x) { return x !== w; }); o.push(w); P.dl = Object.assign({}, dlP(), { o: o }); dlSet("y", w, null); dlSet("x", w, null); }
   persist();
   if (!$("modal").hidden && $("mTitle").textContent === WIDGETS[w].t) closeModal();
   renderSide(); render();
@@ -5366,8 +5403,9 @@ function swFs(k) {
   dlSet("fs", w, v === 1 ? null : v);
   persist(); renderSide();
 }
-// Dragging a docked panel by its title (a computer only): it follows the mouse, the panels make room, and where you let go
-// it stays: on the side the mouse is on, in that place among the others, with the gap above it that you left.
+// Dragging a docked panel by its title (a computer only): it follows the mouse and the panels make room. Where you let go
+// it stays: on the side the mouse is on, in that place among the others, with the gap above it and the gap from the
+// screen's edge that you left (small gaps snap shut).
 var SWDRAG = null;
 document.addEventListener("pointerdown", function (e) {
   var h = e.target.closest && e.target.closest(".sw .swh");
@@ -5382,25 +5420,36 @@ document.addEventListener("pointermove", function (e) {
     if (Math.abs(e.clientX - D.x0) + Math.abs(e.clientY - D.y0) < 6) return;
     if (typeof edPush === "function" && edOn()) edPush();
     var r = D.el.getBoundingClientRect();
-    D.on = true; D.dx = e.clientX - r.left; D.dy = e.clientY - r.top;
+    D.on = true; D.dx = e.clientX - r.left; D.dy = e.clientY - r.top; D.gw = r.width;
     D.ghost = D.el.cloneNode(true); D.ghost.classList.add("swghost");
-    D.ghost.style.width = r.width + "px"; D.ghost.style.height = r.height + "px"; D.ghost.style.marginTop = "0";
+    D.ghost.style.width = r.width + "px"; D.ghost.style.height = r.height + "px"; D.ghost.style.margin = "0";
     document.body.appendChild(D.ghost);
     D.el.classList.add("swmoving"); document.body.classList.add("resizing");
   }
   e.preventDefault();
-  D.ghost.style.left = e.clientX - D.dx + "px"; D.ghost.style.top = e.clientY - D.dy + "px";
+  var gl = e.clientX - D.dx, top = e.clientY - D.dy;
+  D.ghost.style.left = gl + "px"; D.ghost.style.top = top + "px";
   // which side, and where among the panels of that side
   var side = e.clientX < window.innerWidth / 2 ? "left" : "right", box = $(side === "left" ? "sideL" : "sideR");
-  if (sideOf(D.w) !== side) { P.side[D.w] = side; box.appendChild(D.el); syncDock(); }
-  var others = Array.prototype.filter.call(box.children, function (x) { return x !== D.el; }), top = e.clientY - D.dy, before = null;
+  if (sideOf(D.w) !== side) {
+    P.side[D.w] = side; box.appendChild(D.el); syncDock();
+    D.el.className = D.el.className.replace(/\b(left|right)\b/, side);
+    D.el.style.marginLeft = D.el.style.marginRight = "";
+  }
+  var others = Array.prototype.filter.call(box.children, function (x) { return x !== D.el; }), before = null;
   others.some(function (x) { var rr = x.getBoundingClientRect(); if (top < rr.top + rr.height / 2) { before = x; return true; } return false; });
   if (before) { if (D.el.nextSibling !== before) box.insertBefore(D.el, before); } else if (box.lastChild !== D.el) box.appendChild(D.el);
-  // the gap above it: as far down as you dragged it, past the panel above (small gaps snap shut)
+  // the gap above it: as far down as you dragged it, past the panel above
   D.el.style.marginTop = "0";
   var gap = Math.round(top - D.el.getBoundingClientRect().top);
   D.gap = gap > 16 ? Math.min(gap, 2000) : 0;
   D.el.style.marginTop = D.gap ? D.gap + "px" : "";
+  // the gap from the screen's edge: how far in toward the boxes you dragged it (a side without a video only)
+  var gx = side === "left" ? gl - 10 : window.innerWidth - (gl + D.gw) - 10;
+  D.gx = slimSide(side) && gx > 16 ? Math.round(Math.min(gx, window.innerWidth * 0.35)) : 0;
+  D.side = side;
+  D.el.style["margin" + (side === "left" ? "Left" : "Right")] = D.gx ? D.gx + "px" : "";
+  if (slimSide(side)) document.documentElement.style.setProperty(side === "left" ? "--dockls-w" : "--dockr-w", swW(side) + Math.max(D.gx, swMaxX(side, D.w)) + "px");
 });
 document.addEventListener("pointerup", function () {
   var D = SWDRAG;
@@ -5411,20 +5460,26 @@ document.addEventListener("pointerup", function () {
   ["sideL", "sideR"].forEach(function (id) { Array.prototype.forEach.call($(id).children, function (x) { if (x.dataset.sw) o.push(x.dataset.sw); }); });
   P.dl = Object.assign({}, dlP(), { o: o });
   dlSet("y", D.w, D.gap || null);
+  dlSet("x", D.w, D.gx || null);
   persist(); renderSide();
 });
-// Edit mode: drag the bottom edge of a docked panel for its height, its inner edge for the width of that side
+// Edit mode: drag the bottom edge of a docked panel for its height, its inner edge for its width
 document.addEventListener("pointerdown", function (e) {
   var g = e.target.closest && e.target.closest(".sw .swg");
   if (!g || layM()) return;
   e.preventDefault(); e.stopPropagation();
-  var sw = g.closest(".sw"), w = sw.dataset.sw, left = !!sw.closest("#dock"), r = sw.getBoundingClientRect(), isH = g.dataset.swg === "h", v = 0;
+  var sw = g.closest(".sw"), w = sw.dataset.sw, left = !!sw.closest("#dock"), side = left ? "left" : "right", r = sw.getBoundingClientRect(), isH = g.dataset.swg === "h", v = 0;
   if (typeof edPush === "function" && edOn()) edPush();
   try { g.setPointerCapture(e.pointerId); } catch (x) {}
   document.body.classList.add("resizing");
   function mv(ev) {
     if (isH) { v = Math.round(Math.max(120, Math.min(ev.clientY - r.top, window.innerHeight - 20))); sw.style.height = v + "px"; sw.classList.add("swfixh"); }
-    else { v = Math.round(Math.max(240, Math.min(left ? ev.clientX : window.innerWidth - ev.clientX, window.innerWidth * 0.5))); document.documentElement.style.setProperty(left ? "--dockls-w" : "--dockr-w", v + "px"); }
+    else {
+      v = Math.round(Math.max(200, Math.min(left ? ev.clientX - r.left : r.right - ev.clientX, window.innerWidth * 0.5)));
+      Array.prototype.forEach.call($(left ? "sideL" : "sideR").children, function (x) { x.style.width = v + "px"; });
+      document.documentElement.style.setProperty(left ? "--dockls-w" : "--dockr-w", v + swMaxX(side) + "px");
+    }
+    swFit();
   }
   function up() {
     g.removeEventListener("pointermove", mv); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
@@ -5573,7 +5628,7 @@ function admData() {
   var d = ADM.d, now = Date.now(), day = 86400000, users = d.users || [], byId = {};
   users.forEach(function (u) { byId[u.id] = u; });
   var today = new Date().toISOString().slice(0, 10);
-  var visits = (d.visits || []).map(function (v) { return { at: admTs(v.at), ip: String(v.ip || ""), cc: String(v.cc || ""), u: byId[v.user_id] }; });
+  var visits = (d.visits || []).map(function (v) { return { at: admTs(v.at), ip: String(v.ip || ""), cc: String(v.cc || ""), u: byId[v.user_id], ua: String(v.ua || ""), ref: String(v.ref || ""), lang: String(v.lang || ""), tz: String(v.tz || "") }; });
   var first = {}, count = {};
   visits.forEach(function (v) { if (!v.ip) return; count[v.ip] = (count[v.ip] || 0) + 1; if (!first[v.ip] || v.at < first[v.ip].at) first[v.ip] = v; });
   var ips = Object.keys(first).map(function (ip) { var f = first[ip]; return { ip: ip, at: f.at, cc: f.cc, n: count[ip], u: visits.filter(function (v) { return v.ip === ip && v.u; }).map(function (v) { return v.u.email; })[0] || "" }; }).sort(function (a, b) { return b.at - a.at; });
@@ -5582,14 +5637,72 @@ function admData() {
   var fb = (d.feedback || []).slice().sort(function (a, b) { return admTs(b.at) - admTs(a.at); });
   var active = {}; (d.usage || []).forEach(function (u) { if (u.day === today) active[u.user_id] = 1; });
   return {
-    accts: accts, logins: logins, fb: fb, ips: ips,
+    accts: accts, logins: logins, fb: fb, ips: ips, visits: visits, byId: byId,
     n: { users: users.length, new1: accts.filter(function (u) { return now - admTs(u.created) < day; }).length, new7: accts.filter(function (u) { return now - admTs(u.created) < 7 * day; }).length,
       active: Object.keys(active).length, visitors: Object.keys(visits.filter(function (v) { return now - v.at < day; }).reduce(function (o, v) { o[v.ip] = 1; return o; }, {})).length,
       fbNew: fb.filter(function (f) { return (f.status || "new") === "new"; }).length, ipNew: ips.filter(function (x) { return now - x.at < day; }).length }
   };
 }
-function admRow(isNew, main, sub, when) {
-  return '<div class="row arow' + (isNew ? " new" : "") + '"><span>' + main + (sub ? " <small>" + sub + "</small>" : "") + '</span><span class="r mut">' + (when ? ago(when) : "") + "</span></div>";
+// one line; click it (key: "u:<account>", "ip:<address>" or "f:<feedback>") and its details open under it
+function admRow(isNew, main, sub, when, key) {
+  var open = key && ADM.open === key;
+  return '<div class="row arow' + (isNew ? " new" : "") + (key ? " aclick" : "") + (open ? " aopen" : "") + '"' + (key ? ' data-a="admx" data-k="' + esc(key) + '" role="button" tabindex="0" aria-expanded="' + !!open + '"' : "") + "><span>" + main + (sub ? " <small>" + sub + "</small>" : "") + '</span><span class="r mut">' + (when ? ago(when) : "") + "</span></div>" +
+    (open ? admDetail(key) : "");
+}
+function admWhen(t) { return t ? new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " · " + ago(t) + " ago" : "never"; }
+function admMins(s) { var m = Math.round((+s || 0) / 60); return m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min"; }
+function admUa(ua) {
+  var b = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "";
+  var o = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  return [b, o].filter(Boolean).join(" on ") || (ua ? ua.slice(0, 60) : "");
+}
+function admLink(key, label) { return '<button class="lnk2" data-a="admx" data-k="' + esc(key) + '">' + esc(label) + "</button>"; }
+function admKv(rows) { return '<div class="admd">' + rows.filter(function (r) { return r && r[1] !== "" && r[1] != null; }).map(function (r) { return "<span>" + r[0] + "</span><b>" + r[1] + "</b>"; }).join("") + "</div>"; }
+// the details of an account, an address or a feedback message, from what the overview already holds
+function admDetail(key) {
+  key = String(key).replace(/#\d+$/, "");
+  var D = admData(), i = key.indexOf(":"), kind = key.slice(0, i), id = key.slice(i + 1);
+  if (kind === "u") {
+    var u = D.byId[id];
+    if (!u) return admKv([["", "Not in the list any more"]]);
+    var use = (ADM.d.usage || []).filter(function (x) { return x.user_id === id; }), secs = use.reduce(function (s, x) { return s + (+x.secs || 0); }, 0), lastSeen = use.reduce(function (m, x) { return Math.max(m, admTs(x.last_seen)); }, 0);
+    var p = (ADM.d.prefs || {})[id] || null, ipl = {}, myFb = D.fb.filter(function (f) { return f.user_id === id; }).length;
+    D.visits.forEach(function (v) { if (v.u && v.u.id === id && v.ip) { var e = ipl[v.ip] || (ipl[v.ip] = { n: 0, at: 0, cc: v.cc }); e.n++; e.at = Math.max(e.at, v.at); } });
+    var ipKeys = Object.keys(ipl).sort(function (a, b) { return ipl[b].at - ipl[a].at; }).slice(0, 5);
+    var srcs = p ? [p.news >= 0 ? p.news + " news" : "", p.tg >= 0 ? p.tg + " Telegram" : "", p.rd >= 0 ? p.rd + " Reddit" : "", p.stocks ? p.stocks + " stocks" : "", p.yt ? p.yt + " YouTube" : "", p.leagues >= 0 ? p.leagues + " leagues" : "", p.mail ? p.mail + " mail" : "", p.twitch ? "Twitch" : ""].filter(Boolean).join(" · ") : "";
+    return admKv([
+      ["Signed up", esc(admWhen(admTs(u.created)))], ["Last sign-in", esc(admWhen(admTs(u.last)))],
+      ["Status", esc([u.confirmed ? "email confirmed" : "email not confirmed", u.banned ? "blocked" : "", u.admin ? "owner" : ""].filter(Boolean).join(" · "))],
+      ["Last 30 days", esc(use.length + (use.length === 1 ? " day active · " : " days active · ") + admMins(secs) + " on the page" + (lastSeen ? " · last seen " + ago(lastSeen) + " ago" : ""))],
+      p ? ["Setup", esc([p.onboarded ? "guide done" : "guide not done", p.theme, p.off && p.off.length ? p.off.length + " boxes off" : "", p.docked && p.docked.length ? "docked: " + p.docked.join(", ") : "", (ADM.d.wallpapers || []).indexOf(id) >= 0 ? "own wallpaper" : ""].filter(Boolean).join(" · "))] : ["Setup", "nothing saved yet"],
+      srcs ? ["Sources", esc(srcs)] : null,
+      p ? ["Saved", esc(p.notes + " notes · " + p.todos + " to-dos · " + p.cal + " events" + (p.favs ? " · " + p.favs + " favorites" : ""))] : null,
+      ipKeys.length ? ["Addresses", ipKeys.map(function (ip) { return admLink("ip:" + ip, ip) + ' <small class="mut">' + esc((ipl[ip].cc ? ipl[ip].cc + " · " : "") + ipl[ip].n + "×") + "</small>"; }).join("<br>")] : null,
+      myFb ? ["Feedback", myFb + " sent"] : null
+    ]);
+  }
+  if (kind === "ip") {
+    var vs = D.visits.filter(function (v) { return v.ip === id; }).sort(function (a, b) { return b.at - a.at; });
+    if (!vs.length) return admKv([["", "No visits from this address in the last 30 days"]]);
+    var last = vs[0], firstV = vs[vs.length - 1], who = {};
+    vs.forEach(function (v) { if (v.u) who[v.u.id] = v.u; });
+    var host = ""; try { host = last.ref ? new URL(last.ref).hostname : ""; } catch (e) { host = last.ref.slice(0, 40); }
+    return admKv([
+      ["Country", esc(last.cc || "unknown")], ["First seen", esc(admWhen(firstV.at))], ["Last seen", esc(admWhen(last.at))], ["Visits", vs.length + " in 30 days"],
+      ["Accounts", Object.keys(who).length ? Object.keys(who).map(function (k) { return admLink("u:" + k, who[k].email || k); }).join("<br>") : "not signed in"],
+      ["Browser", esc(admUa(last.ua))], ["Language", esc([last.lang, last.tz].filter(Boolean).join(" · "))], host ? ["Came from", esc(host)] : null
+    ]);
+  }
+  var f = D.fb.filter(function (x) { return String(x.id) === id; })[0];
+  if (!f) return admKv([["", "Not in the list any more"]]);
+  var by = f.user_id && D.byId[f.user_id];
+  return admKv([
+    ["Kind", esc([f.kind, f.area, f.freq].filter(Boolean).join(" · "))], ["Status", esc(f.status || "new")],
+    f.title ? ["Title", esc(f.title)] : null,
+    f.a ? ["Text", esc(String(f.a).slice(0, 1200))] : null, f.b ? ["More", esc(String(f.b).slice(0, 800))] : null, f.c ? ["Also", esc(String(f.c).slice(0, 800))] : null,
+    ["From", by ? admLink("u:" + f.user_id, by.email || "account") : "not signed in"], f.ip ? ["Address", admLink("ip:" + f.ip, f.ip)] : null,
+    f.contact ? ["Contact", esc(f.contact)] : null, f.info ? ["Device", esc(String(f.info).slice(0, 300))] : null, ["Sent", esc(admWhen(admTs(f.at)))]
+  ]);
 }
 function admHtml() {
   var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["fb", "Feedback"], ["in", "Sign-ins"], ["ip", "Visitors"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div>" +
@@ -5597,18 +5710,19 @@ function admHtml() {
   if (!isAdmin()) return '<div class="adm"><p class="mut">Only for the site owner.</p></div>';
   if (!ADM.d) { if (!ADM.busy && !ADM.err) setTimeout(function () { admLoad(); }, 0); return '<div class="adm">' + top + '<p class="mut sn">' + (ADM.err ? esc(ADM.err) : "Loading…") + "</p></div>"; }
   var D = admData(), N = D.n, S = ADMSEEN, body = "", L = 30;
-  var fbRow = function (f) { return admRow(admTs(f.at) > S, '<b class="pill' + ((f.status || "new") === "new" ? " ac" : "") + '">' + esc(f.status || "new") + "</b> " + esc(String(f.title || f.a || "(no title)").slice(0, 120)), esc([f.kind, f.area].filter(Boolean).join(" · ")), admTs(f.at)); };
-  var accRow = function (u) { return admRow(admTs(u.created) > S, esc(u.email || "(no email)"), u.confirmed ? "" : "not confirmed", admTs(u.created)); };
-  var inRow = function (u) { return admRow(admTs(u.last) > S, esc(u.email || ""), "", admTs(u.last)); };
-  var ipRow = function (x) { return admRow(x.at > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits")), x.at); };
+  var fbRow = function (f) { return admRow(admTs(f.at) > S, '<b class="pill' + ((f.status || "new") === "new" ? " ac" : "") + '">' + esc(f.status || "new") + "</b> " + esc(String(f.title || f.a || "(no title)").slice(0, 120)), esc([f.kind, f.area].filter(Boolean).join(" · ")), admTs(f.at), "f:" + f.id); };
+  var accRow = function (u) { return admRow(admTs(u.created) > S, esc(u.email || "(no email)"), u.confirmed ? "" : "not confirmed", admTs(u.created), "u:" + u.id); };
+  var inRow = function (u) { return admRow(admTs(u.last) > S, esc(u.email || ""), "", admTs(u.last), "u:" + u.id); };
+  var ipRow = function (x) { return admRow(x.at > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits")), x.at, "ip:" + x.ip); };
   if (ADM.tab === "sum") {
     var ev = [];
-    D.accts.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.created), h: admRow(admTs(u.created) > S, "New account: " + esc(u.email || ""), "", admTs(u.created)) }); });
-    D.fb.slice(0, 10).forEach(function (f) { ev.push({ t: admTs(f.at), h: admRow(admTs(f.at) > S, "Feedback: " + esc(String(f.title || f.a || "").slice(0, 90)), esc(f.kind || ""), admTs(f.at)) }); });
-    D.logins.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.last), h: admRow(admTs(u.last) > S, "Signed in: " + esc(u.email || ""), "", admTs(u.last)) }); });
-    D.ips.slice(0, 10).forEach(function (x) { ev.push({ t: x.at, h: admRow(x.at > S, "New visitor: " + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at) }); });
+    D.accts.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.created), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.created) > S, "New account: " + esc(u.email || ""), "", admTs(u.created), k); } }); });
+    D.fb.slice(0, 10).forEach(function (f) { ev.push({ t: admTs(f.at), k: "f:" + f.id, h: function (k) { return admRow(admTs(f.at) > S, "Feedback: " + esc(String(f.title || f.a || "").slice(0, 90)), esc(f.kind || ""), admTs(f.at), k); } }); });
+    D.logins.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.last), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.last) > S, "Signed in: " + esc(u.email || ""), "", admTs(u.last), k); } }); });
+    D.ips.slice(0, 10).forEach(function (x) { ev.push({ t: x.at, k: "ip:" + x.ip, h: function (k) { return admRow(x.at > S, "New visitor: " + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at, k); } }); });
+    // the same account can be in the timeline twice (new and signed in): only the line you clicked opens
     body = '<div class="admst">' + [[N.users, "accounts"], ["+" + N.new1 + " / +" + N.new7, "new today / 7 days"], [N.active, "active today"], [N.visitors, "visitors today"], [N.fbNew, "feedback open"], [N.ipNew, "new IPs today"]].map(function (x) { return "<div><b>" + x[0] + "</b><small>" + x[1] + "</small></div>"; }).join("") + "</div>" +
-      ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x) { return x.h; }).join("");
+      ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x, n) { return x.h(x.k + "#" + n); }).join("");
   }
   else if (ADM.tab === "acc") body = D.accts.slice(0, L).map(accRow).join("");
   else if (ADM.tab === "fb") body = D.fb.slice(0, L).map(fbRow).join("") || '<p class="mut sn">No feedback.</p>';
@@ -5619,10 +5733,11 @@ function admHtml() {
 }
 function admAct(a, k) {
   if (!isAdmin()) return;
-  if (a === "admtab") { ADM.tab = k; admDraw(); }
+  if (a === "admtab") { ADM.tab = k; ADM.open = ""; admDraw(); }
   else if (a === "admload") admLoad(true);
   else if (a === "admseen") { ADMSEEN = Date.now(); save("sp_admseen", ADMSEEN); admDraw(); }
   else if (a === "admopen") { putWidget("adm"); admLoad(); }
+  else if (a === "admx") { ADM.open = ADM.open === k ? "" : k; admDraw(); }
 }
 
 // ✎ puts the cursor at the end of the text, ready to change it (Enter or clicking elsewhere saves, Esc stops)
@@ -5742,7 +5857,7 @@ function dockAdd(k, side) {
     '<button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
   $(d.side === "r" ? "dockPR" : "dockP").appendChild(w);
   if (kind === "t" && P.dockChat) dockChat(d.uid);
-  syncDock(); closeModal();
+  renderSide(); closeModal();   // (the docked panels on that side now follow the video's width)
 }
 function dockChat(uid) {
   var w = $("dk" + uid), d = DOCK.filter(function (x) { return x.uid === +uid; })[0];
@@ -5792,7 +5907,7 @@ document.addEventListener("dblclick", function (e) {
 function undock(uid) {
   DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
   var n = $("dk" + uid); if (n) n.remove();
-  syncDock();
+  renderSide();
 }
 
 // ---- Currency and crypto converter (no key: exchangerate.host mirror + CoinGecko, both called straight from the browser) ----
@@ -6499,7 +6614,7 @@ document.addEventListener("click", function (e) {
   if (/^city/.test(a)) { cityAct(a, k); return; }
   if (a === "clockmenu") { audio(); MENU_OPEN = ""; if (k === "s") startStopwatch(); else if (k === "calc") { render(); openCalc(); } else if (k === "adm") { render(); admAct("admopen"); } else openClock(k); return; }
   if (/^calc(key|sci|deg)$/.test(a)) { calcAct(a, k); return; }
-  if (/^adm(tab|load|seen|open)$/.test(a)) { admAct(a, k); return; }
+  if (/^adm(tab|load|seen|open|x)$/.test(a)) { admAct(a, k); return; }
   if (a === "swfs") { swFs(k); return; }
   if (a === "noteedit") { noteEdit(k); return; }
   if (a === "cltest") { audio(); ring($("clSnd").value); return; }
@@ -7042,7 +7157,7 @@ function openHelp() {
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; TV shows</b> (or Layout &amp; boxes).</p>' +
     '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for a small card with what the show is about, where it runs and its next and latest episode, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
     '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes, the calendar or the calculator:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. On a computer, drag a docked panel by its title to move it up or down, or across to the other side (⇄ does that in one click); it stays where you let go. In <b>Edit</b> mode each docked panel also gets T&minus; / T+ for its own text size, its bottom edge sets its height and its inner edge the width of that side (double-click an edge to undo it). This is kept for computers only. On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page, centered like the boxes. ✕ turns a panel back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
+  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes, the calendar or the calculator:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. On a computer, drag a docked panel by its title to move it up or down, in toward the boxes, or across to the other side (⇄ does that in one click); it stays where you let go. In <b>Edit</b> mode each docked panel also gets T&minus; / T+ for its largest text size, its bottom edge sets its height and its inner edge the width of the panels on that side (double-click an edge to undo it). A docked panel always shows all of its content: made narrower or shorter, everything in it gets smaller instead of being cut off or scrolling. This is kept for computers only. On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page, centered like the boxes. ✕ turns a panel back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
   html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. To change an event afterwards, press ✎ on it: the same form then holds its name, day, time, reminder and repeat; press Save, or Cancel to leave it as it was. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
     '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
     '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +

@@ -1631,7 +1631,7 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 /* ---- Docked panels on a computer: drag the title to move one, and in Edit mode its text size, height and the side's width ---- */
 .sw{position:relative;display:flex;flex-direction:column;min-height:0}
 .sw .swb{min-height:0}
-.sw.swfixh .swb{flex:1;overflow-y:auto;overscroll-behavior:contain}
+.sw.swfixh .swb{flex:1;min-height:0;overflow:hidden;overscroll-behavior:contain}
 .swt{display:flex;align-items:center;gap:5px;cursor:grab;user-select:none;-webkit-user-select:none;flex:1;min-width:0}
 .swgrip{font-style:normal;color:var(--mut);opacity:.55;font-size:12px}
 .swh:hover .swgrip{opacity:1;color:var(--ac)}
@@ -1698,3 +1698,15 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 }/* the calculator's window is only as wide as the calculator; the owner panel's a little wider */
 .mbox:has(.calc){width:min(380px,100%)}
 .mbox:has(.adm){width:min(560px,100%)}
+/* a panel on a side without a video: its own width, and it can sit away from the screen's edge */
+.sw.swx{flex:none;max-width:100%}
+.sw.swx.left{align-self:flex-start}
+.sw.swx.right{align-self:flex-end}
+/* owner panel: click an account, an address or a message for its details */
+.arow.aclick{cursor:pointer}
+.arow.aclick:hover>span:first-child{color:var(--ac)}
+.arow.aopen{border-bottom-color:transparent}
+.admd{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;padding:6px 8px 8px;margin:0 0 6px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
+.admd>span{color:var(--mut);white-space:nowrap}
+.admd>b{font-weight:500;min-width:0;overflow-wrap:anywhere}
+.admd .lnk2{font-size:12px;padding:0;text-align:left}
