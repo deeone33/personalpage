@@ -1,4 +1,4 @@
-var VERSION = 184;
+var VERSION = 185;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6613,27 +6613,64 @@ function cityAct(a, k) {
 // ---- Stocks: details window with TradingView chart, and adding symbols ----
 // A symbol picked from the search has the exchange as an ending (SAAB-B.ST); the chart wants it in front (OMXSTO:SAAB_B)
 var TV_EX = { ST: "OMXSTO", HE: "OMXHEX", CO: "OMXCOP", IC: "OMXICE", TL: "OMXTSE", RG: "OMXRSE", VS: "OMXVSE", OL: "OSL", DE: "XETR", F: "FWB", L: "LSE", PA: "EURONEXT", AS: "EURONEXT", BR: "EURONEXT", LS: "EURONEXT", IR: "EURONEXT", MI: "MIL", MC: "BME", SW: "SIX", VI: "VIE", WA: "GPW", TO: "TSX", V: "TSXV", AX: "ASX", HK: "HKEX", T: "TSE", KS: "KRX", NS: "NSE", BO: "BSE", SS: "SSE", SZ: "SZSE", SA: "BMFBOVESPA", MX: "BMV" };
+// Indices and other names the quotes know by a short name of their own: on its own TradingView reads "SPX" as a share
+// on a German exchange (SpaceX), so these get their exchange spelled out. TradingView does not let its embedded charts
+// show the official index feeds (SP:SPX, DJ:DJI, NASDAQ:IXIC: "only available on TradingView"), so the indices use
+// TradingView's own index price that follows them point for point (FOREXCOM). The Nasdaq Composite has none: its chart
+// is the Nasdaq 100, and the window says so (TV_NOTE).
+var TV_FIX = { SPX: "FOREXCOM:SPXUSD", "^GSPC": "FOREXCOM:SPXUSD", DJI: "FOREXCOM:DJI", "^DJI": "FOREXCOM:DJI", NASDAQ: "FOREXCOM:NSXUSD", "^IXIC": "FOREXCOM:NSXUSD",
+  NDX: "FOREXCOM:NSXUSD", "^NDX": "FOREXCOM:NSXUSD", XAUUSDG: "TVC:GOLD", XAGUSDG: "TVC:SILVER", BCOUSD: "TVC:UKOIL" };
+var TV_NOTE = { NASDAQ: "The chart shows the Nasdaq 100, which moves almost exactly like the Nasdaq Composite; the Composite itself cannot be shown here.", "^IXIC": "" };
+TV_NOTE["^IXIC"] = TV_NOTE.NASDAQ;
 function tvSym(id) {
+  if (TV_FIX[id]) return TV_FIX[id];
   if (id.indexOf(":") >= 0) return id;
   var m = /^([A-Z0-9-]+)\.([A-Z]{1,2})$/.exec(id), c = /^([A-Z0-9]{2,10})-USD$/.exec(id);
   if (m && TV_EX[m[2]]) return TV_EX[m[2]] + ":" + (m[2] === "HK" ? m[1].replace(/^0+/, "") : m[1].replace(/-/g, "_"));
   return c ? c[1] + "USD" : id.replace(/-/g, ".");
 }
+var STOPEN = "";   // the stock whose window is open (the chart switch redraws its chart)
 function openStock(id) {
+  STOPEN = id;
   var s = tk(id), q = QUOTES[s], se = encodeURIComponent(s.replace(/_/g, "-"));
   var lk = function (u, l) { return '<a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + u + '">' + l + "</a>"; };
-  openModal(id, (q ? '<div class="mrow sthead"><b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") + "</div>" : "") +
-    '<div id="tv" class="tv"></div><div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
+  var sw = '<span class="seg stsw" id="stSw" role="group" aria-label="Chart style"><button data-a="stchart" data-k="line" title="Price line: hover anywhere for the price">' +
+    '<svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M1 9l4-4 3 2 6-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+    '<button data-a="stchart" data-k="adv" title="Full chart: candles, volume and tools"><svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M3 1v9M7.5 0v11M12 2v7" stroke="currentColor" stroke-width="1"/><rect x="1.5" y="3" width="3" height="4" fill="currentColor"/><rect x="6" y="2" width="3" height="6" fill="none" stroke="currentColor"/><rect x="10.5" y="4" width="3" height="3" fill="currentColor"/></svg></button></span>';
+  openModal(id, '<div class="mrow sthead">' + (q ? '<b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") : "") + sw + "</div>" +
+    '<div id="tv" class="tv"></div>' + (TV_NOTE[id] ? '<p class="mut sn stnote">' + esc(TV_NOTE[id]) + "</p>" : "") + '<div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
     '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + '<button class="lnk2" data-a="paopen" data-k="' + esc(id) + '">Set a price alert</button></p>');
   loadStockNews(id);
+  stChart(id);
+}
+// Two kinds of chart, switched with the button above it (the choice is kept with your settings):
+// "line" = a clean price line where hovering anywhere shows the price at that moment, with ranges from 1 day to all time;
+// "adv" = TradingView's full chart with candles, volume and its own toolbar.
+function stChartKind() { return P.stChart === "adv" ? "adv" : "line"; }
+function stChart(id) {
+  var el = $("tv"), sw = $("stSw"), q = QUOTES[tk(id)], kind = stChartKind();
+  if (!el) return;
+  el.innerHTML = ""; el.className = "tv tv-" + kind;
+  if (sw) Array.prototype.forEach.call(sw.children, function (b) { b.classList.toggle("on", b.dataset.k === kind); b.setAttribute("aria-pressed", b.dataset.k === kind); });
   var box = document.createElement("div"); box.className = "tradingview-widget-container"; box.style.height = "100%";
   var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget"; inner.style.height = "100%";
   box.appendChild(inner);
   var sc = document.createElement("script"); sc.async = true;
-  sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-  sc.text = JSON.stringify({ autosize: true, symbol: tvSym(id), interval: "D", timezone: "Europe/Tallinn", theme: P.theme, style: "1", locale: "en", allow_symbol_change: false, hide_side_toolbar: true });
+  if (kind === "adv") {
+    sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    sc.text = JSON.stringify({ autosize: true, symbol: tvSym(id), interval: "D", timezone: "Europe/Tallinn", theme: P.theme, style: "1", locale: "en", allow_symbol_change: false, hide_side_toolbar: true });
+  } else {
+    // green or red like the change today; the colors are the page's own up / down colors
+    var cs = getComputedStyle(document.body), up = !q || q.c == null || q.c >= 0, col = (cs.getPropertyValue(up ? "--up" : "--down") || (up ? "#2fd17f" : "#ff5c6c")).trim();
+    if (!/^#[0-9a-f]{6}$/i.test(col)) col = up ? "#2fd17f" : "#ff5c6c";
+    sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+    sc.text = JSON.stringify({ symbols: [[id, tvSym(id) + "|1D"]], chartOnly: false, autosize: true, width: "100%", height: "100%", locale: "en", colorTheme: P.theme === "light" ? "light" : "dark",
+      isTransparent: true, showVolume: false, showMA: false, hideDateRanges: false, hideMarketStatus: false, hideSymbolLogo: false, scalePosition: "right", scaleMode: "Normal", fontSize: "10",
+      noTimeScale: false, valuesTracking: "1", changeMode: "price-and-percent", chartType: "area", lineWidth: 2, lineType: 0,
+      lineColor: col, topColor: col + "55", bottomColor: col + "00", dateRanges: ["1d|1", "1m|30", "3m|60", "12m|1D", "60m|1W", "all|1M"] });
+  }
   box.appendChild(sc);
-  $("tv").appendChild(box);
+  el.appendChild(box);
 }
 document.addEventListener("submit", function (e) {
   if (e.target.id !== "addStock") return;
@@ -6771,6 +6808,7 @@ document.addEventListener("click", function (e) {
   if (a === "opencal") { CALV = null; openCal(); return; }
   if (/^cal(day|nav|del|jump|rep|edit|cancel)$/.test(a)) { calAct(a, k); return; }
   if (a === "paopen" || a === "padel") { paAct(a, k); return; }
+  if (a === "stchart") { if (k !== stChartKind()) { P.stChart = k; persist(); stChart(STOPEN); } return; }
   if (a === "icsexport") { icsExport(); return; }
   if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
@@ -7268,7 +7306,7 @@ function openHelp() {
     '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
     '<li>Paste that link into the link field (the same one as for a Google Sheet) and press Import.</li>' +
     '</ol></li></ol>' +
-    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open and its &ldquo;down&rdquo; color while it is closed (the same colors and strength as the rest of the box, set under Settings &rarr; Appearance &rarr; Signal colors per box). Point at it for a small box with your main markets, or click it for all of them, lined up in columns: the market, how many of your stocks are on it, open or closed, how long until it closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto is left out because it never closes; currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. <b>Price alerts:</b> the bell button next to the clock opens a small window where you fill in one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price field starts at what the stock costs now. You get one notification when it happens and the alert then switches itself off; tick it to set it again, change its price or condition right in the list, or remove it with ✕. <b>Set a price alert</b> in the window of a stock opens the same thing for that stock. Up to 30 alerts; prices are looked at about once a minute while the page is open in a tab. Star or hide a stock in Edit mode.</p>' +
+    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for its chart with recent news and chatter about it. The switch above the chart swaps between a clean price line (hover anywhere for the price then; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools; the one you pick stays picked. Big indices are drawn with TradingView&rsquo;s own index price, since the official feeds cannot be shown outside TradingView (for the Nasdaq Composite that is the Nasdaq 100, as the window says). <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open and its &ldquo;down&rdquo; color while it is closed (the same colors and strength as the rest of the box, set under Settings &rarr; Appearance &rarr; Signal colors per box). Point at it for a small box with your main markets, or click it for all of them, lined up in columns: the market, how many of your stocks are on it, open or closed, how long until it closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto is left out because it never closes; currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. <b>Price alerts:</b> the bell button next to the clock opens a small window where you fill in one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price field starts at what the stock costs now. You get one notification when it happens and the alert then switches itself off; tick it to set it again, change its price or condition right in the list, or remove it with ✕. <b>Set a price alert</b> in the window of a stock opens the same thing for that stock. Up to 30 alerts; prices are looked at about once a minute while the page is open in a tab. Star or hide a stock in Edit mode.</p>' +
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
   html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li><li>With several channels, each Telegram post starts with its channel&rsquo;s name. Settings &rarr; News, Telegram &amp; Reddit &rarr; <b>Channel names in Telegram posts</b> turns that off (<b>Source names after headlines</b> does the same for News and Reddit).</li></ul>' +
