@@ -73,8 +73,29 @@
    <div class="ph"><b id="setTitle">Settings</b><button id="closeBtn" aria-label="Close settings">✕ Close</button></div>
    <div class="setbody">
 
-  <section class="setgrp" data-cat="Look" data-sec="Appearance">
-    <div class="mut sn">Colors, text size and effects for the whole page. Each box can also get its own text size: cogwheel → Edit, click the box, then T− and T+.</div>
+  <section class="setgrp" data-cat="Page" data-sec="Layout &amp; boxes">
+    <div class="mut sn">Switch whole boxes on or off; a box that is off is not loaded either. To move or resize boxes, choose Edit in the cogwheel menu. A phone keeps its own order, list lengths and text sizes when you change them there.</div>
+    <div class="sub"><b>Boxes on the page</b>
+      <div id="boxList" class="boxlist"></div>
+      <div class="mut sn">Web page boxes are switched on in their own section under Content.</div>
+    </div>
+    <div class="sub" data-kw="hidden restore streamers sources stocks"><b>Hidden items</b>
+      <div class="mut sn">Streamers, sources and stocks you hid with Hide in Edit mode. Restore brings one back.</div>
+      <div id="hiddenList" class="mut"></div>
+    </div>
+    <div class="sub" data-kw="notes calendar calculator dock docked side panel"><b>Notes and docked panels</b>
+      <div class="mut sn">Notes, the calendar and the calculator can stay open beside the boxes: open one and press Dock.</div>
+      <label data-kw="paste clipboard ctrl+v">Pasting on the page (Ctrl+V) offers to save it as a note <input type="checkbox" id="pasteOn"></label>
+    </div>
+    <div class="sub" data-kw="interests starter country football news gaming investing tech music podcasts sources setup guide wizard start over again"><b>Setup</b>
+      <div class="mut sn">Add interests: choose your country and what you are into; the boxes these need are switched on and good sources are added to the ones you have. Nothing is removed.</div>
+      <div class="mut sn">The setup guide walks through the boxes, your city and each source again. It changes nothing until you do.</div>
+      <span><button data-a="sxopen">Add interests</button> <button data-a="wizopen">Run the setup guide again</button></span>
+    </div>
+  </section>
+
+  <section class="setgrp" data-cat="Page" data-sec="Appearance">
+    <div class="mut sn">Colors, text size and effects for the whole page. A single box gets its own text size in Edit mode: click the box, then T− and T+.</div>
     <div class="sub"><b>Theme and colors</b>
       <label>Theme <button id="themeBtn"></button></label>
       <label>Accent color <span><input type="color" id="accent"> <button id="accentReset">Reset</button></span></label>
@@ -82,16 +103,15 @@
       <label>Boxes <input type="color" id="cCard"></label>
       <label>Box opacity <input type="range" id="cAlpha" min="30" max="100"></label>
       <label>Text color <input type="color" id="cFg"></label>
-      <label>Muted text <input type="color" id="cMut"></label>
-      <label data-kw="next event upcoming line under the date calendar">Next-event line under the date <span><input type="color" id="cNext"> <button id="cNextReset">Reset</button></span></label>
+      <label data-kw="muted grey gray secondary faint">Dim text color (times, sources, notes) <input type="color" id="cMut"></label>
       <span><button id="cReset">Reset colors</button></span>
     </div>
     <div class="sub"><b>Text and effects</b>
       <label>Text size <input type="range" id="fsAll" min="70" max="140" step="5"></label>
       <div class="mut sn" data-kw="phone mobile text size font">A phone has its own text size: set it on the phone and the computer stays as it is.</div>
-      <label data-kw="aurora gradient">Glow background <input type="checkbox" id="auroraOn"></label>
+      <label data-kw="aurora gradient glow background">Glow behind the page <input type="checkbox" id="auroraOn"></label>
       <label>Shadows behind boxes and logo <input type="checkbox" id="shadowOn"></label>
-      <label>Rounded corners (boxes, menus, windows and buttons) <input type="checkbox" id="roundOn"></label>
+      <label data-kw="round square corners radius">Rounded corners (boxes, menus, windows and buttons) <input type="checkbox" id="roundOn"></label>
     </div>
     <div class="sub" data-kw="red green live dot signal color colour per box opacity">
       <b>Signal colors per box</b>
@@ -100,39 +120,14 @@
     </div>
   </section>
 
-  <section class="setgrp" data-cat="Look" data-sec="Wallpaper">
+  <section class="setgrp" data-cat="Page" data-sec="Wallpaper">
     <div class="mut sn">Your own picture behind the page. It follows your account to your other devices.</div>
     <label>Image <span><label class="filebtn" for="wallFile">Choose image</label><input type="file" id="wallFile" accept="image/*" class="vis-hidden"> <button id="wallClear">Remove</button></span></label>
-    <label>Fit <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
+    <label data-kw="fit fill crop size">How the image fits <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
     <div class="mut sn">Press Reposition, then drag the screen to move the image. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
   </section>
 
-  <section class="setgrp" data-cat="Look" data-sec="Layout &amp; boxes">
-    <div class="mut sn">Switch whole boxes on or off. A box that is off is not loaded either. To move or resize boxes, close this window and choose Edit in the cogwheel menu. A phone keeps its own list lengths, text sizes and order when you change them there.</div>
-    <div class="sub"><b>Boxes on the page</b>
-      <div id="boxList" class="boxlist"></div>
-      <div class="mut sn">Web page boxes have their own section under Content.</div>
-    </div>
-    <div class="sub">
-      <b>Hidden streamers, sources and stocks</b>
-      <div class="mut sn">Things you hid with Hide in Edit mode. Restore brings one back.</div>
-      <div id="hiddenList" class="mut"></div>
-    </div>
-    <div class="sub"><b>Notes and calendar</b>
-      <div class="mut sn">Notes and the calendar can stay open at the side of the page: open one and press Dock left or Dock right.</div>
-      <label data-kw="paste clipboard">Ctrl+V on the page offers to save the pasted text as a note <input type="checkbox" id="pasteOn"></label>
-    </div>
-    <div class="sub" data-kw="interests starter country football news gaming investing tech music podcasts sources"><b>Add interests</b>
-      <div class="mut sn">Choose your country and what you are into: the boxes these need are switched on and good sources are added to the ones you have. Nothing is removed.</div>
-      <span><button data-a="sxopen">Add interests</button></span>
-    </div>
-    <div class="sub"><b>Start over</b>
-      <div class="mut sn">The setup guide walks through the boxes, your city and each source again. It changes nothing until you do.</div>
-      <span><button data-a="wizopen">Run the setup guide again</button></span>
-    </div>
-  </section>
-
-  <section class="setgrp" data-cat="Look" data-sec="Date &amp; time">
+  <section class="setgrp" data-cat="Page" data-sec="Date &amp; time">
     <div class="mut sn" data-kw="clock date time world clocks day name location timezone">What the top-left corner of the page shows, and the time in other cities.</div>
     <div class="sub"><b>Date and time at the top of the page</b>
       <div id="ckPrev" class="ckprev" aria-label="How it looks"></div>
@@ -146,10 +141,11 @@
         <label><input type="checkbox" id="ckWd"> Weekday in front of the date</label>
         <label><input type="checkbox" id="ckSec"> Seconds</label>
       </div>
-      <label>Written as in <select id="ckFmt"></select></label>
+      <label data-kw="written as in country format">Date and time format as in <select id="ckFmt"></select></label>
       <label>The date <select id="ckStyle"></select></label>
-      <label>The clock <select id="ckH"><option value="">Follows “Written as in”</option><option value="24">24-hour: 21:41</option><option value="12">12-hour: 9:41 PM</option></select></label>
+      <label>The clock <select id="ckH"><option value="">Follows the format above</option><option value="24">24-hour: 21:41</option><option value="12">12-hour: 9:41 PM</option></select></label>
       <label>Location for the date and time <button data-a="opensettingsloc">Change</button></label>
+      <label data-kw="next event upcoming line under the date calendar color">Color of the next-event line under the date <span><input type="color" id="cNext"> <button id="cNextReset">Reset</button></span></label>
     </div>
     <div class="sub"><b>How the day name looks</b>
       <label>Font <select id="ckFont"></select></label>
@@ -165,15 +161,31 @@
       <div id="wcList"></div>
       <div class="mut sn">The small box shows each city’s time and date, and how many hours it is ahead or behind. On a phone you tap the date instead of pointing at it. On the page, a small ⁺¹ after a time means it is already tomorrow there.</div>
     </div>
-    <div class="mut sn">Timers, countdowns and the stopwatch are the clock icon in the menu box. Their sound is under Notifications.</div>
   </section>
 
-  <section class="setgrp wide" data-cat="Look" data-sec="Bookmarks">
+  <section class="setgrp" data-cat="Page" data-sec="Search bar">
+    <div class="mut sn">The search field at the top of the page. It also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>; Enter copies the answer. Type <code>help</code> in it to see everything it can do.</div>
+    <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
+    <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
+    <div class="sub" data-kw="prefix prefixes command word words site search all boxes ss note todo translate tr help shortcut shift alt enter"><b>Command words</b>
+      <div class="mut sn">A word at the start of what you type tells the bar what to do with the rest, for example <code>ss ferry</code> searches every box on the page. Change a word here: letters and digits, up to 12.</div>
+      <label>Search all boxes <input type="text" id="cmdSs" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for searching all boxes"></label>
+      <label>Save a note <input type="text" id="cmdNote" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a note"></label>
+      <label>Save a to-do <input type="text" id="cmdTodo" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a to-do"></label>
+      <label>Translate <input type="text" id="cmdTr" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for translating"></label>
+      <label>Show what the bar can do <input type="text" id="cmdHelp" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for the help of the search bar"></label>
+      <label>Search all boxes without the word <select id="ssKeySel"><option value="shift">Shift+Enter</option><option value="alt">Alt+Enter</option><option value="off">Off</option></select></label>
+      <div id="cmdMsg" class="mut sn" role="status"></div>
+      <span><button id="cmdReset">Back to the standard words</button></span>
+    </div>
+  </section>
+
+  <section class="setgrp wide" data-cat="Page" data-sec="Bookmarks">
     <div class="mut sn">A slim row of your own links at the very top of the page. Switched off, it takes no room at all.</div>
     <div class="sub"><b>The bar</b>
       <label>Show the bookmarks bar <input type="checkbox" id="bmOn"></label>
       <label>Open links in a new tab <input type="checkbox" id="bmNw"></label>
-      <label>Where the bar starts <select id="bmAl"><option value="l">From the left</option><option value="c">Centered</option><option value="r">From the right</option></select></label>
+      <label data-kw="where the bar starts left centered right">Align the bar <select id="bmAl"><option value="l">Left</option><option value="c">Center</option><option value="r">Right</option></select></label>
       <label>Color for all bookmarks <span><input type="color" id="bmColAll" aria-label="Color for all bookmarks"> <button data-a="bmcolreset">Reset all colors</button></span></label>
     </div>
     <div class="sub"><b>Add a bookmark</b>
@@ -195,28 +207,9 @@
     </div>
   </section>
 
-  <section class="setgrp" data-cat="Look" data-sec="Search bar">
-    <div class="mut sn">The search field at the top of the page.</div>
-    <label>Search engine <select id="engineSel"><option value="google">Google</option><option value="ddg">DuckDuckGo</option><option value="brave">Brave</option><option value="bing">Bing</option><option value="kagi">Kagi</option></select></label>
-    <label>Open results in a new tab <input type="checkbox" id="srchNewTab"></label>
-    <div class="mut sn">The bar also answers sums and conversions while you type, for example <code>12*45</code>, <code>15% of 240</code>, <code>100 usd in eur</code> or <code>10 km in miles</code>. Enter copies the answer. Type <code>help</code> in it to see everything it can do.</div>
-    <div class="sub" data-kw="prefix prefixes command word words site search all boxes ss note todo translate tr help shortcut shift alt enter"><b>Command words</b>
-      <div class="mut sn">A word at the start of what you type tells the bar what to do with the rest, for example <code>ss ferry</code> searches every box on the page. Change a word here: letters and digits, up to 12.</div>
-      <label>Search all boxes <input type="text" id="cmdSs" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for searching all boxes"></label>
-      <label>Save a note <input type="text" id="cmdNote" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a note"></label>
-      <label>Save a to-do <input type="text" id="cmdTodo" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for saving a to-do"></label>
-      <label>Translate <input type="text" id="cmdTr" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for translating"></label>
-      <label>Show what the bar can do <input type="text" id="cmdHelp" class="cmdw" maxlength="12" spellcheck="false" aria-label="Word for the help of the search bar"></label>
-      <label>Search all boxes without the word <select id="ssKeySel"><option value="shift">Shift+Enter</option><option value="alt">Alt+Enter</option><option value="off">Off</option></select></label>
-      <div id="cmdMsg" class="mut sn" role="status"></div>
-      <span><button id="cmdReset">Back to the standard words</button></span>
-      <div class="mut sn">The single keys that work when you are not typing (for example <code>Q</code> to search all boxes and <code>D</code> for Discover on Twitch) are under Keyboard shortcuts.</div>
-    </div>
-  </section>
-
-  <section class="setgrp" data-cat="Look" data-sec="Keyboard shortcuts" id="keysSec">
+  <section class="setgrp" data-cat="Page" data-sec="Keyboard shortcuts" id="keysSec">
     <div class="mut sn">Shortcuts work when you are not typing in a box. To change one, click its key and press the new key. Backspace removes the key, Esc cancels.</div>
-    <label>Keyboard shortcuts <input type="checkbox" id="keysOn"></label>
+    <label>Use keyboard shortcuts <input type="checkbox" id="keysOn"></label>
     <div class="sub" id="keyList"></div>
     <button data-a="keyreset">Back to the standard keys</button>
   </section>
@@ -257,28 +250,43 @@
       <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
       <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
       <label>Channel names in Telegram posts <input type="checkbox" id="tgNamesOn"></label>
-      <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
+      <label data-kw="reddit comments post window">Top comments under a Reddit post <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
+      <label data-kw="away come back return unread new seen count">When you come back to the page <select id="awaySeen"><option value="keep">Unread posts stay new</option><option value="seen">What was on screen counts as seen</option></select></label>
     </div>
     <div class="sub" data-kw="reader read scroll scrolling posts catch up window click older newer direction"><b>Reading posts</b>
       <label>Clicking a post opens <select id="rdrClick"><option value="reader">Reader</option><option value="one">Single post</option></select></label>
-      <label>After clicking a post, scrolling down goes to <select id="rdrCdir"><option value="old">Older posts</option><option value="new">Newer posts</option></select></label>
-      <label>From the catch-up button, scrolling down goes to <select id="rdrBdir"><option value="new">Newer posts</option><option value="old">Older posts</option></select></label>
       <label data-kw="snap one post at a time page freely">Scrolling in the reader moves <select id="rdrSnap"><option value="one">One post at a time</option><option value="free">Freely</option></select></label>
-      <label data-kw="away come back return unread new seen count">When you come back to the page <select id="awaySeen"><option value="keep">Unread posts stay new</option><option value="seen">What was on screen counts as seen</option></select></label>
-      <label data-kw="reader window size height tall small big">Height of the reader window <select id="rdrH"><option value="90">90% of the screen</option><option value="75">75%</option><option value="60">60%</option><option value="50">50%</option></select></label>
-      <label data-kw="post end wheel notch notches scrolls push next short long">Wheel notches to go to the next post <select id="rdrPush"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
-      <label data-kw="post skip next short long hold arrive wheel scroll">After arriving at a post, ignore the wheel for <select id="rdrHold"><option value="0">Off</option><option value="100">0.1 second</option><option value="200">0.2 seconds</option><option value="300">0.3 seconds</option><option value="400">0.4 seconds</option><option value="500">0.5 seconds</option><option value="700">0.7 seconds</option><option value="1000">1 second</option></select></label>
       <div class="mut sn">The reader shows the posts of a box one under another, each in full, to scroll through. The catch-up button is the small list button at the top of News, Telegram and Reddit: it opens the reader at the oldest post you have not seen.</div>
+      <details class="smore"><summary>More reader options <small>scroll direction, window height, wheel</small></summary>
+        <label>After clicking a post, scrolling down goes to <select id="rdrCdir"><option value="old">Older posts</option><option value="new">Newer posts</option></select></label>
+        <label>From the catch-up button, scrolling down goes to <select id="rdrBdir"><option value="new">Newer posts</option><option value="old">Older posts</option></select></label>
+        <label data-kw="reader window size height tall small big">Height of the reader window <select id="rdrH"><option value="90">90% of the screen</option><option value="75">75%</option><option value="60">60%</option><option value="50">50%</option></select></label>
+        <label data-kw="post end wheel notch notches scrolls push next short long">Wheel clicks needed to go to the next post <select id="rdrPush"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
+        <label data-kw="post skip next short long hold arrive wheel scroll ignore">Pause the wheel after arriving at a post <select id="rdrHold"><option value="0">Off</option><option value="100">0.1 second</option><option value="200">0.2 seconds</option><option value="300">0.3 seconds</option><option value="400">0.4 seconds</option><option value="500">0.5 seconds</option><option value="700">0.7 seconds</option><option value="1000">1 second</option></select></label>
+      </details>
     </div>
     <span><button id="srcReset">Back to default sources</button></span>
   </section>
 
+  <section class="setgrp" data-cat="Content" data-sec="Sports">
+    <div class="mut sn">The leagues the Sports box follows. Each one is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments; Formula 1 and golf show the event with its sessions or leaders. SHL (shl.se) and the esports games (bo3.gg) need you to be signed in.</div>
+    <div id="spList"></div>
+    <span><button data-a="spreset">Back to the starting leagues</button></span>
+    <div class="sub"><b>Favorites</b>
+      <label data-kw="favourite favorite sport ufc view">Favorite sport <select id="spFavSel"></select></label>
+      <div class="mut sn">Your favorite sport gets its own choice in the Sports box (★ and its name): everything in it that is on now, today and coming up. A UFC card that is on shows every fight as its own row.</div>
+      <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
+      <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite.</div>
+    </div>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Stocks">
-    <div class="mut sn">The stocks, funds, indexes and crypto in the Stocks box. To take one off the list, hide it in Edit mode. Price alerts are under Notifications.</div>
+    <div class="mut sn">The stocks, funds, indexes and crypto in the Stocks box. To take one off the list, hide it in Edit mode.</div>
     <div class="sub"><b>Add one</b>
       <form id="addStock" class="add"><input id="stockIn" placeholder="Company name or symbol, e.g. Tesla or NVDA" aria-label="Company name or stock symbol" autocomplete="off"><button>Add</button></form>
       <div id="stockRes"></div>
     </div>
+    <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
     <div class="sub"><b>Add many at once</b>
       <form id="impStock" class="add imp"><textarea id="impIn" rows="2" placeholder="Paste a list of symbols, e.g. NVDA, AAPL, BTCUSD (or a TradingView export)" aria-label="Import a list of symbols"></textarea><button>Import</button></form>
       <form id="linkStock" class="add"><input id="linkIn" placeholder="Link to a Google Sheet or a shared TradingView watchlist" aria-label="Google Sheet or TradingView watchlist link"><button>Import</button></form>
@@ -286,31 +294,61 @@
     </div>
     <div id="stMsg" class="sn" role="status"></div>
     <div id="stImp"></div>
-    <label data-kw="sparkline sparklines graph line">Small chart on each row <select id="sparkSel"><option value="off">Off</option><option value="d">Today</option><option value="w">This week (5 trading days)</option><option value="m">This month</option></select></label>
   </section>
 
-  <section class="setgrp" data-cat="Content" data-sec="Sports">
-    <div class="mut sn">Choose which leagues the Sports box follows. Each one you add is one more thing to load, so pick the ones you actually watch. Tennis shows tournaments (click one for its matches); Formula 1 and golf show the event with its sessions or leaders. SHL comes from shl.se and the esports games from bo3.gg (top-tier tournaments); those need you to be signed in.</div>
-    <div id="spList"></div>
-    <span><button data-a="spreset">Back to the starting leagues</button></span>
-    <div class="sub"><b>Favorites</b>
-      <label data-kw="favourite favorite sport ufc view">Favorite sport <select id="spFavSel"></select></label>
-      <div class="mut sn">Your favorite sport gets its own choice in the Sports box (★ and its name): everything in it that is on now, today and coming up. A UFC card that is on shows every fight as its own row.</div>
-      <label>Show my ★ favorites' games in the calendar <input type="checkbox" id="spCalOn"></label>
-      <div class="mut sn">Mark a team, fighter or player with ☆ in a game's window to make it a favorite. Alerts for favorites are under Notifications.</div>
+  <section class="setgrp" data-cat="Content" data-sec="Mail">
+    <div class="mut sn">Shows your unread Gmail without giving this site your Google password. Step-by-step instructions are in Help → Mail (Gmail).</div>
+    <div class="sub">
+      <b>First inbox</b>
+      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
+      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
+      <input type="text" class="secret" id="mt0" placeholder="Token" autocomplete="off" spellcheck="false">
     </div>
+    <div class="sub">
+      <b>Second inbox</b>
+      <input type="text" id="mn1" placeholder="Name, e.g. Work">
+      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
+      <input type="text" class="secret" id="mt1" placeholder="Token" autocomplete="off" spellcheck="false">
+    </div>
+    <span><button id="mailSave" class="pri">Save</button></span>
+    <div id="mailMsg" class="mut" role="status"></div>
   </section>
 
-  <section class="setgrp" data-cat="Content" data-sec="TV shows">
-    <div class="mut sn" data-kw="tv television series shows episodes streaming netflix hbo calendar">A box with the next episodes of the shows you follow, the ones that just aired, and what is on today. Press ⌕ in the box and type a name to follow a show; click any row for the show and its episodes.</div>
-    <label>Show the TV shows box <input type="checkbox" id="tvOn" data-a="boxtoggle" data-k="tv"></label>
-    <label>Country for “On today” <select id="tvCc"></select></label>
-    <label data-kw="calendar episodes">Show my shows' episodes in the calendar <input type="checkbox" id="tvCalOn"></label>
-    <div class="mut sn">The next and the latest episode of each show you follow. A notification when a new episode airs is switched on and off under Notifications.</div>
-    <div class="sub"><b>Shows you follow</b>
-      <div id="tvSet"></div>
+  <section class="setgrp" data-cat="Content" data-sec="Calendar">
+    <div class="mut sn">Your own events are added and changed in the calendar itself (the calendar icon in the menu box; ✎ on an event changes it). Here you bring in other calendars, choose which days the calendar marks by itself, and take your own events elsewhere.</div>
+    <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
+      <b>Calendars from elsewhere</b>
+      <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
+      <div class="add stfile"><label class="filebtn" for="icsFile">Import an .ics file</label><input type="file" id="icsFile" accept=".ics,.ical,.ifb,text/calendar" class="vis-hidden"><span class="mut sn">Copies the events into your own calendar, once. You can change and delete them afterwards.</span></div>
+      <form id="icsAdd" class="add"><input id="icsUrl" placeholder="Or follow a calendar by its address (.ics)" aria-label="Calendar address" autocomplete="off" maxlength="1000"><button>Follow</button></form>
+      <div class="mut sn">A calendar you follow is read again every half hour and shown next to your own events, without copying them. Up to four. Needs you to be signed in.</div>
+      <div id="icsMsg" class="sn" role="status"></div>
+      <div id="icsImp"></div>
+      <div id="icsList"></div>
     </div>
-    <div class="mut sn">Times are shown in your own time zone. Show information comes from TVmaze.com.</div>
+    <div class="sub">
+      <b>Mark these days</b>
+      <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
+      <div id="sdGroups"></div>
+      <label data-kw="mother father day country">Mother's and Father's Day dates from <select id="sdMf"></select></label>
+      <label data-kw="payday salary">Payday (day of the month, empty = off) <input type="number" id="sdPay" min="1" max="31" step="1" placeholder="–"></label>
+      <div class="mut sn">A payday that falls on a weekend is shown on the Friday before.</div>
+    </div>
+    <div class="sub">
+      <b>Public holidays (days most people are off work)</b>
+      <div id="sdHol" class="chipwrap"></div>
+    </div>
+    <div class="sub">
+      <b>Remind me of marked days</b>
+      <label>When <select id="sdRemDays"><option value="0">On the day</option><option value="1">The day before</option><option value="3">3 days before</option><option value="7">A week before</option></select></label>
+      <div id="sdRem" class="chipwrap"></div>
+      <div class="mut sn">Tick the days you want a notification for. It appears from 08:00 while this page is open, and needs Calendar reminders switched on under Notifications. A day only reminds you if it is also marked above.</div>
+    </div>
+    <div class="sub" data-kw="export download ics backup google outlook apple">
+      <b>Take your events elsewhere</b>
+      <div class="mut sn">Saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</div>
+      <span><button data-a="icsexport">Download my events as an .ics file</button></span>
+    </div>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Twitch">
@@ -328,94 +366,51 @@
     <div class="mut sn">Export it from Google Takeout, then choose it here (you must be signed in).</div>
   </section>
 
+  <section class="setgrp" data-cat="Content" data-sec="TV shows">
+    <div class="mut sn" data-kw="tv television series shows episodes streaming netflix hbo calendar">A box with the next episodes of the shows you follow, the ones that just aired, and what is on today. Switch it on under Layout &amp; boxes. Press ⌕ in the box and type a name to follow a show; click any row for the show and its episodes.</div>
+    <label>Country for “On today” <select id="tvCc"></select></label>
+    <label data-kw="calendar episodes">Show my shows' episodes in the calendar <input type="checkbox" id="tvCalOn"></label>
+    <div class="sub"><b>Shows you follow</b>
+      <div id="tvSet"></div>
+    </div>
+    <div class="mut sn">Times are shown in your own time zone. Show information comes from TVmaze.com.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Content" data-sec="Podcasts">
+    <div class="mut sn" data-kw="podcast podcasts episodes shows follow listen apple">The newest episodes of the podcasts you follow. Switch the box on under Layout &amp; boxes. In the box, Popular shows the most listened shows of a country and ⌕ searches every podcast. Episodes play in the Radio box (its first button switches between radio and podcasts), and where you stopped is remembered on every device.</div>
+    <div class="sub"><b>Playing</b>
+      <label data-kw="podcast speed faster slower">Playing speed <select id="podSpeedSet"><option value="0.8">0.8×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></label>
+      <label data-kw="podcast skip back rewind">Jump back <select id="podBackSet"><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option></select></label>
+      <label data-kw="podcast skip forward">Jump forward <select id="podFwdSet"><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option></select></label>
+    </div>
+    <div class="sub"><b>The list</b>
+      <label data-kw="podcast finished played episodes">Played episodes <select id="podDoneSet"><option value="dim">Stay in the list, dimmed</option><option value="hide">Leave the list</option></select></label>
+      <label data-kw="podcast popular chart country">Popular list from <select id="podCcSet"></select></label>
+    </div>
+    <div class="sub"><b>Podcasts you follow</b>
+      <div class="mut sn">☆ on a show gives you a notification for its new episodes.</div>
+      <div id="podSet"></div>
+    </div>
+    <details class="smore" data-kw="podcast radio box progress line time left rolling scrolling title marquee jump buttons"><summary>In the Radio box <small>progress line, time left, jump buttons, long titles</small></summary>
+      <label>Progress line under the episode <input type="checkbox" id="podLineSet"></label>
+      <label>Time left <input type="checkbox" id="podTimeSet"></label>
+      <label>Jump back and forward buttons <input type="checkbox" id="podJumpSet"></label>
+      <label data-kw="rolling scrolling marquee title">Long titles <select id="podRollSet"><option value="cut">Cut short with …</option><option value="roll">Roll slowly across</option></select></label>
+      <div class="mut sn">The jump buttons are always in the player window (click the episode in the Radio box). In a narrow Radio box they step aside by themselves, so the title keeps its room.</div>
+    </details>
+    <div class="mut sn">Shows, episodes and the popular lists come from Apple's public podcast directory. The episode itself plays straight from the show's own address.</div>
+  </section>
+
   <section class="setgrp" data-cat="Content" data-sec="Radio">
-    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak. The box has the list, a play button (it stops the radio while it plays), the next station, what is playing (ⓘ) and the volume. The radio keeps playing while you use the rest of the page.</div>
+    <div class="mut sn" data-kw="music stations stream fm">Tick the stations you want in the Radio box's list. They are sorted by genre, and the tag after each name is the language the presenters speak.</div>
     <div class="sub" data-kw="add own station search find genre radio browser stream address"><b>Add a station of your own</b>
       <div class="add"><input type="text" id="radQ" placeholder="Station name, city or genre, e.g. BBC Radio 1, Stockholm, jazz" aria-label="Search for a radio station" autocomplete="off"><button data-a="radgo">Search</button></div>
       <div id="radRes"></div>
       <div id="radMsg" class="sn" role="status"></div>
-      <div class="mut sn">▶ plays a station so you can hear it first; Add puts it in your list under “My stations”. You can also paste a stream address (https://…) here. A station you already have is not added twice. The song that is playing shows for your own stations too, when the station sends it.</div>
+      <div class="mut sn">▶ plays a station so you can hear it first; Add puts it in your list under “My stations”. You can also paste a stream address (https://…) here. A station you already have is not added twice.</div>
     </div>
     <div id="radList"></div>
     <span><button data-a="radreset">Back to the starting stations</button></span>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Podcasts">
-    <div class="mut sn" data-kw="podcast podcasts episodes shows follow listen apple">The Podcasts box shows the newest episodes of the podcasts you follow. Choose <b>Popular</b> in the box for the most listened shows of a country, or press ⌕ to search every podcast. Episodes play in the Radio box: its first button switches between radio and podcasts. Where you stopped is remembered on every device.</div>
-    <label>Show the Podcasts box <input type="checkbox" id="podOn" data-a="boxtoggle" data-k="podcasts"></label>
-    <label data-kw="podcast speed faster slower">Playing speed <select id="podSpeedSet"><option value="0.8">0.8×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select></label>
-    <label data-kw="podcast skip back rewind">Jump back <select id="podBackSet"><option value="10">10 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option></select></label>
-    <label data-kw="podcast skip forward">Jump forward <select id="podFwdSet"><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option></select></label>
-    <label data-kw="podcast finished played episodes">Played episodes <select id="podDoneSet"><option value="dim">Stay in the list, dimmed</option><option value="hide">Leave the list</option></select></label>
-    <label data-kw="podcast new episode notification bell star">Notifications for new episodes of <select id="podNtfSet"><option value="star">Shows with a ☆</option><option value="all">Every show I follow</option></select></label>
-    <label data-kw="podcast popular chart country">Popular list from <select id="podCcSet"></select></label>
-    <div class="mut sn">Notifications for new episodes are switched on and off under Notifications. Put a ☆ on a show on its page in the box, or in the list below.</div>
-    <div class="sub" data-kw="podcast radio box progress line time left rolling scrolling title marquee jump buttons"><b>In the Radio box</b>
-      <label>Progress line under the episode <select id="podLineSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
-      <label>Time left <select id="podTimeSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
-      <label>Jump back and forward buttons <select id="podJumpSet"><option value="1">Show</option><option value="0">Hide</option></select></label>
-      <label>Long titles <select id="podRollSet"><option value="cut">Cut short with …</option><option value="roll">Roll slowly across</option></select></label>
-      <div class="mut sn">The jump buttons are always in the player window (click the episode in the Radio box). In a narrow Radio box they step aside by themselves, so the title keeps its room.</div>
-    </div>
-    <div class="sub"><b>Podcasts you follow</b>
-      <div id="podSet"></div>
-    </div>
-    <div class="mut sn">Shows, episodes and the popular lists come from Apple's public podcast directory. The episode itself plays straight from the show's own address.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Mail">
-    <div class="mut sn">Shows your unread Gmail without giving this site your Google password. Step-by-step instructions are in Help → Mail (Gmail).</div>
-    <div class="sub">
-      <b>First inbox</b>
-      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
-      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-      <input type="text" class="secret" id="mt0" placeholder="Token" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="sub">
-      <b>Second inbox</b>
-      <input type="text" id="mn1" placeholder="Name, e.g. Work">
-      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-      <input type="text" class="secret" id="mt1" placeholder="Token" autocomplete="off" spellcheck="false">
-    </div>
-    <span><button id="mailSave">Save Gmail accounts</button></span>
-    <div id="mailMsg" class="mut" role="status"></div>
-  </section>
-
-  <section class="setgrp" data-cat="Content" data-sec="Calendar">
-    <div class="mut sn">Your own events are added and changed in the calendar itself (the calendar icon in the menu box; ✎ on an event changes it). Here you bring in other calendars, take your own events out, and choose which days the calendar marks by itself.</div>
-    <div class="sub" data-kw="ics ical icalendar google outlook apple import subscribe calendar address file">
-      <b>Calendars from elsewhere</b>
-      <div class="mut sn">Bring in events from Google Calendar, Outlook, Apple Calendar or anything else that can give you an .ics file or address. How to get one is in Help → Calendar.</div>
-      <div class="add stfile"><label class="filebtn" for="icsFile">Import an .ics file</label><input type="file" id="icsFile" accept=".ics,.ical,.ifb,text/calendar" class="vis-hidden"><span class="mut sn">Copies the events into your own calendar, once. You can change and delete them afterwards.</span></div>
-      <form id="icsAdd" class="add"><input id="icsUrl" placeholder="Or follow a calendar by its address (.ics)" aria-label="Calendar address" autocomplete="off" maxlength="1000"><button>Follow</button></form>
-      <div class="mut sn">A calendar you follow is read again every half hour and shown next to your own events, without copying them. Up to four. Needs you to be signed in.</div>
-      <div id="icsMsg" class="sn" role="status"></div>
-      <div id="icsImp"></div>
-      <div id="icsList"></div>
-    </div>
-    <div class="sub" data-kw="export download ics backup google outlook apple">
-      <b>Take your events elsewhere</b>
-      <div class="mut sn">Saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</div>
-      <span><button data-a="icsexport">Download my events as an .ics file</button></span>
-    </div>
-    <div class="sub">
-      <b>Mark these days</b>
-      <div class="mut sn" data-kw="holiday holidays christmas easter valentine mother father halloween special days red days week number payday moon">Days the calendar marks by itself. They show on their day (hover or click the day to read them) and are not listed under Coming up. A public holiday turns the date red.</div>
-      <div id="sdGroups"></div>
-      <label>Mother's and Father's Day as in <select id="sdMf"></select></label>
-      <label>Payday on day of the month (empty = off) <input type="number" id="sdPay" min="1" max="31" step="1" placeholder="–"></label>
-      <div class="mut sn">A payday that falls on a weekend is shown on the Friday before.</div>
-    </div>
-    <div class="sub">
-      <b>Public holidays (days most people are off work)</b>
-      <div id="sdHol" class="chipwrap"></div>
-    </div>
-    <div class="sub">
-      <b>Remind me of marked days</b>
-      <label>When <select id="sdRemDays"><option value="0">On the day</option><option value="1">The day before</option><option value="3">3 days before</option><option value="7">A week before</option></select></label>
-      <div id="sdRem" class="chipwrap"></div>
-      <div class="mut sn">Tick the days you want a notification for. It appears from 08:00 while this page is open, and needs Calendar reminders switched on under Notifications. A day only reminds you if it is also marked above.</div>
-    </div>
   </section>
 
   <section class="setgrp wide" data-cat="Content" data-sec="Web page boxes">
@@ -431,19 +426,16 @@
       <label class="in">Sources needed <input type="number" id="nfSrcN" min="2" max="6" step="1"></label>
       <label>Headlines with your highlight words <input type="checkbox" id="nfWords"></label>
       <label>Stock moves <input type="checkbox" id="nfStock"></label>
-      <label class="in">Fast move, % within 30 min <input type="number" id="nfPct" min="0.5" max="50" step="0.5"></label>
-      <label class="in">Day move, % <input type="number" id="nfDay" min="1" max="90" step="0.5"></label>
+      <label class="in" data-kw="fast move percent">Fast move (% within 30 minutes) <input type="number" id="nfPct" min="0.5" max="50" step="0.5"></label>
+      <label class="in" data-kw="day move percent">Move over the day (%) <input type="number" id="nfDay" min="1" max="90" step="0.5"></label>
       <label>★ streamer goes live <input type="checkbox" id="nfLive"></label>
       <label>★ team or player: start, goals, final score <input type="checkbox" id="nfSport"></label>
       <label data-kw="tv show series episode airs">New episode of a TV show I follow <input type="checkbox" id="nfTv"></label>
       <label data-kw="podcast episode new">New episode of a podcast I follow <input type="checkbox" id="nfPod"></label>
+      <label class="in" data-kw="podcast new episode notification bell star">Which podcasts <select id="podNtfSet"><option value="star">Shows with a ☆</option><option value="all">Every show I follow</option></select></label>
       <label>Calendar reminders <input type="checkbox" id="nfCal"></label>
       <label>New mail <input type="checkbox" id="nfMail"></label>
-    </div>
-    <div class="mut sn" data-kw="price alert level stock bell">An alert for a price you choose is set with the bell button in the Stocks box.</div>
-    <div class="sub"><b>Sound</b>
-      <label>Ping sound with a notification <input type="checkbox" id="nfSound"></label>
-      <label data-kw="alarm timer countdown volume loudness">Alarm volume (timers, countdowns, alarms) <input type="range" id="volSlider" min="0" max="100"></label>
+      <div class="mut sn" data-kw="price alert level stock bell">An alert for a price you choose is set with the bell button in the Stocks box.</div>
     </div>
     <div class="sub"><b>Also send them</b>
       <label>As desktop notifications <input type="checkbox" id="nfDesktop"></label>
@@ -451,14 +443,13 @@
       <div class="mut sn">Emails go to your connected Gmail inbox, sent by its own script (Settings → Mail), with everything from a five-minute stretch in one email. This needs the newer script code from Help → Mail, and this page has to be open in a tab. <button data-a="nfmailtest">Send a test email</button></div>
       <div id="nfMailMsg" class="sn" role="status"></div>
     </div>
-    <span><button data-a="nftest">Show a test notification</button></span>
-    <div class="sub"><b>Last 5 notifications and why</b>
-      <div class="mut sn">Every notification and alarm on this device, with what caused it and whether it made a sound. Use it when you heard something and saw nothing.</div>
-      <div id="nfLog"></div>
+    <div class="sub"><b>Sound</b>
+      <label>Ping sound with a notification <input type="checkbox" id="nfSound"></label>
+      <label data-kw="alarm timer countdown volume loudness">Alarm volume (timers, countdowns, alarms) <input type="range" id="volSlider" min="0" max="100"></label>
     </div>
     <div class="sub" data-kw="tab title count number unread new browser tab favicon dot"><b>Count in the tab title</b>
       <div class="mut sn">The page's tab shows how many new things are waiting, like “(5) OmniTree”, so you see it from other tabs.</div>
-      <label>Show a count in the tab title <select id="tabOn"><option value="1">On</option><option value="0">Off</option></select></label>
+      <label>Show a count in the tab title <input type="checkbox" id="tabOn"></label>
       <div class="tabbx" id="tabBoxes">
         <label>New mail <input type="checkbox" data-tab="mail"></label>
         <label>New Telegram posts <input type="checkbox" data-tab="tg"></label>
@@ -471,7 +462,11 @@
       </div>
       <div class="mut sn" id="tabPrev" role="status"></div>
     </div>
-    <div class="mut sn">The summary window has its own section, right below this one.</div>
+    <span><button data-a="nftest">Show a test notification</button></span>
+    <div class="sub"><b>Last 5 notifications and why</b>
+      <div class="mut sn">Every notification and alarm on this device, with what caused it and whether it made a sound. Use it when you heard something and saw nothing.</div>
+      <div id="nfLog"></div>
+    </div>
   </section>
 
   <section class="setgrp wide" data-cat="Alerts" data-sec="Summary">
@@ -487,46 +482,48 @@
       <label>Most items in each part <select id="sumN"></select></label>
     </div>
     <div class="sub"><b>What is in it</b>
-      <div class="mut sn">Untick a part to leave it out. ▲ ▼ change the order. <b>Choose…</b> narrows a part down to certain sources, channels or sports. A part with nothing to show is left out by itself.</div>
+      <div class="mut sn">Untick a part to leave it out. ▲ ▼ change the order. Choose… narrows a part down to certain sources, channels or sports. A part with nothing to show is left out by itself.</div>
       <div id="sumParts"></div>
     </div>
     <span><button class="pri" data-a="sumshow">Show the summary now</button></span>
   </section>
 
-  <section class="setgrp" data-cat="Account" data-sec="Password">
-    <div id="pwSignedIn">
-      <form class="nosub">
-      <input type="text" id="pwUser" name="username" autocomplete="username" class="vis-hidden" tabindex="-1" aria-hidden="true">
-      <label>New password <input type="password" id="pwNew" name="new-password" placeholder="8+ characters" autocomplete="new-password"></label>
-      <label>Type it again <input type="password" id="pwNew2" name="new-password-again" placeholder="Same password once more" autocomplete="new-password"></label>
-      <button type="button" id="pwSave">Update password</button>
-      </form>
-      <div id="pwMsg" class="mut sn" role="status"></div>
+  <section class="setgrp" data-cat="Account" data-sec="Sign-in &amp; security" id="actSec">
+    <div class="sub" data-kw="password change new"><b>Password</b>
+      <div id="pwSignedIn">
+        <form class="nosub">
+        <input type="text" id="pwUser" name="username" autocomplete="username" class="vis-hidden" tabindex="-1" aria-hidden="true">
+        <label>New password <input type="password" id="pwNew" name="new-password" placeholder="8+ characters" autocomplete="new-password"></label>
+        <label>Type it again <input type="password" id="pwNew2" name="new-password-again" placeholder="Same password once more" autocomplete="new-password"></label>
+        <button type="button" id="pwSave">Update password</button>
+        </form>
+        <div id="pwMsg" class="mut sn" role="status"></div>
+      </div>
+      <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
     </div>
-    <div id="pwSignedOut" class="mut" hidden>Sign in (the person icon in the menu box) to change your password.</div>
-  </section>
-
-  <section class="setgrp" data-cat="Account" data-sec="Sign-in activity" id="actSec">
-    <div class="mut sn">Every device and browser that is signed in to your account right now, and the latest sign-ins. If something here is not you, change your password and sign the other devices out.</div>
-    <div id="actList"></div>
-    <label>Email me when a new device or browser signs in <input type="checkbox" id="devMailOn"></label>
-    <div class="mut sn">Sent through your connected Gmail inbox (Settings → Mail), by the page itself the first time it opens in a browser your account has not been seen in.</div>
-    <span><button data-a="actload">Refresh</button> <button data-a="actout">Sign out everywhere else</button></span>
-  </section>
-
-  <section class="setgrp" data-cat="Account" data-sec="Backup">
-    <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
-    <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
-    <div id="bkMsg" class="mut sn" role="status"></div>
-  </section>
-
-  <section class="setgrp" data-cat="Account" data-sec="Delete account">
-    <div id="delSignedIn">
-      <div class="mut sn">Deletes your account for good, with everything saved in it: settings, sources, notes, calendar and wallpaper. This cannot be undone. Download a backup first if you might want your setup back. You can create a new account with the same email afterwards.</div>
-      <button class="danger" data-a="delacct">Delete my account…</button>
-      <div id="delMsg" class="sn" role="status"></div>
+    <div class="sub" data-kw="sign-in activity devices browsers sessions sign out everywhere"><b>Signed-in devices</b>
+      <div class="mut sn">Every device and browser that is signed in to your account right now, and the latest sign-ins. If something here is not you, change your password and sign the other devices out.</div>
+      <div id="actList"></div>
+      <label>Email me when a new device or browser signs in <input type="checkbox" id="devMailOn"></label>
+      <div class="mut sn">Sent through your connected Gmail inbox (Settings → Mail), by the page itself the first time it opens in a browser your account has not been seen in.</div>
+      <span><button data-a="actload">Refresh</button> <button data-a="actout">Sign out everywhere else</button></span>
     </div>
-    <div id="delSignedOut" class="mut" hidden>Sign in first to delete an account.</div>
+  </section>
+
+  <section class="setgrp" data-cat="Account" data-sec="Your data">
+    <div class="sub" data-kw="backup restore export download file"><b>Backup</b>
+      <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
+      <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
+      <div id="bkMsg" class="mut sn" role="status"></div>
+    </div>
+    <div class="sub" data-kw="delete account remove close"><b>Delete account</b>
+      <div id="delSignedIn">
+        <div class="mut sn">Deletes your account for good, with everything saved in it: settings, sources, notes, calendar and wallpaper. This cannot be undone. Download a backup first if you might want your setup back. You can create a new account with the same email afterwards.</div>
+        <span><button class="danger" data-a="delacct">Delete my account…</button></span>
+        <div id="delMsg" class="sn" role="status"></div>
+      </div>
+      <div id="delSignedOut" class="mut" hidden>Sign in first to delete an account.</div>
+    </div>
     <div class="mut sn">What is stored about you and why: <a href="privacy" target="_blank" rel="noopener">Privacy policy</a></div>
   </section>
 
