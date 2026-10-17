@@ -1,4 +1,4 @@
-var VERSION = 178;
+var VERSION = 179;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5436,6 +5436,14 @@ function swFs(k) {
 // nearest: at the screen's edge, or right next to the boxes. Only well over on the other side of the screen does it
 // change side, so the page does not jump about while you drag.
 var SWDRAG = null;
+// A click on the empty part of a docked column is a click on nothing: without this the browser puts the cursor in the
+// nearest text you can edit (the last to-do of a docked Notes panel) and starts typing there.
+document.addEventListener("mousedown", function (e) {
+  if (e.target !== $("dock") && e.target !== $("dockR")) return;
+  e.preventDefault();
+  var a = document.activeElement;
+  if (a && a !== document.body && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)) && a.closest("#dock, #dockR")) a.blur();
+}, true);
 document.addEventListener("pointerdown", function (e) {
   var h = e.target.closest && e.target.closest(".sw .swh");
   if (!h || layM() || e.button !== 0 || e.target.closest("button")) return;
