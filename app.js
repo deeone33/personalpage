@@ -1,4 +1,4 @@
-var VERSION = 180;
+var VERSION = 181;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -28,8 +28,7 @@ var DATA = {
     { id: "pixelchef", sub: "Just Chatting", v: 3100, live: 1 },
     { id: "tavern_bard", sub: "Music", v: 1900, live: 1 },
     { id: "gridline", sub: "Grand Theft Auto V", v: 1200, live: 1 },
-    { id: "northwind", sub: "Hearthstone", v: 640, live: 1 },
-    { id: "raidleader_x", sub: "Offline", v: 0, live: 0 }
+    { id: "northwind", sub: "Hearthstone", v: 640, live: 1 },    { id: "raidleader_x", sub: "Offline", v: 0, live: 0 }
   ],
   youtube: [
     { ch: "WoW Academy", t: "Raid guide: Black Temple", age: "2h" },
@@ -92,14 +91,73 @@ function loadSamples() {
     v("Build Things", "I made a desk that hides every cable", 800), v("Trail Notes", "Three days alone on the coastal path", 1300), v("WoW Academy", "Ten addons you should be using", 1700)
   ];
   NEWSV++;
+  demoSeed();
   render();
+}
+// The rest of the preview is the real thing, filled once with examples so every box and panel can be tried: a few TV shows
+// and the top podcasts (real data, from TVmaze and Apple), notes and to-dos, calendar events, notifications in the bell, and
+// Notes and the calendar docked beside the boxes where the screen has room. Everything added is marked "demo" and taken
+// out again when an account is created here (demoStrip), so a new account starts with none of it.
+var DEMO_TV = [[83, "The Simpsons"], [112, "South Park"], [361, "Saturday Night Live"], [114, "Survivor"], [44933, "Severance"], [46562, "The Last of Us"]];
+function demoSeed() {
+  if (USER || P.demo) return;
+  P.demo = { v: 1, side: [] };
+  var day = function (n) { var d = new Date(Date.now() + n * 86400000); return d.toLocaleDateString("en-CA", { timeZone: TZ }); }, now = Date.now(), L = LAY();
+  L.c = L.c || {}; L.fs = L.fs || {}; L.rows = L.rows || {};
+  if (!(P.tv && P.tv.on)) { var T = tvp(); T.on = true; T.demo = 1; DEMO_TV.forEach(function (s) { T.shows.push({ id: s[0], n: s[1], demo: 1 }); }); L.c.tv = 6; L.fs.tv = 0.9; L.rows.tv = 6; }
+  if (!(P.pod && P.pod.on)) { var p = podp(); p.on = true; p.demo = 1; L.c.podcasts = 6; L.fs.podcasts = 0.9; L.rows.podcasts = 6; demoPods(); }
+  var n = function (id, t, mins, todo, done, pin) { return { id: "demo" + id, t: t, ts: now - mins * 60000, todo: todo, done: done, pin: pin, demo: 1 }; };
+  P.notes = (P.notes || []).concat([
+    n(1, "Ideas for the weekend: the coastal path, the new bakery, the book fair on Sunday", 30, false, false, true),
+    n(2, "Buy rye bread and coffee", 50, true), n(3, "Book the ferry tickets for spring", 90, true), n(4, "Call the dentist back", 200, true, true),
+    n(5, "Wi-Fi at the cabin: the code is on the router. Bring the long cable.", 600)
+  ]);
+  var e = function (id, t, d, tm) { var o = { id: "demo" + id, t: t, d: day(d), demo: 1 }; if (tm) o.tm = tm; return o; };
+  P.cal = (P.cal || []).concat([e(1, "Gym", 0, "18:00"), e(2, "Dentist", 1, "14:30"), e(3, "Team meeting", 3, "10:00"), e(4, "Book fair", 6), e(5, "Ferry to Stockholm", 9, "07:15")]);
+  // docked beside the boxes only where both columns fit next to the page, so the preview never squeezes the boxes
+  var W = document.documentElement.clientWidth || window.innerWidth;
+  if (!layM() && W >= 1840) { P.side = Object.assign({}, P.side, { notes: "left", cal: "right" }); P.demo.side = ["notes", "cal"]; }
+  else if (!layM() && W >= 1530) { P.side = Object.assign({}, P.side, { notes: "right" }); P.demo.side = ["notes"]; }
+  if (!NLOG.length) {
+    var g = function (k, t, b, mins, act) { return { k: k, t: t, b: b, ts: now - mins * 60000, act: act || null, demo: 1 }; };
+    NLOG = [g("cal", "Gym at 18:00", "Today", 15, { a: "cal", k: day(0) }), g("stock", "NVDA +4.2% today", "NVIDIA · 142.30", 40, { a: "stock", k: "NVDA" }),
+      g("live", "nocturne_tv is live", "World of Warcraft · 21.4k watching", 70), g("news", "Riksbank holds interest rate steady and signals cuts next year", "World Wire · sample headline", 95)];
+    save("sp_nlog", NLOG);
+  }
+  save("sp_prefs", P);
+  renderSide(); fetchTv(true);
+}
+// the most-listened podcasts in the visitor's country right now (Apple's chart), four of them
+function demoPods() {
+  podGet(podCc() + "/rss/toppodcasts/limit=4/json").then(function (j) {
+    var list = ((j || {}).feed || {}).entry || [], p = podp();
+    if (USER || !p.demo) return;
+    (Array.isArray(list) ? list : [list]).forEach(function (x) {
+      var im = x["im:image"] || [], id = String(((x.id || {}).attributes || {})["im:id"] || "");
+      if (id && !podHas(id)) p.f.push({ id: id, n: String((x["im:name"] || {}).label || "").slice(0, 100), a: String((x["im:artist"] || {}).label || "").slice(0, 80), img: safeUrl(String((im[im.length - 1] || {}).label || "")), since: Date.now() - 7 * 86400000, demo: 1 });
+    });
+    save("sp_prefs", P); render(); fetchPod(true);
+  }).catch(function () {});
+}
+// An account is being created from the preview: everything demoSeed added goes; what the visitor changed themselves stays
+function demoStrip() {
+  var D = P.demo;
+  if (!D) return;
+  var mine = function (x) { return !(x && x.demo); };
+  P.notes = (P.notes || []).filter(mine); P.cal = (P.cal || []).filter(mine);
+  if (P.tv) { P.tv.shows = (P.tv.shows || []).filter(mine); if (P.tv.demo) { if (!P.tv.shows.length) P.tv.on = false; delete P.tv.demo; } }
+  if (P.pod) { P.pod.f = (P.pod.f || []).filter(mine); if (P.pod.demo) { if (!P.pod.f.length) { P.pod.on = false; P.pod.mode = "radio"; } delete P.pod.demo; } }
+  (D.side || []).forEach(function (w) { if (P.side) delete P.side[w]; });
+  NLOG = NLOG.filter(mine); save("sp_nlog", NLOG);
+  delete P.demo;
 }
 // The small note at the bottom of a details window in the preview
 function previewNote() { return '<p class="pvnote">This is sample content. <button class="lnk2" data-a="pvup">Create a free account</button> to fill this box with your own.</p>'; }
 
 // ---- Storage (safe if the browser blocks it) ----
 function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
-function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+var LEAVING = false;   // set while the page restarts for another account: nothing of the old one may be written back
+function save(k, v) { if (LEAVING) return false; try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 var DEFAULT_ACCENT = "#f5b942";
 var P = load("sp_prefs", { theme: "dark", accent: DEFAULT_ACCENT, fs: 0.95, fav: {}, hidden: {} });
 var EDIT = false;
@@ -215,6 +273,7 @@ function applyTheme() {
   document.body.classList.toggle("noshadow", P.shadow === false);
   $("shadowOn").checked = P.shadow !== false;
   $("srcNamesOn").checked = !P.hideSrc;
+  $("tgNamesOn").checked = !P.hideTgSrc;
   $("cBg").value = c.bg; $("cCard").value = c.card; $("cFg").value = c.fg; $("cMut").value = c.mut; $("cAlpha").value = c.a;
   $("volSlider").value = P.vol == null ? 70 : P.vol;
   // the "next in your calendar" line under the date: your own color, or the accent color
@@ -655,7 +714,7 @@ function render() {
   T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + "°</b>" + (wWarn.length ? '<span class="warn" title="' + esc(wxWarnText(wWarn)) + '" aria-label="Weather warning">!</span>' : "") + '<span class="mut">' + esc(note) + "</span></div>", 1);
   T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
-    if (!cfg || !cfg.url) val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>';
+    if (!cfg || !cfg.url) { val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>'; click = PREVIEW; }
     else if (!m) val = '<span class="mut">Loading...</span>';
     else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">Error</span>';
     else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
@@ -700,7 +759,7 @@ function render() {
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
-  var tgMulti = allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
+  var tgMulti = !P.hideTgSrc && allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
   var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !isRead(g.u); }).length;
   var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
@@ -4871,6 +4930,14 @@ function openMail(i) {
   var note = seen && n.n === 0 ? '<p class="mut">Nothing new since you pressed Mark read. Your latest unread mail:</p>' : "";
   openModal(nm + " · " + n.txt + " " + n.lab, ctl + note + (rows || '<p class="mut">No unread mail.</p>'));
 }
+// The preview's inboxes: made-up mail, shown the way a connected Gmail account is
+function openDemoMail(i) {
+  var inb = DATA.inbox[i], L = i ? [["Ferry Line", "Your booking request was received", "We will send your tickets for the spring departure once payment is confirmed.", 25], ["Book Fair", "Programme for Sunday", "Readings start at 11:00 in the main hall. Here is the full list of events.", 140], ["Running Club", "Saturday route changed", "We meet at the harbour this week instead of the park.", 600]]
+    : [["Your bank", "Your monthly statement is ready", "The statement for September can now be viewed in the app.", 12], ["Team", "Notes from today's meeting", "Attached are the notes and the three things we agreed to do next.", 48], ["Dentist", "Appointment reminder", "This is a reminder of your appointment tomorrow at 14:30.", 95], ["Bakery", "Fresh rye bread on Saturdays", "Pre-order online and pick up from 8:00.", 300]];
+  openModal(inb.name + " · " + inb.n + " new", '<div class="tools"><button disabled>Mark read (on this site only)</button></div>' + L.map(function (x) {
+    return '<div class="mi"><div class="r2"><b>' + esc(x[0]) + ' <span class="pill ac">new</span></b><small class="mut">' + ago(Date.now() - x[3] * 60000) + "</small></div><div>" + esc(x[1]) + '</div><div class="mut sn">' + esc(x[2]) + "</div></div>";
+  }).join("") + previewNote());
+}
 function loadMailForm() {
   var M = P.mail || [];
   [0, 1].forEach(function (i) { var c = M[i] || {}; $("mn" + i).value = c.name || ""; $("mu" + i).value = c.url || ""; $("mt" + i).value = c.t || ""; });
@@ -6712,7 +6779,7 @@ document.addEventListener("click", function (e) {
   if (a === "dockchat") { dockChat(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
-  if (a === "mail") { openMail(+k); return; }
+  if (a === "mail") { if (PREVIEW && !(P.mail && P.mail[+k] && P.mail[+k].url)) openDemoMail(+k); else openMail(+k); return; }
   if (a === "spfilt") { SPFIND = !(SPFIND || SPQ); if (!SPFIND) SPQ = ""; render(); var sq = $("spQ"); if (sq) { sq.value = ""; sq.focus(); } return; }
   if (a === "bfilt") { FON[k] = !(FON[k] || FQ[k]); if (!FON[k]) FQ[k] = ""; render(); var bq = $(k === "tg" ? "tgQ" : "rdQ"); if (bq) { bq.value = ""; bq.focus(); } return; }
   if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
@@ -6940,8 +7007,18 @@ function renderAccount() {
   buildSetNav();
 }
 function onUser(u) {
+  // A different account than the one whose things this browser holds (e.g. a confirmation link opened where another
+  // account was signed in): clear everything of the old one and start the page afresh, before anything is shown or saved.
+  var owner = ""; try { owner = localStorage.getItem("sp_owner") || ""; } catch (e) {}
+  if (u && ((USER && USER.id !== u.id) || (owner && owner !== u.id))) {
+    LEAVING = true; USER = null; clearTimeout(saveTimer);
+    wipeLocal(); try { localStorage.setItem("sp_owner", u.id); } catch (e) {}
+    location.replace(location.pathname + location.search); return;
+  }
+  if (u) try { localStorage.setItem("sp_owner", u.id); } catch (e) {}
   USER = u;
   if (u && PREVIEW) { PREVIEW = false; NEWS = []; TGP = []; RD = []; YTV = load("sp_ytv", []); NEWSV++; }
+  if (u) demoStrip();
   renderAccount(); render();
   if (!u) return;
   loadWall(u);
@@ -6978,9 +7055,14 @@ function auth(fn) {
     else setMsg("");
   });
 }
+// What this browser keeps for the signed-in account. Signing out, or another account signing in here, clears all of it,
+// so nothing of one account is ever shown in, or saved into, another.
+var ACCT_KEYS = ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first", "sp_adm",
+  "sp_icsc", "sp_twoff", "sp_calc", "sp_nseen", "sp_stamp", "sp_sumseen", "sp_admseen", "sp_stockn", "sp_sndlog", "sp_owner"];
+function wipeLocal() { try { ACCT_KEYS.forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {} }
 function signOut() {
   if (sb) sb.auth.signOut();
-  try { ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first", "sp_adm"].forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {}
+  wipeLocal();
   P = { theme: P.theme, accent: P.accent, colors: P.colors, fs: P.fs, dockW: P.dockW, home: P.home, cities: P.cities, aurora: P.aurora, shadow: P.shadow, fav: {}, hidden: {} };
   TW = []; TWC = false; TWUID = null; LIVEPREV = null; MAIL = []; NEWS = []; NEWSALL = []; TGP = []; RD = []; NLOG = []; NEWSV++; READ = {}; YTV = []; QUOTES = {}; QLOADED = false; NG = []; USER = null; IS_ADMIN = false; ADM = { d: null, t: 0, busy: false, err: "", tab: "sum" };
   FIRST = { _i: {} };
@@ -7107,7 +7189,7 @@ function openHelp() {
 
   html += '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page shows sample content so you can see what it looks like.</p>';
+  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page is a working preview: sample news, posts, videos, stocks and mail, real sports, TV shows and podcasts, and example notes, calendar events and notifications, so every box and button can be tried. None of the examples go into an account you create.</p>';
 
   html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Date &amp; time</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 
@@ -7152,7 +7234,7 @@ function openHelp() {
     '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for the full chart with recent news and chatter about it. <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open and its &ldquo;down&rdquo; color while it is closed (the same colors and strength as the rest of the box, set under Settings &rarr; Appearance &rarr; Signal colors per box). Point at it for a small box with your main markets, or click it for all of them, lined up in columns: the market, how many of your stocks are on it, open or closed, how long until it closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto is left out because it never closes; currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. <b>Price alerts:</b> the bell button next to the clock opens a small window where you fill in one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price field starts at what the stock costs now. You get one notification when it happens and the alert then switches itself off; tick it to set it again, change its price or condition right in the list, or remove it with ✕. <b>Set a price alert</b> in the window of a stock opens the same thing for that stock. Up to 30 alerts; prices are looked at about once a minute while the page is open in a tab. Star or hide a stock in Edit mode.</p>' +
     '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
 
-  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li></ul>' +
+  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li><li>With several channels, each Telegram post starts with its channel&rsquo;s name. Settings &rarr; News, Telegram &amp; Reddit &rarr; <b>Channel names in Telegram posts</b> turns that off (<b>Source names after headlines</b> does the same for News and Reddit).</li></ul>' +
     '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; posts you have not read stay new when you come back later, unless you set <b>When you come back to the page</b> in Settings &rarr; News, Telegram &amp; Reddit to count what was already on screen as seen). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
     '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window scrolls smoothly inside it and stops at its end; a couple more notches then move on). The bar at the edge of the window is for all the posts; a long post has a thin one of its own beside it, so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and which way scrolling down goes after a click and from the catch-up button. <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen). Two more rows set how the mouse wheel moves between posts, the same for every post: <b>Wheel notches to go to the next post</b> (1 to 6; in a post longer than the window they count once you are at its end) and <b>After arriving at a post, ignore the wheel for</b> (so one run of the wheel moves one post, and a row of short posts cannot fly past). They only matter with one post at a time, and are grayed out when scrolling is set to Freely.</p>' +
     '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
@@ -9914,6 +9996,7 @@ $("srchNewTab").onchange = function () { P.srchNew = this.checked; persist(); };
 $("auroraOn").onchange = function () { P.aurora = this.checked; persist(); applyTheme(); };
 $("shadowOn").onchange = function () { P.shadow = this.checked; persist(); applyTheme(); };
 $("srcNamesOn").onchange = function () { P.hideSrc = !this.checked; persist(); render(); };
+$("tgNamesOn").onchange = function () { P.hideTgSrc = !this.checked; persist(); render(); };
 $("dockChatOn").onchange = function () { P.dockChat = this.checked; persist(); };
 document.addEventListener("input", function (e) {
   if (e.target.id === "spQ") { debounced("spQ", function () { SPQ = $("spQ") ? $("spQ").value.trim().toLowerCase().slice(0, 60) : ""; render(); fetchSports(); }); return; }

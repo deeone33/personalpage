@@ -40,7 +40,7 @@
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search… (type help for info)" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <div id="logoImg" role="img" aria-label="OmniTree"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
   </header>
-  <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, the radio, the search bar, timers, notes and the calendar already work. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
+  <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, TV shows, podcasts, the radio, search, notes, the calendar, timers and the calculator already work, so try them. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
   <div id="clocks"></div>
   <div id="gridw"><div id="grid"></div><div id="embeds"></div></div>
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
@@ -240,6 +240,7 @@
       <label>Telegram posts shown <select id="cntTg"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="100">100</option></select></label>
       <div class="mut sn">The button at the end of each list shows 20 more. For Telegram it also loads older posts from the channels.</div>
       <label>Source names after headlines <input type="checkbox" id="srcNamesOn"></label>
+      <label>Channel names in Telegram posts <input type="checkbox" id="tgNamesOn"></label>
       <label>Reddit comments in a post's window <select id="rdComSel"><option value="0">Off</option><option value="3">Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option><option value="20">Top 20</option></select></label>
     </div>
     <div class="sub" data-kw="reader read scroll scrolling posts catch up window click older newer direction"><b>Reading posts</b>
