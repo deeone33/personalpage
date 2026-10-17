@@ -1,4 +1,4 @@
-var VERSION = 176;
+var VERSION = 177;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5342,7 +5342,7 @@ function swHtml(w, side) {
     (pc ? '<button data-a="sidedock" data-k="' + w + ":" + (side === "left" ? "right" : "left") + '" title="Move to the other side" aria-label="Move to the other side">⇄</button>' : "") +
     '<button data-a="sidedock" data-k="' + w + ':" title="Undock (it opens as a window again)" aria-label="Undock">✕</button></span></div>' +
     '<div class="swb">' + WIDGETS[w].html() + "</div>" +
-    (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to undo."></i>' + (slim ? '<i class="swg swgw ' + (side === "left" ? "r" : "l") + '" data-swg="w" title="Drag to change the width of the panels on this side. Double-click for the standard width."></i>' : "") : "") + "</div>";
+    (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to undo."></i>' + (slim ? ["l", "r"].map(function (s) { return '<i class="swg swgw ' + s + '" data-swg="w" title="Drag to change the width of the panels on this side. Double-click for the standard width."></i>'; }).join("") : "") : "") + "</div>";
 }
 function dlApply() {
   var r = document.documentElement;
@@ -5497,7 +5497,8 @@ document.addEventListener("pointerdown", function (e) {
   function mv(ev) {
     if (isH) { v = Math.round(Math.max(120, Math.min(ev.clientY - r.top, window.innerHeight - 20))); sw.style.height = v + "px"; sw.classList.add("swfixh"); }
     else {
-      v = Math.round(Math.max(200, Math.min(left ? ev.clientX - r.left : r.right - ev.clientX, window.innerWidth * 0.45)));
+      // either edge works: the left one measures from the panel's right edge, the right one from its left edge
+      v = Math.round(Math.max(200, Math.min(g.classList.contains("r") ? ev.clientX - r.left : r.right - ev.clientX, window.innerWidth * 0.45)));
       P.dl = Object.assign({}, dlP()); P.dl[left ? "wl" : "wr"] = v;
       dlApply(); dockPlace();
     }
@@ -5728,10 +5729,11 @@ function admDetail(key) {
   ]);
 }
 function admHtml() {
-  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["fb", "Feedback"], ["in", "Sign-ins"], ["ip", "Visitors"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div>" +
-    '<span class="admb"><button data-a="admseen" title="Mark everything as seen">✓</button><button data-a="admload" title="Refresh">' + (ADM.busy ? '<span class="spin">↻</span>' : "↻") + "</button></span></div>";
+  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["fb", "Feedback"], ["in", "Logins"], ["ip", "Visitors"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div></div>";
+  // ✓ (everything seen) and ↻ (refresh) sit in the bottom line, so the tabs have the whole width
+  var admBtns = '<span class="admb"><button data-a="admseen" title="Mark everything as seen">✓</button><button data-a="admload" title="Refresh">' + (ADM.busy ? '<span class="spin">↻</span>' : "↻") + "</button></span>";
   if (!isAdmin()) return '<div class="adm"><p class="mut">Only for the site owner.</p></div>';
-  if (!ADM.d) { if (!ADM.busy && !ADM.err) setTimeout(function () { admLoad(); }, 0); return '<div class="adm">' + top + '<p class="mut sn">' + (ADM.err ? esc(ADM.err) : "Loading…") + "</p></div>"; }
+  if (!ADM.d) { if (!ADM.busy && !ADM.err) setTimeout(function () { admLoad(); }, 0); return '<div class="adm">' + top + '<p class="mut sn">' + (ADM.err ? esc(ADM.err) : "Loading…") + '</p><div class="admf mut"><span></span>' + admBtns + "</div></div>"; }
   var D = admData(), N = D.n, S = ADMSEEN, body = "", L = 30;
   var fbRow = function (f) { return admRow(admTs(f.at) > S, '<b class="pill' + ((f.status || "new") === "new" ? " ac" : "") + '">' + esc(f.status || "new") + "</b> " + esc(String(f.title || f.a || "(no title)").slice(0, 120)), esc([f.kind, f.area].filter(Boolean).join(" · ")), admTs(f.at), "f:" + f.id); };
   var accRow = function (u) { return admRow(admTs(u.created) > S, esc(u.email || "(no email)"), u.confirmed ? "" : "not confirmed", admTs(u.created), "u:" + u.id); };
@@ -5744,15 +5746,17 @@ function admHtml() {
     D.logins.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.last), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.last) > S, "Signed in: " + esc(u.email || ""), "", admTs(u.last), k); } }); });
     D.ips.slice(0, 10).forEach(function (x) { ev.push({ t: x.at, k: "ip:" + x.ip, h: function (k) { return admRow(x.at > S, "New visitor: " + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at, k); } }); });
     // the same account can be in the timeline twice (new and signed in): only the line you clicked opens
-    body = '<div class="admst">' + [[N.users, "accounts"], ["+" + N.new1 + " / +" + N.new7, "new today / 7 days"], [N.active, "active today"], [N.visitors, "visitors today"], [N.fbNew, "feedback open"], [N.ipNew, "new IPs today"]].map(function (x) { return "<div><b>" + x[0] + "</b><small>" + x[1] + "</small></div>"; }).join("") + "</div>" +
-      ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x, n) { return x.h(x.k + "#" + n); }).join("");
+    body = ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x, n) { return x.h(x.k + "#" + n); }).join("");
   }
   else if (ADM.tab === "acc") body = D.accts.slice(0, L).map(accRow).join("");
   else if (ADM.tab === "fb") body = D.fb.slice(0, L).map(fbRow).join("") || '<p class="mut sn">No feedback.</p>';
   else if (ADM.tab === "in") body = D.logins.slice(0, L).map(inRow).join("");
   else body = D.ips.slice(0, L).map(ipRow).join("") || '<p class="mut sn">' + esc(ADM.d.visitsErr || "No visits.") + "</p>";
-  return '<div class="adm">' + top + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
-    '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
+  // the numbers stay in view above the list, on every tab; one that is not zero (and is news) stands out
+  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", 1, "New accounts today"], [N.new7, "new 7d", 1, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", 1, "Addresses seen for the first time today"], [N.fbNew, "feedback", 1, "Feedback not handled yet"]];
+  var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
+  return '<div class="adm">' + top + stats + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
+    '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + admBtns + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
 }
 function admAct(a, k) {
   if (!isAdmin()) return;

@@ -1725,4 +1725,17 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .admst small{font-size:11px}/* (round 4) the owner panel: its list scrolls inside, the tabs and the buttons under it stay in view */
 .sw .adm .admbody,.mbox .adm .admbody{max-height:340px;overflow-y:auto;overscroll-behavior:contain}
 .sw.swfixh .swb .adm{height:100%}
-.sw.swfixh .swb .adm .admbody{flex:1;min-height:0;max-height:none}
+.sw.swfixh .swb .adm .admbody{flex:1;min-height:0;max-height:none}/* (round 5) the owner panel's numbers: one compact block above the list, always in view */
+.adm .admst{display:flex;flex-wrap:wrap;gap:4px;margin:0;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:10px;grid-template-columns:none}
+.adm .admst span{flex:1 1 auto;display:flex;align-items:baseline;gap:4px;padding:2px 7px;border-radius:7px;background:var(--card);font-size:11.5px;color:var(--mut);white-space:nowrap}
+.adm .admst b{display:inline;font-size:15px;font-weight:800;color:var(--fg);line-height:1.2}
+.adm .admst span.hot{background:var(--acsoft);color:var(--fg)}
+.adm .admst span.hot b{color:var(--ac)}
+.adm .admst span.zero b{color:var(--mut);font-weight:600}
+/* both side edges of a docked panel resize it in Edit mode, a little wider to grab */
+.swgw{width:10px}/* (round 5b) the numbers: a tight grid of four, the tabs keep their whole names (the panel shrinks a little if it must) */
+.adm .admst{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:4px}
+.adm .admst span{padding:1px 5px;gap:3px;font-size:10.5px;min-width:0;overflow:hidden}
+.adm .admst b{font-size:13.5px}
+.admh .seg button{min-width:auto;padding:3px 5px;font-size:11px;overflow:visible}.admf .admb{margin-left:auto}
+.admf>span:first-child{white-space:nowrap}
