@@ -1722,4 +1722,7 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .admd{font-size:12.5px}
 .admd .lnk2{font-size:12.5px}
 .admst b{font-size:16px}
-.admst small{font-size:11px}
+.admst small{font-size:11px}/* (round 4) the owner panel: its list scrolls inside, the tabs and the buttons under it stay in view */
+.sw .adm .admbody,.mbox .adm .admbody{max-height:340px;overflow-y:auto;overscroll-behavior:contain}
+.sw.swfixh .swb .adm{height:100%}
+.sw.swfixh .swb .adm .admbody{flex:1;min-height:0;max-height:none}
