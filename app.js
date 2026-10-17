@@ -1,4 +1,4 @@
-var VERSION = 177;
+var VERSION = 178;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5351,7 +5351,8 @@ function dlApply() {
 }
 // Where the page and the columns go. The page is moved over only as far as a column does not fit beside it.
 function dockPlace() {
-  var b = document.body, dl = $("dock"), dr = $("dockR"), W = window.innerWidth;
+  // (the width without the scroll bar: a fixed column's "right" is measured from there)
+  var b = document.body, dl = $("dock"), dr = $("dockR"), W = document.documentElement.clientWidth || window.innerWidth;
   b.style.paddingLeft = b.style.paddingRight = ""; dl.style.left = ""; dr.style.right = "";
   if (layM()) return;
   var on = { left: b.classList.contains("docked"), right: b.classList.contains("dockedr") }, col = {}, pad = {};
@@ -5370,8 +5371,10 @@ function dockPlace() {
   if (col.right) b.style.paddingRight = Math.round(pad.right) + "px";
   // a column attached to the boxes sits right beside them, in the free space; otherwise at the screen's edge
   var app = $("app").getBoundingClientRect();
-  if (col.left && swAt("left")) dl.style.left = Math.max(0, Math.round(app.left + 14 - col.left)) + "px";
-  if (col.right && swAt("right")) dr.style.right = Math.max(0, Math.round(W - (app.right - 14) - col.right)) + "px";
+  // attached: the same 14px between the panels and the boxes as between two boxes (the column has 6px padding on that side)
+  var g = $("grid").getBoundingClientRect();
+  if (col.left && swAt("left")) dl.style.left = Math.max(0, Math.round(g.left - 14 + 6 - col.left)) + "px";
+  if (col.right && swAt("right")) dr.style.right = Math.max(0, Math.round(W - (g.right + 14 - 6) - col.right)) + "px";
 }
 window.addEventListener("resize", function () { dockPlace(); });
 function renderSide() {
@@ -5753,7 +5756,11 @@ function admHtml() {
   else if (ADM.tab === "in") body = D.logins.slice(0, L).map(inRow).join("");
   else body = D.ips.slice(0, L).map(ipRow).join("") || '<p class="mut sn">' + esc(ADM.d.visitsErr || "No visits.") + "</p>";
   // the numbers stay in view above the list, on every tab; one that is not zero (and is news) stands out
-  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", 1, "New accounts today"], [N.new7, "new 7d", 1, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", 1, "Addresses seen for the first time today"], [N.fbNew, "feedback", 1, "Feedback not handled yet"]];
+  // a number lights up only while it holds something you have not seen yet (✓ puts them all out); the count itself stays
+  var day = 86400000, nowT = Date.now(), unseen = function (t, span) { return t > S && nowT - t < span; };
+  var uNew1 = D.accts.some(function (u) { return unseen(admTs(u.created), day); }), uNew7 = D.accts.some(function (u) { return unseen(admTs(u.created), 7 * day); });
+  var uIp = D.ips.some(function (x) { return unseen(x.at, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
+  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses seen for the first time today"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
   var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
   return '<div class="adm">' + top + stats + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
     '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + admBtns + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
