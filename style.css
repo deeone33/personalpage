@@ -1739,3 +1739,9 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .adm .admst b{font-size:13.5px}
 .admh .seg button{min-width:auto;padding:3px 5px;font-size:11px;overflow:visible}.admf .admb{margin-left:auto}
 .admf>span:first-child{white-space:nowrap}
+/* docked panels are as far apart as the boxes (14px); the owner panel's bottom line stays on one line */
+#dock,#dockR{gap:14px}
+.admf{gap:6px}
+.admf>span:first-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.admf a.btn{flex:none;font-size:11.5px;padding:3px 9px;white-space:nowrap;line-height:1.3}
+.admf .admb button{padding:2px 7px;font-size:12px}
