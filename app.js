@@ -1,4 +1,4 @@
-var VERSION = 181;
+var VERSION = 182;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -28,7 +28,16 @@ var DATA = {
     { id: "pixelchef", sub: "Just Chatting", v: 3100, live: 1 },
     { id: "tavern_bard", sub: "Music", v: 1900, live: 1 },
     { id: "gridline", sub: "Grand Theft Auto V", v: 1200, live: 1 },
-    { id: "northwind", sub: "Hearthstone", v: 640, live: 1 },    { id: "raidleader_x", sub: "Offline", v: 0, live: 0 }
+    { id: "northwind", sub: "Hearthstone", v: 640, live: 1 },
+    { id: "lumen_plays", sub: "Minecraft", v: 520, live: 1 },
+    { id: "quietforge", sub: "Art", v: 310, live: 1 },
+    { id: "harborlights", sub: "Travel & Outdoors", v: 240, live: 1 },
+    { id: "deckbuilder_ee", sub: "Slay the Spire", v: 180, live: 1 },
+    { id: "ostkust_chess", sub: "Chess", v: 130, live: 1 },
+    { id: "slowcooker_live", sub: "Food & Drink", v: 95, live: 1 },
+    { id: "pixelpond", sub: "Stardew Valley", v: 70, live: 1 },
+    { id: "nightowl_radio", sub: "Music", v: 55, live: 1 },
+    { id: "tinkerbench", sub: "Science & Technology", v: 40, live: 1 },    { id: "raidleader_x", sub: "Offline", v: 0, live: 0 }
   ],
   youtube: [
     { ch: "WoW Academy", t: "Raid guide: Black Temple", age: "2h" },
@@ -46,7 +55,12 @@ var DATA = {
     { id: "BTCUSD", name: "Bitcoin", p: 98450, c: 2.1 },
     { id: "ETHUSD", name: "Ethereum", p: 3420, c: -1.4 },
     { id: "NFLX", name: "Netflix", p: 70.3, c: -1.8 },
-    { id: "XAUUSD", name: "Gold", p: 4220.3, c: 1.5 }
+    { id: "XAUUSD", name: "Gold", p: 4220.3, c: 1.5 },
+    { id: "META", name: "Meta", p: 709.3, c: -3.7 },
+    { id: "GOOGL", name: "Alphabet", p: 251.6, c: 0.6 },
+    { id: "AMD", name: "AMD", p: 164.2, c: 2.6 },
+    { id: "SOLUSD", name: "Solana", p: 212.4, c: -2.2 },
+    { id: "ASML", name: "ASML", p: 812.5, c: 1.1 }
   ]
 };
 
@@ -100,12 +114,14 @@ function loadSamples() {
 // out again when an account is created here (demoStrip), so a new account starts with none of it.
 var DEMO_TV = [[83, "The Simpsons"], [112, "South Park"], [361, "Saturday Night Live"], [114, "Survivor"], [44933, "Severance"], [46562, "The Last of Us"]];
 function demoSeed() {
-  if (USER || P.demo) return;
-  P.demo = { v: 1, side: [] };
-  var day = function (n) { var d = new Date(Date.now() + n * 86400000); return d.toLocaleDateString("en-CA", { timeZone: TZ }); }, now = Date.now(), L = LAY();
-  L.c = L.c || {}; L.fs = L.fs || {}; L.rows = L.rows || {};
-  if (!(P.tv && P.tv.on)) { var T = tvp(); T.on = true; T.demo = 1; DEMO_TV.forEach(function (s) { T.shows.push({ id: s[0], n: s[1], demo: 1 }); }); L.c.tv = 6; L.fs.tv = 0.9; L.rows.tv = 6; }
-  if (!(P.pod && P.pod.on)) { var p = podp(); p.on = true; p.demo = 1; L.c.podcasts = 6; L.fs.podcasts = 0.9; L.rows.podcasts = 6; demoPods(); }
+  if (USER) return;
+  // (a preview from before v182 only gets the new layout)
+  if (P.demo) { if (!(P.demo.v >= 2)) { P.layout = JSON.parse(JSON.stringify(PREVIEW_LAYOUT)); P.demo.v = 2; save("sp_prefs", P); } return; }
+  P.demo = { v: 2, side: [] };
+  P.layout = JSON.parse(JSON.stringify(PREVIEW_LAYOUT));
+  var day = function (n) { var d = new Date(Date.now() + n * 86400000); return d.toLocaleDateString("en-CA", { timeZone: TZ }); }, now = Date.now();
+  if (!(P.tv && P.tv.on)) { var T = tvp(); T.on = true; T.demo = 1; DEMO_TV.forEach(function (s) { T.shows.push({ id: s[0], n: s[1], demo: 1 }); }); }
+  if (!(P.pod && P.pod.on)) { var p = podp(); p.on = true; p.demo = 1; demoPods(); }
   var n = function (id, t, mins, todo, done, pin) { return { id: "demo" + id, t: t, ts: now - mins * 60000, todo: todo, done: done, pin: pin, demo: 1 }; };
   P.notes = (P.notes || []).concat([
     n(1, "Ideas for the weekend: the coastal path, the new bakery, the book fair on Sunday", 30, false, false, true),
@@ -139,15 +155,14 @@ function demoPods() {
     save("sp_prefs", P); render(); fetchPod(true);
   }).catch(function () {});
 }
-// An account is being created from the preview: everything demoSeed added goes; what the visitor changed themselves stays
+// An account is being created from the preview: the made-up notes, events and notifications go. The layout stays as the
+// visitor left it (trying Edit and then signing up is the point), and so do the real TV shows and podcasts in it.
 function demoStrip() {
-  var D = P.demo;
-  if (!D) return;
+  if (!P.demo) return;
   var mine = function (x) { return !(x && x.demo); };
   P.notes = (P.notes || []).filter(mine); P.cal = (P.cal || []).filter(mine);
-  if (P.tv) { P.tv.shows = (P.tv.shows || []).filter(mine); if (P.tv.demo) { if (!P.tv.shows.length) P.tv.on = false; delete P.tv.demo; } }
-  if (P.pod) { P.pod.f = (P.pod.f || []).filter(mine); if (P.pod.demo) { if (!P.pod.f.length) { P.pod.on = false; P.pod.mode = "radio"; } delete P.pod.demo; } }
-  (D.side || []).forEach(function (w) { if (P.side) delete P.side[w]; });
+  if (P.tv) delete P.tv.demo;
+  if (P.pod) delete P.pod.demo;
   NLOG = NLOG.filter(mine); save("sp_nlog", NLOG);
   delete P.demo;
 }
@@ -156,6 +171,12 @@ function previewNote() { return '<p class="pvnote">This is sample content. <butt
 
 // ---- Storage (safe if the browser blocks it) ----
 function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+var WLC_SHOWN = false;
+// a sign-in kept in this browser (Supabase's own key): such a visitor is about to be signed in, so is never welcomed as new,
+// even if the sign-in takes a moment to load
+function savedSignIn() { try { for (var i = 0; i < localStorage.length; i++) if (/^sb-.+-auth-token$/.test(localStorage.key(i) || "")) return true; } catch (e) {} return false; }
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && $("welcome") && !$("welcome").hidden) { $("welcome").hidden = true; save("sp_wlc", 1); } });
+document.addEventListener("click", function (e) { if (e.target && e.target.id === "welcome") { e.target.hidden = true; save("sp_wlc", 1); } });
 var LEAVING = false;   // set while the page restarts for another account: nothing of the old one may be written back
 function save(k, v) { if (LEAVING) return false; try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 var DEFAULT_ACCENT = "#f5b942";
@@ -576,6 +597,16 @@ var DEF_LAYOUT = {
   fs: { weather: 0.9, mail: 0.9, live: 0.9, news: 0.9, telegram: 0.9, stocks: 0.9, twitch: 0.9, youtube: 0.9, reddit: 0.8, sports: 0.8 },
   rows: { news: 10, telegram: 10, stocks: 10, twitch: 10, youtube: 10, reddit: 4, sports: 3 }
 };
+// The preview's layout (not signed in): News and Telegram side by side, then four columns: Stocks, Twitch, Sports over
+// TV shows over Podcasts, and Reddit over YouTube, with list lengths chosen so the columns end on the same line.
+var PREVIEW_LAYOUT = {
+  v: 2, pairPct: 54,
+  order: ["weather", "mail", "live", "menu", "news", "telegram", "stocks", "twitch", "sports", "tv", "podcasts", "reddit", "youtube"],
+  c: { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, stocks: 3, twitch: 3, sports: 3, tv: 3, podcasts: 3, reddit: 3, youtube: 3 },
+  x: { weather: 0, mail: 3, live: 6, news: 0, telegram: 6, stocks: 0, twitch: 3, sports: 6, tv: 6, podcasts: 6, reddit: 9, youtube: 9 },
+  fs: { weather: 0.9, mail: 0.9, live: 0.9, news: 0.9, telegram: 0.9, stocks: 0.9, twitch: 0.9, youtube: 0.85, reddit: 0.85, sports: 0.85, tv: 0.85, podcasts: 0.85 },
+  rows: { news: 10, telegram: 10, stocks: 15, twitch: 15, sports: 3, tv: 3, podcasts: 4, reddit: 6, youtube: 7 }
+};
 var COMPACT = ["weather", "mail", "live", "menu"];
 var LISTS = ["news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv", "podcasts"];
 function LAY() {
@@ -788,7 +819,7 @@ function render() {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0, " favr");
   }).join("") + offRows) : '<div class="empty">Nobody you follow is live.' + (TWC ? ' <button class="lnk2" data-a="twdopen">Discover streams</button>' : "") + "</div>") +
-    (TWC || !window.TWITCH_CLIENT_ID ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, twdBtn() + ctlT);
+    (TWC || !window.TWITCH_CLIENT_ID || PREVIEW ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, twdBtn() + ctlT);
 
   var yb;
   if ((P.yt && P.yt.ch && P.yt.ch.length) || PREVIEW) {
@@ -898,6 +929,9 @@ function render() {
   renderNextUp();
   refreshBrief();
   $("pv").hidden = !PREVIEW;
+  // the welcome window: once per browser, on the first preview (the ? in the line above opens it again)
+  if (!PREVIEW || USER) $("welcome").hidden = true;
+  else if (!load("sp_wlc", 0) && !WLC_SHOWN && !savedSignIn()) { WLC_SHOWN = true; $("welcome").hidden = false; }
   if (!$("peek").hidden) hidePeek();   // the row it pointed at has just been redrawn
   fitHeads();
   fltFit();
@@ -6688,7 +6722,8 @@ document.addEventListener("click", function (e) {
     });
     return;
   }
-  if (a === "pvup" || a === "pvin") { ACCTMSG = ""; openAuth(a === "pvup" ? "up" : "in"); return; }
+  if (a === "wlcx" || a === "wlcopen") { $("welcome").hidden = a === "wlcx"; if (a === "wlcx") save("sp_wlc", 1); return; }
+  if (a === "pvup" || a === "pvin") { $("welcome").hidden = true; save("sp_wlc", 1); ACCTMSG = ""; openAuth(a === "pvup" ? "up" : "in"); return; }
   if (a === "delacct") { deleteAccount(); return; }
   if (a === "signout") { signOut(); return; }
   if (a === "editmode") { MENU_OPEN = ""; toggleEdit(); return; }
@@ -7015,7 +7050,7 @@ function onUser(u) {
     wipeLocal(); try { localStorage.setItem("sp_owner", u.id); } catch (e) {}
     location.replace(location.pathname + location.search); return;
   }
-  if (u) try { localStorage.setItem("sp_owner", u.id); } catch (e) {}
+  if (u) try { localStorage.setItem("sp_owner", u.id); localStorage.setItem("sp_wlc", "1"); } catch (e) {}   // someone who has signed in here is not welcomed as new again
   USER = u;
   if (u && PREVIEW) { PREVIEW = false; NEWS = []; TGP = []; RD = []; YTV = load("sp_ytv", []); NEWSV++; }
   if (u) demoStrip();
@@ -7189,7 +7224,7 @@ function openHelp() {
 
   html += '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page is a working preview: sample news, posts, videos, stocks and mail, real sports, TV shows and podcasts, and example notes, calendar events and notifications, so every box and button can be tried. None of the examples go into an account you create.</p>';
+  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page is a working preview: sample news, posts, videos, stocks and mail, real sports, TV shows and podcasts, and example notes, calendar events and notifications, so every box and button can be tried. The first time, a short welcome window explains the page (the <b>?</b> next to <b>Create free account</b> opens it again). If you create an account from the preview, the layout you made and the TV shows and podcasts in it come with you; the example notes, events and notifications do not.</p>';
 
   html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Date &amp; time</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
 

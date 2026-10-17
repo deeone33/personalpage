@@ -40,7 +40,22 @@
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search… (type help for info)" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <div id="logoImg" role="img" aria-label="OmniTree"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
   </header>
-  <div id="pv" hidden><span><b>This is a preview with sample content.</b> Weather, sports, TV shows, podcasts, the radio, search, notes, the calendar, timers and the calculator already work, so try them. Create a free account to add your own news, Telegram, Reddit, stocks, Twitch, YouTube and mail.</span><span class="pvb"><button class="pri" data-a="pvup">Create free account</button><button data-a="pvin">Sign in</button></span></div>
+  <div id="pv" hidden><span class="mut">Preview<span class="pvx"> with sample content</span></span><button class="lnk2" data-a="pvup">Create free account</button><button class="lnk2" data-a="pvin">Sign in</button><button class="lnk2" data-a="wlcopen" title="What is OmniTree?">?</button></div>
+  <div id="welcome" hidden><div class="wlc" role="dialog" aria-modal="true" aria-labelledby="wlcT">
+    <button class="wlx" data-a="wlcx" aria-label="Close">✕</button>
+    <div class="wlogo"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
+    <h2 id="wlcT">Welcome to OmniTree</h2>
+    <p class="wsub">Your world, in one tab.</p>
+    <p>A free start page that keeps what you check every day side by side and up to date: news, sports, stocks, streams, mail, weather, TV, podcasts and more.</p>
+    <ul class="wl">
+      <li><b>Click anything.</b> Headlines, scores, shows and podcasts open right here.</li>
+      <li><b>Make it yours.</b> Cogwheel &rarr; <b>Edit</b> moves, resizes and hides boxes.</li>
+      <li><b>Tools.</b> Notes, calendar, timers and the calculator are under the four-squares icon, and can be docked beside the boxes.</li>
+    </ul>
+    <p class="mut sn">What is behind this window is a working preview with sample content. When it feels right, create a free account: your layout comes with you, and you add your own sources.</p>
+    <div class="wb"><button class="pri" data-a="wlcx">Try it out</button><button data-a="pvup">Create free account</button></div>
+    <p class="wsi mut sn">Have an account? <button class="lnk2" data-a="pvin">Sign in</button></p>
+  </div></div>
   <div id="clocks"></div>
   <div id="gridw"><div id="grid"></div><div id="embeds"></div></div>
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
