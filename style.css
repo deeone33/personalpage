@@ -1859,3 +1859,22 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 @media(max-width:820px){.tnm{font-size:14px;grid-template-columns:24px minmax(0,1fr) auto 70px}}
 .sptg>span:first-child{white-space:nowrap}
 @media(max-width:820px){.sptg{grid-template-columns:80px 18px minmax(0,1fr) auto;font-size:12.5px}.sptg.tn{grid-template-columns:80px 46px minmax(0,1fr) auto}}
+@media(max-width:820px){.spst{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.spst>div{padding:5px 6px}.spst b{font-size:14px}.spst small{font-size:10.5px}}
+
+/* Help: real section titles, small sub-headings, short lists; the contents are grouped by kind */
+.hlp{font-size:14px;line-height:1.55}
+.hlp h3{margin:22px 0 6px;padding-top:14px;border-top:1px solid var(--line);font-size:16px;font-weight:700;color:var(--fg);text-transform:none;letter-spacing:0;scroll-margin-top:10px}
+.hlp h4{margin:12px 0 3px;font-size:11.5px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.hlp p{margin:0 0 8px}
+.hlp ol,.hlp ul{margin:2px 0 10px;padding-left:20px}
+.hlp li{margin-bottom:4px}
+.hlp li>ol,.hlp li>ul{margin:4px 0 2px}
+.hlp li::marker{color:var(--mut)}
+.hlp a{color:var(--ac)}
+.hlp .helptoc{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.hlp .htg{display:grid;grid-template-columns:112px 1fr;align-items:start;gap:5px}
+.hlp .htg>div{display:flex;flex-wrap:wrap;gap:5px}
+.hlp .htg>span{padding-top:5px;font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.hlp .helptoc button,.hlp .helptoc a{font-size:12px;padding:3px 10px;border-radius:99px}
+.hlp .shelp{margin:4px 0 8px}
+@media (max-width:640px){.hlp .htg{grid-template-columns:1fr;gap:4px}.hlp .htg>span{padding-top:2px}}

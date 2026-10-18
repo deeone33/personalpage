@@ -1,4 +1,4 @@
-var VERSION = 193;
+var VERSION = 196;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1371,7 +1371,8 @@ function placeEmbeds() {
       fr.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
       fr.setAttribute("referrerpolicy", "no-referrer");
       fr.setAttribute("loading", "lazy");
-      fr.setAttribute("allow", "fullscreen");
+      // protected video (TV4 Play, other streaming sites) needs encrypted-media; storage-access lets the site ask for its login
+      fr.setAttribute("allow", "fullscreen; encrypted-media; autoplay; storage-access");
       layer.appendChild(fr);
     }
     fr.title = embName(id);
@@ -7318,145 +7319,431 @@ function initAuth() {
 }
 // The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
 var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
+// Help: one window with every part of the page, grouped, each with short headings, steps and lists. The same text is
+// on the help page (help.html), made from this; keep the two the same.
 function openHelp() {
-  var toc = [
-    ["signin", "Signing in"], ["weather", "Weather &amp; Location"], ["mail", "Mail (Gmail)"], ["stocks", "Stocks"],
-    ["news", "News &amp; Telegram"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"], ["pod", "Podcasts"],
-    ["timers", "Timers, stopwatch &amp; calculator"], ["notes", "Notes"], ["wallpaper", "Wallpaper"],
-    ["edit", "Colors, text size &amp; layout"], ["dock", "Watching while you browse"], ["reddit", "Reddit"], ["sports", "Sports"], ["tv", "TV shows"], ["boxes", "Hiding boxes &amp; docking"],["cal", "Calendar"],["ntf", "Notifications &amp; summary"], ["keys", "Search &amp; shortcuts"],["account", "Account &amp; privacy"]
+  var groups = [
+    ["Getting started", [["start", "Account &amp; setup guide"], ["edit", "Arranging the page"], ["looks", "Colors &amp; wallpaper"], ["clock", "Date, time &amp; world clocks"]]],
+    ["Boxes", [["weather", "Weather"], ["news", "News &amp; Telegram"], ["reddit", "Reddit"], ["sports", "Sports"], ["stocks", "Stocks"], ["tv", "TV shows"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"], ["pod", "Podcasts"], ["mail", "Mail (Gmail)"]]],
+    ["Tools", [["notes", "Notes &amp; read later"], ["cal", "Calendar"], ["timers", "Timers &amp; calculator"], ["keys", "Search bar &amp; shortcuts"], ["bm", "Bookmarks bar"], ["embed", "Web page boxes"], ["dock", "Docking"]]],
+    ["Alerts", [["ntf", "Notifications"], ["away", "While you are away"], ["summary", "Summary"]]],
+    ["Account", [["account", "Account &amp; privacy"]]]
   ];
-  var html = '<p class="mut">Jump to a section:</p><div class="helptoc">' +
-    toc.map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div>";
+  var A = "&rarr;", ul = function (a) { return "<ul>" + a.map(function (x) { return "<li>" + x + "</li>"; }).join("") + "</ul>"; }, ol = function (a, start) { return "<ol" + (start ? ' start="' + start + '"' : "") + ">" + a.map(function (x) { return "<li>" + x + "</li>"; }).join("") + "</ol>"; };
+  var h3 = function (id, t) { return '<h3 id="help-' + id + '">' + t + "</h3>"; }, h4 = function (t) { return "<h4>" + t + "</h4>"; }, p = function (t) { return "<p>" + t + "</p>"; };
+  var S = function (path) { return "<b>Settings " + A + " " + path + "</b>"; };
 
-  html += '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
+  var html = '<div class="hlp"><div class="helptoc">' + groups.map(function (g) {
+    return '<div class="htg"><span>' + g[0] + "</span><div>" + g[1].map(function (t) { return '<button data-a="helpjump" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("") + "</div></div>";
+  }).join("") + "</div>" +
+    '<p class="mut sn">Looking for one setting? Open Settings and type in the search field at the top of its menu. For everything the search bar can do, type <code>help</code> in it.</p>';
 
-  html += '<h3 id="help-signin">Signing in</h3><p>Click the person icon in the row of small icons. Choose <b>Create account</b>, enter an email and a password (twice), then click the link in the confirmation email and sign in. The first time you sign in, a short setup guide starts with two questions: your country (a guess from your device&rsquo;s time zone, which you confirm or change) and what you are into (News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts). It ticks the boxes that fit and fills them with good sources: national news and the subreddit of your country, international news, official Telegram channels of news outlets, your country&rsquo;s football league, and the most popular podcasts of your country for each topic. Then you choose your boxes and go through them one by one. You can run the guide again from <b>Settings &rarr; Layout &amp; boxes</b>; to add an interest later without starting over, use <b>Add interests</b> there, which adds sources and never removes any. Everything you set up is saved to your account and is there on any device. Before you sign in, the page is a working preview: sample news, posts, videos, stocks and mail, real sports, TV shows and podcasts, and example notes, calendar events and notifications, so every box and button can be tried. The first time, a short welcome window explains the page (the <b>?</b> next to <b>Create free account</b> opens it again). If you create an account from the preview, the layout you made and the TV shows and podcasts in it come with you; the example notes, events and notifications do not.</p>';
+  // ---- Getting started ----
+  html += h3("start", "Account &amp; setup guide") +
+    h4("Try it first") +
+    p("Before you sign in, the page is a working preview: sample news, posts, videos, stocks and mail; real sports, TV shows and podcasts; and example notes, calendar events and notifications. Every box and button can be tried.") +
+    ul(["The first time, a short welcome window explains the page. The <b>?</b> next to <b>Create free account</b> opens it again.",
+      "Create an account from the preview and the layout you made, and the TV shows and podcasts in it, come with you. The example notes, events and notifications do not."]) +
+    h4("Create an account") +
+    ol(["Click the person icon (the last of the small icons in the menu box).", "Choose <b>Create account</b> and enter your email and a password (at least 8 characters) twice.", "Open the confirmation email and click its link.", "Sign in."]) +
+    h4("The setup guide") +
+    p("The first time you sign in, a short guide sets up your page:") +
+    ol(["<b>Your country</b>: a guess from your device&rsquo;s time zone. Confirm or change it.",
+      "<b>What you are into</b>: News, Football, Other sports, Investing, Gaming, Tech, Music, Podcasts.",
+      "<b>Your boxes</b>: your interests tick the ones that fit. Untick or add any.",
+      "<b>Your city</b>, for the weather and the clock.",
+      "<b>One page per box</b> that needs setting up: news, Telegram, Reddit, stocks, TV shows, podcasts, Twitch, YouTube and Gmail."]) +
+    p("Your interests fill the boxes with good sources: national news and your country&rsquo;s subreddit, international news, official Telegram channels of news outlets, your country&rsquo;s football league and the most popular podcasts of your country. Every step can be skipped and changed later.") +
+    ul(["Run the guide again: " + S("Layout &amp; boxes") + " " + A + " <b>Run the setup guide again</b>.",
+      "Add an interest without starting over: " + S("Layout &amp; boxes") + " " + A + " <b>Add interests</b>. It only adds sources, it never removes any.",
+      "Everything you set up is saved to your account and is the same on every device."]) +
+    h4("Finding your way") +
+    ul(["<b>Settings</b>: the cogwheel icon " + A + " Settings. Its search field finds any option.", "<b>Help</b>: the cogwheel icon " + A + " Help, or press <code>?</code>.", "<b>The search bar</b>: type <code>help</code> in it."]);
 
-  html += '<h3 id="help-weather">Weather &amp; Location</h3><p><b>The city you start with is a guess.</b> Until you choose one, the page takes the city from the time zone your device is set to: a device on Swedish time gets Stockholm, one on Estonian time gets Tallinn. Your browser hands that over by itself, so there is no permission question, and your position and IP address are not used for it. It can therefore be the wrong city in the right country. The setup guide asks you to confirm or change it, and you can change it at any time:</p><p>There are two separate places to set a city:</p><ol><li><b>The weather tile</b> shows the forecast for one city. Click the tile, type a city name, click a result, then press <b>Use for the tile</b>.</li><li><b>The date and time at the top of the page</b> uses a different city. Open the cogwheel icon &rarr; <b>Settings</b> &rarr; <b>Date &amp; time</b> &rarr; <b>Change</b>, type a city, and click <b>Use</b> next to it.</li></ol><p>Changing one does not change the other. A <b>!</b> on the weather tile means a weather warning for the coming days (strong wind, heavy rain or snow, frost, heat); hover it or open the tile to read it. In the weather window you can also save more cities and switch between them.</p>';
+  html += h3("edit", "Arranging the page") +
+    p("Choose <b>Edit</b> in the cogwheel menu (or press <code>E</code>). Nothing moves until you do something: each box gets a dashed outline and a small ⠿ tab on its top edge, and a bar with <b>Undo</b>, <b>Cancel</b> and <b>Done</b> appears at the bottom.") +
+    h4("A box&rsquo;s buttons") +
+    p("Click a box for its buttons. They also show the box&rsquo;s size and text size.") +
+    ul(["◀ ▶ move it one column; ▲ ▼ move it up or down.", "W&minus; W+ make it narrower or wider.", "H&minus; H+ show fewer or more rows of a list (down to one row).", "T&minus; T+ change that box&rsquo;s own text size.", "<b>Hide</b> switches the box off."]) +
+    h4("Dragging") +
+    ul(["<b>Resize</b>: drag the edge or corner of the selected box. The 12 columns appear, the width snaps to them and the height to whole rows, and the other boxes make room.",
+      "<b>Move</b>: drag the ⠿ tab. Its place stays open as an outlined gap so you see where it lands. Esc puts it back.",
+      "<b>Keyboard</b>: the arrows move the selected box, Shift + arrows resize it."]) +
+    h4("Finishing") +
+    ul(["<b>Done</b> keeps the changes, <b>Cancel</b> puts everything back, <b>Undo</b> steps back one change.",
+      "Hidden boxes come back from the chips in the bar, or in " + S("Layout &amp; boxes") + ". A hidden box is not loaded.",
+      "On a list, a row&rsquo;s ☆ and ✕ show when you point at it (and on every row of the selected box): ☆ makes it a favorite, ✕ hides that streamer, source or stock. Bring hidden ones back in " + S("Layout &amp; boxes") + " " + A + " <b>Hidden items</b>."]) +
+    h4("Phone and computer") +
+    ul(["A phone has its own layout: list lengths, text sizes and the order you change on a phone apply to phones only. Whatever you never changed on a phone follows the computer.",
+      "The bar says which layout you are editing.",
+      "On a phone the boxes sit in one column, so only ▲ ▼, the height and the text size are offered, and the bars sit at the bottom within reach of your thumb. Hold the ⠿ tab to move a box.",
+      "Hidden boxes are the same on every device."]) +
+    h4("Reloading and problems") +
+    ul(["Every list box has a ↻ button to reload it.", "A small <b>!</b> in a box means something could not be loaded. Click it for what failed, why, since when, and what you can do."]);
 
-  html += '<h3 id="help-mail">Mail (Gmail)</h3><p>This shows how many unread emails you have, without giving the site your Google password. It needs a small piece of free code pasted into your own Google account, once per inbox. It looks technical, but it is entirely copy and paste &mdash; follow every step below in order.</p>' +
-    '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google\'s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it at any time, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
-    '<ol>' +
-    '<li>Go to <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> and make sure you are signed in as the Gmail account you want to show (top right corner of the page).</li>' +
-    '<li>Click <b>New project</b> (top left).</li>' +
-    '<li>You will see some sample code already in the box. Click inside that box, press Ctrl+A (or Cmd+A on a Mac) to select everything, then press Delete.</li>' +
-    '<li>Click the button below to copy the correct code, then click inside the empty box and paste it (Ctrl+V or Cmd+V).</li>' +
-    '</ol>' +
-    '<div class="codebox"><button class="lnk2 copybtn" data-a="copycode">Copy the code</button><pre id="gsCode">' + GS_CODE + '</pre></div>' +
-    '<ol start="5">' +
-    '<li>Near the top of the script.google.com page, click the untitled project name and rename it to something like "Mail for my start page", then press Enter.</li>' +
-    '<li>Press Ctrl+S (or Cmd+S) to save.</li>' +
-    '<li>Click the blue <b>Deploy</b> button (top right), then <b>New deployment</b>.</li>' +
-    '<li>Click the small gear/pencil icon next to "Select type" and choose <b>Web app</b>.</li>' +
-    '<li>Set <b>Execute as</b> to <b>Me</b>, and <b>Who has access</b> to <b>Anyone</b>. This must say Anyone, not "Anyone with a Google account".</li>' +
-    '<li>Click <b>Deploy</b>.</li>' +
-    '<li>Google will ask you to authorize the script. Click <b>Authorize access</b>, choose your account. If you see a warning that says the app isn\'t verified, click <b>Advanced</b>, then <b>Go to (unsafe)</b>, then <b>Allow</b>. This warning is normal &mdash; it is your own private script, seen only by you.</li>' +
-    '<li>You will now see a <b>Web app URL</b> ending in <code>/exec</code>. Click <b>Copy</b> next to it.</li>' +
-    '<li>Paste that address into a new browser tab and press Enter. The page will show some text containing a <b>token</b> &mdash; a long code in quotes. Copy that token now; it is only shown this one time. If you ever lose it, there are reset instructions inside the code itself.</li>' +
-    '<li>Go back to this site, open <b>Settings</b> (cogwheel icon) &rarr; <b>Mail</b>. Paste in a name (e.g. "Personal"), the web app address, and the token, then press <b>Save</b>.</li>' +
-    '<li>Wait about a minute and your unread count will appear on the site.</li>' +
-    '</ol><p class="mut">To add a second inbox, repeat all of the steps above while signed in to that other Gmail account.</p>' +
-    '<p><b>Using it:</b> hover the mail tile for the latest unread subjects, click it for the list, and press <b>Mark read</b> to count only mail that arrives from now on.</p>' +
-    '<p><b>Emails from this page</b> (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by this same script to its own address. If you set the script up a while ago, replace its code with the code above and deploy it again (<b>Deploy &rarr; Manage deployments &rarr; pencil &rarr; Version: New version &rarr; Deploy</b>); the address and the token stay the same.</p>';
+  html += h3("looks", "Colors &amp; wallpaper") +
+    h4("Appearance (" + S("Appearance") + ")") +
+    ul(["Light or dark theme (or press <code>T</code>), and your accent color.",
+      "The colors of the background, the boxes, the text and the dim text (times, sources, notes), and how see-through the boxes are.",
+      "The text size for the whole page. A phone has its own: changing it on a phone leaves the computer as it is. One box&rsquo;s own text size: Edit " + A + " T&minus; T+.",
+      "The glow behind the page, the shadows, and rounded or square corners everywhere (boxes, menus, windows and buttons).",
+      "<b>Signal colors per box</b>: the green and red in Stocks, the live dot in Twitch, the live red and icons in Sports, each with a strength slider to tone it down."]) +
+    h4("Wallpaper (" + S("Wallpaper") + ")") +
+    ol(["Press <b>Choose image</b>.", "Choose how it fits: Fill screen (may crop), Fit whole image, or Original size.", "Press <b>Reposition</b>, drag the screen to move the image, then press <b>Done</b>. <b>Reset position</b> puts it back."]) +
+    p("Your wallpaper follows your account to your other devices.");
 
-  html += '<h3 id="help-stocks">Stocks</h3><p>Open <b>Settings</b> &rarr; <b>Stocks</b>. There are five ways to add stocks, funds, indexes or crypto:</p><ol>' +
-    '<li><b>Search by name:</b> type a company name such as <code>Tesla</code> in the first field. A list appears under it with the symbol, the full name and the exchange; press <b>Add</b> on the right one. The same company is often listed on several exchanges, so pick the one you actually hold. If you know the symbol (<code>NVDA</code>, or <code>NASDAQ:NVDA</code>), type it and press Add.</li>' +
-    '<li><b>Paste a list:</b> paste a comma-separated list of symbols and press Import.</li>' +
-    '<li><b>Import a file:</b> press <b>Import a file</b> and choose the CSV file you exported from your broker or portfolio site. The page looks for a column called <b>Symbol</b>, <b>Ticker</b> or <b>ISIN</b>, wherever it is in the file, and shows what it found so you can untick what you do not want before anything is added. Files that only have ISIN codes (common with Nordic brokers) work too: the codes are looked up and turned into symbols, and any that could not be found are listed so you can add them by name. Only the symbols are taken; amounts, prices and account numbers in the file are not read into the page and the file is not uploaded anywhere. An Excel file has to be saved as CSV first (File &rarr; Save as &rarr; CSV).</li>' +
-    '<li><b>Import a Google Sheet:</b> in Google Sheets press <b>Share</b>, set it to <b>Anyone with the link</b> (Viewer), copy the link and paste it in the link field. The sheet needs the same kind of column as a file: Symbol, Ticker or ISIN, with the column names in the first row. To import another tab of the sheet, open that tab before you copy the link. This reads the sheet once; it does not keep following it.</li>' +
-    '<li><b>Import your TradingView watchlist:</b><ol type="a">' +
-    '<li>Go to <a href="https://www.tradingview.com" target="_blank" rel="noopener">tradingview.com</a> and open any chart while signed in.</li>' +
-    '<li>Your watchlist is the panel on the right side of the screen.</li>' +
-    '<li>Click the <b>•••</b> (three dots) at the top of that watchlist panel.</li>' +
-    '<li>Choose <b>Advanced view</b> (or <b>Share</b>), then turn on link sharing if it is not already on.</li>' +
-    '<li>Copy the link it gives you &mdash; it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>.</li>' +
-    '<li>Paste that link into the link field (the same one as for a Google Sheet) and press Import.</li>' +
-    '</ol></li></ol>' +
-    '<p><b>In the box:</b> each row has the price, a small chart and the day\'s change. Choose what the chart covers (today, the week, the month, or off) in <b>Settings &rarr; Stocks</b>; in a narrow box the price is cut short to make room for it. Sort with the dropdown, and click a stock for its chart with recent news and chatter about it. The switch above the chart swaps between a clean price line (hover anywhere for the price then; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools; the one you pick stays picked. Big indices are drawn with TradingView&rsquo;s own index price, since the official feeds cannot be shown outside TradingView (for the Nasdaq Composite that is the Nasdaq 100, as the window says). <b>Market hours:</b> the small clock button at the top of the box shows whether the markets your stocks trade on are open. The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open and its &ldquo;down&rdquo; color while it is closed (the same colors and strength as the rest of the box, set under Settings &rarr; Appearance &rarr; Signal colors per box). Point at it for a small box with your main markets, or click it for all of them, lined up in columns: the market, how many of your stocks are on it, open or closed, how long until it closes or opens, and at what time on your own clock. Click a market there to see which of your stocks belong to it. Crypto is left out because it never closes; currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening. The page works out the market from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange is taken as a US stock. The main public holidays are counted, shortened trading days are not. <b>Price alerts:</b> the bell button next to the clock opens a small window where you fill in one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price field starts at what the stock costs now. You get one notification when it happens and the alert then switches itself off; tick it to set it again, change its price or condition right in the list, or remove it with ✕. <b>Set a price alert</b> in the window of a stock opens the same thing for that stock. Up to 30 alerts; prices are looked at about once a minute while the page is open in a tab. Star or hide a stock in Edit mode.</p>' +
-    '<p><b>Alerts:</b> a notification when a stock moves fast (within about half an hour) or far on the day. Set the percentages in <b>Settings &rarr; Notifications</b>.</p>';
+  html += h3("clock", "Date, time &amp; world clocks") +
+    p("All in " + S("Date &amp; time") + ":") +
+    ul(["Tick what the top of the page shows: day name, date, year, time, location, the weekday in front of the date, and seconds.",
+      "Write it the European or the American way, and choose a 24- or 12-hour clock.",
+      "Set the font, size and color of the day name, and the color of the next-event line under the date.",
+      "<b>Location</b>: press <b>Change</b> to set the city for the date and time (separate from the weather box).",
+      "<b>World clocks</b>: add up to five cities, shown in a small box when you point at the date, or on the page under it."]);
 
-  html += '<h3 id="help-news">News &amp; Telegram</h3><p>Open <b>Settings</b> &rarr; <b>News, Telegram &amp; Reddit</b>.</p><ul><li><b>To add a news source:</b> give it a name and either a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website like <code>reuters.com</code>, and press Add. A feed address is the most reliable; with only a website the page looks the news up through search services. Up to 15 sources. Start the name with the outlet (&ldquo;SVT Utrikes&rdquo;, &ldquo;BBC World&rdquo;): two feeds whose names start the same count as one outlet.</li><li><b>To add a Telegram channel:</b> type its name (for example <code>ClashReport</code>) or paste a t.me link, and press Add.</li><li>Click the ✕ next to any source to remove it, or <b>Back to default sources</b> to start over. The list also shows when each source last delivered, and why one was skipped.</li><li>Each of the News and Telegram tiles has its own <b>Sources</b> button, to temporarily hide one source without deleting it.</li><li>With several channels, each Telegram post starts with its channel&rsquo;s name. Settings &rarr; News, Telegram &amp; Reddit &rarr; <b>Channel names in Telegram posts</b> turns that off (<b>Source names after headlines</b> does the same for News and Reddit).</li></ul>' +
-    '<p><b>Reading the news:</b> a story you have not seen gets an accent bar, and the header counts them (click the count to mark everything seen; posts you have not read stay new when you come back later, unless you set <b>When you come back to the page</b> in Settings &rarr; News, Telegram &amp; Reddit to count what was already on screen as seen). Stories you opened are dimmed. The same story from several sources is one row with a source count before the time, also when one report is in Swedish and another in English; three or more outlets within 3 hours makes it <b>hot</b>. A story stays where it was first reported: another source picking it up joins the row and does not mark it new again. Hover a row for the picture and summary, click it for all sources. <b>Search:</b> the ⌕ button at the top of News, Telegram and Reddit opens a search field. It looks through everything the box has loaded (not only the rows on screen), in the headline or post text and the source name; every word you type has to be there, in any order, and capitals and accents do not matter. A moment later (or at once with Enter) it also looks further back than the box reaches: the last 30 days on your own news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first. Press ⌕ again to close the search.</p>' +
-    '<p><b>The reader:</b> click a headline or post and it opens in a window with the other posts of that box above and below it, each one in full with its picture or video, so you scroll from one to the next instead of opening them one by one. Each post gets the window to itself: the list stops on one post at a time (a post longer than the window scrolls smoothly inside it and stops at its end; a couple more notches then move on). The bar at the edge of the window is for all the posts; a long post has a thin one of its own beside it, so two posts are never on screen together. For news, the reader also fetches the full text of the article from the site as you reach a headline and shows it under the picture, in place of the short summary. Where a site does not give its text (a paywall, a page that only works in a browser, some links that come through Google News) the summary stays and a line says why; <b>Read the full article</b> opens the site. The small list button at the top of the box (before ⌕) is for catching up: it opens the same window at the oldest post you have not seen, with a <b>New</b> line above it, and you scroll down to the newest, where it says you are up to date. A post counts as read once you have scrolled to it, so the count of new posts goes down as you read. On a phone the reader fills the screen and you scroll with your thumb; with a keyboard, <code>↓</code> and <code>↑</code> (or <code>J</code> and <code>K</code>) go one post on or back, and Esc closes it. The button beside Close shows which way the list runs (<b>↓ Newer</b> or <b>↓ Older</b>) and turns it around. Videos do not start by themselves, and stop when you scroll away. In Telegram, <b>Load older posts</b> at the old end fetches more; in Reddit, <b>Top comments</b> shows the comments under a post. Under <b>Settings &rarr; News, Telegram &amp; Reddit &rarr; Reading posts</b> you choose whether a click opens the reader or the single post, and <b>Scrolling in the reader moves</b> switches between one post at a time and free scrolling. Under <b>More reader options</b> you set which way scrolling down goes after a click and from the catch-up button, and <b>Height of the reader window</b> sets how much of the screen the window takes (90, 75, 60 or 50%; on a phone it always fills the screen). Two more rows set how the mouse wheel moves between posts, the same for every post: <b>Wheel clicks needed to go to the next post</b> (1 to 6; in a post longer than the window they count once you are at its end) and <b>Pause the wheel after arriving at a post</b> (so one run of the wheel moves one post, and a row of short posts cannot fly past). They only matter with one post at a time, and are grayed out when scrolling is set to Freely.</p>' +
-    '<p><b>Languages:</b> under <i>Languages shown in News</i> tick the languages you read; headlines in other languages are left out (nothing is translated). <b>How many:</b> <i>Headlines shown</i> and <i>Telegram posts shown</i> set the length of the lists; the button at the end of a list shows 20 more, and for Telegram it also loads older posts.</p>' +
-    '<p><b>Filters &amp; alerts:</b> <i>Mute words</i> hide every headline containing them; <i>Highlight words</i> mark matching headlines and notify you when a new one appears.</p>';
+  // ---- Boxes ----
+  html += h3("weather", "Weather") +
+    p("The weather box shows the weather now; click it for hour by hour and the coming days. A <b>!</b> means a weather warning (strong wind, heavy rain or snow, frost, heat): point at it or open the box to read it.") +
+    h4("Your city") +
+    p("Until you choose one, the city is a guess from your device&rsquo;s time zone: Swedish time gives Stockholm, Estonian time Tallinn. No permission is asked, and neither your position nor your IP address is used, so it can be the wrong city in the right country. The setup guide asks you to confirm it.") +
+    p("There are two separate cities; changing one does not change the other:") +
+    ol(["<b>The weather box</b>: click it, type a city, click a result, then press <b>Use for the tile</b>.", "<b>The date and time at the top</b>: " + S("Date &amp; time") + " " + A + " <b>Change</b>, type a city and click <b>Use</b>."]) +
+    p("In the weather window you can also save more cities and switch between them.");
 
-  html += '<h3 id="help-twitch">Twitch</h3><p>Open <b>Settings</b> &rarr; <b>Twitch</b> &rarr; press <b>Connect</b>, log in if asked, and approve access. The box then shows who you follow that is live, with game and viewers; sort it or pick one category with the dropdowns. Hover a channel for a preview picture, the stream title and how long it has been live. Click a name to watch inside the page. Streamers you starred (Edit mode) who are offline are listed dimmed under the live ones with when they were last live; switch that off in Settings &rarr; Twitch.</p>' +
-    '<p><b>Discover:</b> the compass button at the top of the box (always there, also while people you follow are live) opens a window for everything you do not follow. It starts with the biggest live streams right now. Pick a category from the chips to see its ten biggest streams, with <b>Show 10 more</b> for the next ten; <b>All categories</b> unfolds the list and <b>More categories</b> loads further ones. Type in the field to search for a channel or a game by name, and choose a language to see only streams in it. Click a stream to watch it the usual way; the player has a <b>Discover</b> button to go back. ☆ puts a channel on your own list without following it on Twitch: it then shows in the Twitch box when it is live, among your ★ streamers when it is not, and you are told when it goes live. Nothing is asked of Twitch until you open the window, and each answer is kept for a minute. Discover needs your Twitch account to be connected.</p>' +
-    '<p><b>Chat says &ldquo;log in&rdquo;, or ads even though you have Turbo or a sub?</b> The player and chat inside this page are a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login cookie from it, so Twitch thinks you are logged out: you cannot write in chat (the login window opens and closes again by itself) and you get ads. This is a browser setting, not a fault, and <b>Connect</b> in Settings does not change it. Two fixes:</p><ol>' +
-    '<li><b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on <b>Settings &rarr; Twitch &rarr; Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.</li>' +
-    '<li><b>Let the embed see your login</b>: allow third-party cookies for Twitch only. Quickest in Chrome and Edge: click the icon at the left end of the address bar while on this page and allow third-party cookies for this site. Or through the settings:<ul>' +
-    '<li>Chrome: Settings &rarr; Privacy and security &rarr; Third-party cookies &rarr; <i>Sites allowed to use third-party cookies</i> &rarr; Add &rarr; <code>[*.]twitch.tv</code>.</li>' +
-    '<li>Edge: Settings &rarr; Cookies and site permissions &rarr; Manage and delete cookies &rarr; <i>Allow</i> &rarr; Add <code>[*.]twitch.tv</code> (and set Tracking prevention to Balanced, not Strict).</li>' +
-    '<li>Firefox: Settings &rarr; Privacy &amp; Security &rarr; Cookies and Site Data &rarr; Manage Exceptions &rarr; add <code>https://www.twitch.tv</code> and <code>https://player.twitch.tv</code> as <i>Allow</i>.</li>' +
-    '<li>Brave: click the lion icon on this site &rarr; Advanced &rarr; Cookies: <i>Allow all</i>.</li>' +
-    '<li>Safari: cross-site tracking prevention cannot be relaxed per site, so use Pop out.</li></ul>Then make sure you are logged in at twitch.tv in the same browser and reload this page.</li></ol>' +
-    '<p>Tip: mark streamers with ★ (Edit mode) to get a notification when they go live.</p>';
+  html += h3("news", "News &amp; Telegram") +
+    h4("Adding and removing sources (" + S("News, Telegram &amp; Reddit") + ")") +
+    ul(["<b>News</b>: give a name and a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website (<code>reuters.com</code>), and press Add. A feed address is the most reliable; with only a website the page finds the news through search services. Up to 15. Start the name with the outlet (&ldquo;BBC World&rdquo;): feeds whose names start the same count as one outlet.",
+      "<b>Telegram</b>: type a channel name (<code>ClashReport</code>) or paste a t.me link, and press Add. Only public channels work.",
+      "✕ removes a source; <b>Back to default sources</b> starts over. The list shows when each source last delivered, and why one was skipped.",
+      "The <b>Sources</b> button in each box hides a source for a while without deleting it."]) +
+    h4("Reading the box") +
+    ul(["A story you have not seen has an accent bar, and the count at the top counts them. Click the count to mark everything seen. Stories you opened are dimmed.",
+      "The same story from several outlets is one row with a count, also when one report is in Swedish and another in English. Three or more outlets within 3 hours make it <b>hot</b>. A story stays where it was first reported; another source joining does not mark it new again.",
+      "Point at a row for its picture and summary; click it to read it.",
+      "<b>Highlight words</b> mark headlines and tell you when a new one appears; <b>mute words</b> hide every headline that contains them.",
+      "With several channels, each Telegram post starts with its channel&rsquo;s name. <b>Channel names in Telegram posts</b> turns that off, and <b>Source names after headlines</b> does the same for News and Reddit."]) +
+    h4("Search") +
+    p("The ⌕ button at the top of News, Telegram and Reddit opens a search field.") +
+    ul(["It looks through everything the box has loaded: the text and the source name. Every word must be there, in any order; capitals and accents do not matter.",
+      "A moment later (or at once with Enter) it looks further back: the last 30 days of your news sites, the whole history of your Telegram channels, and the last year of your subreddits. What it finds joins the list, newest first.",
+      "Press ⌕ again to close the search."]) +
+    h4("The reader") +
+    p("Click a post and it opens in a window with the box&rsquo;s other posts above and below it, each in full with its picture or video, so you scroll from one to the next.") +
+    ul(["One post at a time: a long post scrolls inside the window and stops at its end; a couple more wheel clicks move on to the next.",
+      "News: the full article is fetched from the site and shown under the picture. Where a site does not allow it (a paywall, some Google News links) the summary stays with a note, and <b>Read the full article</b> opens the site.",
+      "<b>Catching up</b>: the small list button at the top of the box (before ⌕) opens the reader at the oldest post you have not seen, under a <b>New</b> line, and you scroll down to the newest. A post counts as read once you reach it.",
+      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around.",
+      "Videos do not start by themselves, and stop when you scroll away.",
+      "Telegram: <b>Load older posts</b> at the old end. Reddit: <b>Top comments</b> under a post.",
+      "On a phone the reader fills the screen and you scroll with your thumb."]) +
+    h4("Reading settings (" + S("News, Telegram &amp; Reddit") + ")") +
+    ul(["<b>Clicking a post opens</b> the reader, or just that post.",
+      "<b>Scrolling in the reader moves</b> one post at a time, or freely.",
+      "<b>More reader options</b>: which way scrolling down goes after a click and from the catch-up button; the reader&rsquo;s height (90, 75, 60 or 50% of the screen; always full on a phone); <b>Wheel clicks needed to go to the next post</b> (1 to 6); <b>Pause the wheel after arriving at a post</b>, so a row of short posts cannot fly past. The last two only count with one post at a time.",
+      "<b>Languages shown in News</b>: headlines in other languages are left out (nothing is translated).",
+      "<b>Headlines shown</b> and <b>Telegram posts shown</b>: the length of the lists. The button at the end shows 20 more; for Telegram it also loads older posts.",
+      "<b>When you come back to the page</b>: unread posts stay new, or what was on screen counts as seen."]);
 
-  html += '<h3 id="help-keys">Search &amp; keyboard shortcuts</h3>' + searchHelpHtml() +
-    '<p>Shortcuts (when you are not typing in a box): ' + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close." : "switched off.") + ' Change any key, or switch them off, in Settings &rarr; Keyboard shortcuts.</p>';
+  html += h3("reddit", "Reddit") +
+    ul(["Add or remove subreddits in " + S("News, Telegram &amp; Reddit") + " (up to 12).",
+      "In the box, choose <b>Best</b>, <b>Hot</b>, <b>New</b>, <b>Top</b> or <b>Rising</b>. <b>Sources</b> hides a subreddit for a while.",
+      "Point at a post for a preview; click it for the text, the links and the top comments. How many comments (3 to 20, or none) is set under <b>Top comments under a Reddit post</b>.",
+      "Reddit gives a flat list without votes; the button in the window opens the whole discussion on Reddit."]) +
+    p("Search, the reader and catching up work as in News &amp; Telegram.");
 
-  html += '<h3 id="help-youtube">YouTube</h3><p>This shows new uploads from channels you subscribe to (YouTube does not allow websites to read your personal recommended feed, so this is the closest available option).</p><ol>' +
-    '<li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a> while signed in to your YouTube account.</li>' +
-    '<li>Click <b>Deselect all</b> (near the top).</li>' +
-    '<li>Scroll down, find <b>YouTube and YouTube Music</b>, and tick its checkbox.</li>' +
-    '<li>Click the button on that same row that says <b>All YouTube data included</b>. Untick everything, then tick only <b>subscriptions</b>.</li>' +
-    '<li>Click <b>Next step</b>, then <b>Create export</b>.</li>' +
-    '<li>Wait for an email from Google (usually a few minutes) and click the download link inside it.</li>' +
-    '<li>Open the downloaded file. Inside it, find a file named <code>subscriptions.csv</code> (it will be inside a "YouTube and YouTube Music" folder).</li>' +
-    '<li>On this site, open <b>Settings</b> &rarr; <b>YouTube</b>, click <b>Choose subscriptions.csv</b>, and select that file.</li>' +
-    '</ol>';
+  html += h3("sports", "Sports") +
+    p("Choose your leagues in " + S("Sports") + ". ESPN supplies football (leagues and cups from more than twenty countries, the World Cup, the European Championship, the Nations League), NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC. SHL (Swedish hockey) comes from shl.se, and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg; those four need you to be signed in.") +
+    h4("The box") +
+    ul(["Pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> (set in " + S("Sports") + ": everything on now, today and coming up in that sport).",
+      "Point at a game for a short summary; click it for its window.",
+      "<b>Results</b> goes back in time, newest first with a heading for each day: team leagues to the start of the month (in its first week, the month before too); UFC, Formula 1 and golf four weeks; tennis, SHL and esports about a week. It lists the 120 newest; pick one sport to see further back.",
+      "<b>Search</b>: ⌕ finds a team, player, fighter, league or event in everything loaded for your leagues. Several words narrow it down (<code>ufc allen</code>). Press ⌕ again to close."]) +
+    h4("A game&rsquo;s window") +
+    p("What it shows depends on the sport and on what the source has:") +
+    ul(["<b>Team sports</b>: goals and cards with minute and player, the score of each period, match and team stats, the best player lines of each team, line-ups, both sides&rsquo; last five results, and the league table with both teams highlighted. Before the game: the odds and who is unavailable.",
+      "<b>Rugby</b>: every try, conversion and penalty with minute and scorer (T, C, P, DG), the cards, line-ups and the table with bonus points. <b>Cricket</b>: the result, batting and bowling figures and the table with net run rate. <b>Australian football</b>: the goals, each quarter, team stats, the players with the most disposals and the ladder.",
+      "<b>Formula 1</b>: the order of every session that has run (click a session), and the driver and team standings. <b>Golf</b>: the leaderboard round by round. <b>IndyCar</b> and <b>NASCAR</b>: the race order and driver standings.",
+      "<b>Tennis</b>: every match as a small scoreboard, one line per player with the games of each set and the winner ticked, and the world ranking below.",
+      "<b>SHL</b>: the goals with assists, the score of each period, team stats, the best skaters and the goalies.",
+      "<b>Esports</b>: both teams&rsquo; last five, world ranking and recent meetings, and every map or game with its score. Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating; Dota 2 a scoreboard for each game with heroes and net worth. Click a team for its roster, career numbers, next matches, last results and titles, and a player in the roster for the player. <b>Watch</b> buttons dock the Twitch stream showing the match."]) +
+    h4("Teams and players") +
+    p("Team and player names can be clicked wherever they appear: in game windows, league tables, rankings, tennis matches and Formula 1 and golf results. They turn your accent color when you point at them.") +
+    ul(["<b>A team</b>: its league position, record and coach, the last five results as W/D/L, its results and coming games side by side, and the squad by position with number, age and nationality (! = injured). SHL teams also show the club&rsquo;s history, the team&rsquo;s figures (goals per game, power play, penalty kill) and their top scorers.",
+      "<b>A player</b>: team, position, number, age, birthplace, nationality, height and weight, and their statistics. Tennis players also show their matches in the tournaments that are loaded.",
+      "Click on to another team or player from there; <b>&larr; Back</b> goes back the same way.",
+      "UFC fighters and esports teams and players have windows of their own (below and above)."]) +
+    h4("UFC") +
+    ul(["An upcoming event is one row. Click it for the fight card: a table with the fighters facing each other, the odds to win beside each name, and the weight class and status in their own columns.",
+      "While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results.",
+      "Click a fight for both fighters side by side, the fight&rsquo;s numbers (strikes, takedowns, control time) and a tale of the tape. Point at a fighter for a small card; click the name for the fighter&rsquo;s window."]) +
+    h4("Favorites") +
+    ul(["Press ☆ next to a team, fighter or player in a window. Favorites are marked ★ and listed first.",
+      "You are told when their game starts, at every goal (football and ice hockey) and at the final score.",
+      "Their games show in the calendar. Both can be switched off (" + S("Sports") + " and " + S("Notifications") + ")."]) +
+    h4("Sports in your calendar") +
+    ul(["<b>+ Add to calendar</b> (in the window of any game, card, race or tournament) puts that event in your calendar with a reminder 30 minutes before. Change or remove it with ✎ in the calendar.",
+      "<b>+ Every &hellip; event</b> does the same for every coming event of that league, also the ones announced later, and keeps them at the right time when one is moved. An event you delete yourself is not put back.",
+      "Switch it off with the same button or in " + S("Sports") + " " + A + " <b>Events in your calendar</b>; the events still to come leave the calendar again.",
+      "The reminders need <b>Calendar reminders</b> switched on in " + S("Notifications") + "."]);
 
-  html += '<h3 id="help-radio">Radio</h3><p>The small box next to the menu icons is an internet radio: pick a station from its list and press ▶ to play; while it plays, the same button stops it (■). ⏭ goes to the next station of your list (also while it plays), and the speaker button at the end opens a volume slider. It keeps playing while you use the rest of the page, and choosing another station while it plays switches straight to it. Tick which stations are in the list in <b>Settings &rarr; Radio</b>. <b>Your own stations:</b> in the same place, under <b>Add a station of your own</b>, type a station name, a city or a genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The list that appears comes from Radio Browser, a free public catalogue of tens of thousands of stations; ▶ lets you listen before you decide and <b>Add</b> puts the station in your list under &ldquo;My stations&rdquo;, ticked and ready in the box. You can also paste a stream address that starts with https://. Up to 25 of your own; ✕ next to one removes it. A station that is already in the list, also when the catalogue has it under another address, is not added a second time: it is ticked instead. The song that is playing shows for your own stations too, whenever the station sends it along with the music (most do; some only send their own name or nothing). A red play button means that station could not be reached just now. <b>What is playing:</b> press the ⓘ button before the volume button (or click the box itself; hovering it shows the song, artist and album cover) for the song with album, year, length, who wrote it, links to the song and lyrics, and the last five songs. Under them is a short note about the station: its genre, language and country, its sound quality, a few of its own tags and a link to its website, as far as the public station catalogue knows them. Not every station sends its song, and the earlier songs are the ones noted while the radio played on this page. (The currency converter that used to be here is now in the search bar: type <code>100 usd in eur</code>.)</p><p><b>Podcasts in the same box:</b> with the Podcasts box on, the first button of the Radio box switches it between the radio and podcasts. See Podcasts below.</p>';
+  html += h3("stocks", "Stocks") +
+    h4("Adding stocks (" + S("Stocks") + ")") +
+    p("Stocks, funds, indexes and crypto can be added in five ways:") +
+    ol(["<b>Search by name</b>: type a company name such as <code>Tesla</code>. A list shows the symbol, the full name and the exchange; press <b>Add</b> on the right one. A company is often on several exchanges, so pick the one you hold. If you know the symbol (<code>NVDA</code> or <code>NASDAQ:NVDA</code>), type it and press Add.",
+      "<b>Paste a list</b> of symbols separated by commas, and press Import.",
+      "<b>Import a file</b>: choose the CSV file from your broker or portfolio site. The page looks for a <b>Symbol</b>, <b>Ticker</b> or <b>ISIN</b> column and shows what it found, so you can untick anything first. Files with only ISIN codes work too; any that cannot be found are listed so you can add them by name. Only the symbols are read; amounts, prices and account numbers are not, and the file is not uploaded. Save an Excel file as CSV first.",
+      "<b>A Google Sheet</b>: in Google Sheets press <b>Share</b>, set it to <b>Anyone with the link</b> (Viewer), copy the link and paste it into the link field. The sheet needs the same kind of column, with the names in its first row. For another tab of the sheet, open that tab before copying the link. It is read once, not followed.",
+      "<b>Your TradingView watchlist</b>:" + ol(["Open any chart on <a href=\"https://www.tradingview.com\" target=\"_blank\" rel=\"noopener\">tradingview.com</a> while signed in. Your watchlist is the panel on the right.", "Click <b>&bull;&bull;&bull;</b> at the top of that panel and choose <b>Advanced view</b> (or <b>Share</b>); turn link sharing on.", "Copy the link (it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>), paste it into the link field and press Import."])]) +
+    h4("The box") +
+    ul(["Each row shows the price, a small chart and the day&rsquo;s change. Choose what the chart covers (today, the week, the month, or off) in " + S("Stocks") + ". In a narrow box the price is cut short to make room.",
+      "Sort with the dropdown. Star or hide a stock in Edit mode.",
+      "Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept.",
+      "Big indices are drawn with TradingView&rsquo;s own index price, as the official feeds cannot be shown outside TradingView. For the Nasdaq Composite that is the Nasdaq 100, as the window says."]) +
+    h4("Market hours (the clock button)") +
+    ul(["The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open, and its &ldquo;down&rdquo; color while it is closed.",
+      "Point at it for your main markets; click it for all of them: how many of your stocks are on each, open or closed, how long until it opens or closes, and at what time on your own clock. Click a market to see which of your stocks belong to it.",
+      "Crypto is left out (it never closes). Currencies and commodities (oil, gold) trade almost around the clock from Sunday evening to Friday evening.",
+      "The market comes from the symbol (<code>NASDAQ:NVDA</code>, <code>SAAB-B.ST</code>); a symbol without an exchange counts as a US stock. Main public holidays are counted, shortened trading days are not."]) +
+    h4("Alerts") +
+    ul(["<b>Price alerts</b>: the bell button next to the clock opens one sentence: Alert me when [stock] is [more than / less than / reaches] [price]. The price starts at today&rsquo;s. You get one notification and the alert switches itself off; tick it to set it again, change it right in the list, or remove it with ✕. <b>Set a price alert</b> in a stock&rsquo;s window does the same. Up to 30, checked about once a minute while the page is open.",
+      "<b>Big moves</b>: a notification when a stock moves fast (within about half an hour) or far in a day. Set the percentages in " + S("Notifications") + "."]);
 
-  html += '<h3 id="help-pod">Podcasts</h3><p>A box for the podcasts you follow. It is off at first: switch it on under <b>Settings &rarr; Layout &amp; boxes</b>.</p><p><b>Find shows:</b> choose <b>Popular</b> in the list at the top of the box for the most listened shows of a country, by topic (choose both right under it), or press ⌕ and type a name, a topic or a person to search every podcast. Press <b>+</b> to follow a show; ✓ means you follow it. Click a show&rsquo;s name for its page in the box: its latest episodes (<b>Older episodes</b> loads 20 more), <b>+ Follow</b>, and ☆ for a notification when a new episode comes out. <b>&larr; Back</b> returns to the list. The box always keeps its size; a long list scrolls inside it.</p><p><b>Following</b> lists the newest episodes of your shows, newest first. New ones are marked, and the number at the top marks them all seen. Click an episode to play it. One you started shows how much is left and a thin line for how far you got; ✓ means played. <b>Shows</b> lists the shows you follow, with ☆ and ✕ (stop following). Point at an episode for a small card with its notes, the date and how much is left; point at a show (in Popular, the search or a show&rsquo;s name) for who makes it, its topic, a description where the directory has one and its latest episode.</p><p><b>Playing:</b> episodes play in the Radio box. Its first button switches between the radio and podcasts (that button is only there while you use podcasts). With podcasts the box shows the title and the time left, play and pause, jump back, jump forward and the volume button (one volume for the radio and podcasts). Click the title for the player: the cover, a bar to jump to any point, the jump buttons, the speed (0.8&times; to 2&times;), the volume, <b>Mark as played</b>, the notes of the episode and <b>Up next</b> (episodes you started, then new ones). The radio and a podcast never play at the same time. Where you stopped is saved with your account, so you can go on on another device. On a phone it keeps playing with the screen off and can be paused from the lock screen.</p><p><b>Settings &rarr; Podcasts:</b> the speed, how far the jump buttons go, whether played episodes stay in the list (dimmed) or leave it, the country of the Popular list, and, folded under <b>In the Radio box</b>, how the Radio box looks while it plays podcasts: the progress line, the time left, the jump buttons (in a narrow box they step aside by themselves; they are always in the player) and whether a long title is cut short or rolls slowly across. Shows and episodes come from Apple&rsquo;s public podcast directory, read straight from your browser; a few shows that are only on one app are not in it.</p><h3 id="help-timers">Timers, stopwatch &amp; calculator</h3><p>Click the Tools icon (four small squares, the first one in the menu box) and choose Timer, Countdown or Stopwatch. A finished timer or countdown keeps ringing every few seconds until you press <b>Stop</b> or remove it, so it is hard to miss. You can set how loud it rings in <b>Settings</b> &rarr; <b>Notifications</b> &rarr; <b>Alarm volume</b>.</p><p><b>Calculator:</b> Tools &rarr; Calculator. Click the keys or type: digits, + &minus; * / ^ % ( ), Enter for the result, Backspace to take one step back and Delete to clear. <b>f(x)</b> shows more: brackets, powers, square root, sin, cos and tan, &pi;, e, ln, log, n! and 1/x, and <b>Ans</b> for the last result; <b>DEG</b>/<b>RAD</b> switches how angles are counted. While you type, the answer shows under the sum. It can be docked like the notes and the calendar.</p>';
+  html += h3("tv", "TV shows") +
+    p("The box is off at first: switch it on in " + S("Layout &amp; boxes") + ". Show information comes from TVmaze.com; films are not included. Times are in your own time zone.") +
+    ul(["<b>Follow a show</b>: press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60.",
+      "<b>My shows: coming up</b> lists the next episode of each show, soonest first, under a heading per day. Point at a row for a small card about the show.",
+      "<b>My shows: just aired</b> lists the latest episode of each, newest first.",
+      "<b>On today</b> shows the best-known shows airing today in one country, on television and streaming, with yours marked ★. Choose the country in " + S("TV shows") + ".",
+      "<b>Click a row</b> for the show: what it is about, where it runs, its rating, coming and latest episodes, and a button to follow it or stop.",
+      "The next and the latest episode of each show sit on their day in the calendar (switch off in " + S("TV shows") + "), and you can be told when a new one airs (" + S("Notifications") + ").",
+      "The shows you follow, each with ✕, are listed in " + S("TV shows") + "."]);
 
-  html += '<h3 id="help-notes">Notes &amp; to-dos</h3><p>Click the notepad icon (or use its shortcut). There are three tabs: To-do, Notes and Read later (see Hiding boxes &amp; docking). <b>To-do:</b> type a task and press Enter; click the circle to tick it off (finished tasks move under <i>Completed</i>, which you can open or clear). <b>Notes:</b> write in the first card and press Save (or Ctrl+Enter). In both, click any text (or ✎) to edit it in place, and hover for pin ★, edit ✎ and delete ✕. Enter or clicking elsewhere saves the change. The number on the icon is how many to-dos are open.</p>' +
-    '<p><b>Quick ways to add one:</b> type <code>note buy milk</code> or <code>todo call the bank</code> in the search bar and press Enter; or press Ctrl+V anywhere on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the small card that appears (switch that off in Settings &rarr; Layout &amp; boxes).</p>';
-  html += '<h3 id="help-reddit">Reddit</h3><p>The Reddit box shows posts from your subreddits. Add or remove them in <b>Settings &rarr; News, Telegram &amp; Reddit</b>. In the box, choose <b>Best, Hot, New, Top</b> or <b>Rising</b>, and use <b>Sources</b> to hide a subreddit without removing it. Hover a post for a preview; click it for the text, the links and the top comments. How many comments are shown (3, 5, 10, 20 or none) is set in the same Settings section. Reddit only gives a flat list without votes, so the button in the window opens the full discussion.</p>';
-  html += '<h3 id="help-sports">Sports</h3><p>Live scores and fixtures. Choose your leagues in <b>Settings &rarr; Sports</b>: football leagues and cups from more than twenty countries plus the World Cup, the European Championship and the Nations League, NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC come from ESPN; SHL (Swedish hockey) comes from shl.se and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg (those four need you to be signed in).</p>' +
-    '<p><b>In the box:</b> pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> if you set one in Settings (everything on now, today and coming up in that sport). Hover a game for the short story of it; click it for goals and cards with minute and scorer, period scores, match stats, top performers and the league table with both teams highlighted. Every team sport also gets, where the source has it: who scored and when, the full team stats, the best player lines of each team (switch team with the two small buttons), football line-ups and the last five results of both sides, and before the game the odds and who is unavailable. A Formula 1 weekend shows the order of every session that has run (click a session) with the driver and team standings; golf shows the whole leaderboard round by round; tennis shows the world ranking under the matches. Rugby shows every try, conversion and penalty with the minute and the scorer (T, C, P, DG), the cards, both line-ups, the last five results and the table with bonus points; rugby league adds team stats. Cricket shows the result, the batting and bowling figures, the teams and the table with net run rate. Australian football shows the goals, the score of each quarter, team stats, the players with the most disposals and the ladder. IndyCar and NASCAR show the order of the race and the driver standings. SHL games show the goals with assists, the score of each period, team stats, the best skaters and the goalies. Esports matches show the last five results of both teams, their world ranking and recent meetings, and every map or game with its score: Counter-Strike 2 adds the players&rsquo; kills, deaths, assists and rating, Dota 2 a scoreboard for each game with heroes and net worth. Click a team&rsquo;s name for the team: roster, career numbers, next matches, last results and titles; click a player in the roster for the player. An esports game has<b>Watch</b> buttons that dock the Twitch stream showing it.</p>' +
-    '<p><b>Results:</b> choose <b>Results</b> in the view list to go back in time: finished games, fight cards, races and tournaments, newest first, with a small heading for each day. Click one for the same full details as a live game (a finished UFC card opens with every fight, and each fight with its numbers). Team leagues go back to the start of the month (in the first week of a month, the month before as well); UFC cards, Formula 1 weekends and golf tournaments four weeks; tennis, SHL and esports about a week. The list shows the 120 newest; pick one sport in the first list to see further back in that sport.</p>' +
-    '<p><b>Search:</b> press ⌕ at the top of the box and type a team, player, fighter, league or event. It looks through everything that is loaded for the leagues you follow, whatever the view: what is live, what is coming up this month and the recent results, in that order. Several words narrow it down (for example <code>ufc allen</code>). Press ⌕ again to close the search.</p>' +
-    '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
-    '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p><p><b>Sports in your calendar:</b> in the window of a game, a UFC card, a race or a tournament, <b>+ Add to calendar</b> puts that one event in your calendar with a reminder 30 minutes before (change or remove it with ✎ in the calendar). <b>+ Every … event</b> does the same for every coming event of that league, also the ones announced later, and keeps them at the right time when one is moved; an event you delete yourself is not put back. Switch it off with the same button or under Settings &rarr; Sports &rarr; Events in your calendar, and the events still to come leave the calendar again. The reminders need Calendar reminders switched on under Settings &rarr; Notifications.</p><p><b>Teams and players:</b> in the window of a game, a tournament or a race, and in league tables and rankings, the names of teams and players can be clicked (they turn your accent color when you point at them). A team shows its place in the league, its record and coach, its last five results as W/D/L, its latest results and coming games side by side, and its squad by position with number, age and nationality (! = injured). A player shows their team, position, number, age, where they were born, nationality, height and weight, and their statistics; a tennis player also their matches in the tournaments that are loaded. Click on from there to another team or player; <b>← Back</b> goes back the same way. Tennis tournaments show each match as a small scoreboard: one line per player with the games of each set, the winner ticked. (UFC fighters and esports teams have their own windows, described above.)</p>';
-  html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; Layout &amp; boxes</b>.</p>' +
-    '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for a small card with what the show is about, where it runs and its next and latest episode, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
-    '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
-  html += '<h3 id="help-boxes">Hiding boxes &amp; docking</h3><p><b>Hide a whole box:</b> in Edit mode click the box and press <b>Hide</b>, or switch it off in <b>Settings &rarr; Layout &amp; boxes</b>, where you can also switch it back on. A hidden box is not loaded. <b>Dock notes, the calendar or the calculator:</b> open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it then stays at the side of the page. On a computer, drag a docked panel by its title to move it up or down, or across to the other side (⇄ does that in one click); it stays where you let go. Drag it in toward the boxes and its side attaches right next to them; drag it back out and it sits at the screen&rsquo;s edge again. The page stays in the middle as long as the docked panels fit beside it, and only moves over when they do not. In <b>Edit</b> mode each docked panel also gets T&minus; / T+ for its text size, its bottom edge sets its height and its inner edge the width of all panels on that side (double-click an edge to undo it). When a row of tabs or keys would not fit, the panel gets just as much smaller as it needs; a long list (such as notes) scrolls inside its panel with its buttons always in view. This is kept for computers only. On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page, centered like the boxes. ✕ turns a panel back into a window. <b>Reload and problems:</b> every list box has a ↻ button to reload it. When something in a box could not be loaded, a small <b>!</b> appears next to it; click it to read what failed, why, since when, and what you can do. <b>Read later:</b> put a headline, Telegram post, Reddit post or video aside for later. With the mouse on its row, a small bookmark button takes the place of the time; or press <b>Read later</b> in the window that opens when you click the item (on a phone, that is the way). Saved rows keep a small bookmark mark. The list is the third tab of <b>Notes</b>: click an item to open it, press ✓ when you are done to take it off the list. It holds up to 100 items and is the same on all your devices. <b>Bookmarks bar:</b> a slim row of your own links at the very top of the page. Switch it on and add links under Settings &rarr; Bookmarks; group links in a folder (it opens as a small list), choose an icon and a color for each, and move them left and right with ◀ ▶. The bar can be aligned left, centered or right, and its links can open in a new tab. <b>Bring your browser&rsquo;s bookmarks along:</b> first save them to a file in your browser (Chrome, Edge, Brave and Opera: Bookmark manager → ⋮ → Export bookmarks; Firefox: Bookmarks → Manage bookmarks → Import and Backup → Export Bookmarks to HTML; Safari: File → Export → Bookmarks). Then, under Settings → Bookmarks → Import from your browser, choose that file. Every folder in it is listed with a tick box and the number of links; tick the ones you want and choose for each whether it becomes a folder or separate links on the bar. The browser&rsquo;s own bookmarks bar is ticked from the start. Links you already have are skipped, a folder takes 60 links at most, and the file is read on your device, not uploaded. <b>Web page boxes:</b> under Settings → Web page boxes you can show up to three web pages in boxes of their own, for example a dashboard, a live map, a webcam or a shared document. Paste the address and the box appears; move it with Edit like any other box, and change its height with H&minus; and H+. The small arrow in its corner opens the page in its own tab, ↻ loads it again, and it can reload by itself every 1, 5, 15 or 60 minutes. Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; then the box stays empty, and when you are signed in the settings tell you so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share → Embed); those work. The page in the box cannot read anything from OmniTree and cannot take over the tab. <b>Date, time and world clocks:</b> under Settings &rarr; Date &amp; time you tick what the top of the page shows (day name, date, year, time, location), choose the European or the American way of writing it, and set the font, size and color of the day name. You can also put the weekday in front of the date, show seconds, choose a 24- or 12-hour clock, and pick the color of the next-event line under the date. Add up to five cities there as world clocks: either in a small box when you point at the date, or on the page under it. <b>Found a bug or have an idea?</b> Cogwheel icon &rarr; <b>Feedback</b>. Pick what kind it is, answer the short questions and press Send; it works without an account too.</p>';
-  html += '<h3 id="help-cal">Calendar &amp; reminders</h3><p>Click the calendar icon (or press <code>c</code>). Pick a day, type an event, optionally set a time, a reminder and a repeat, and press Add. To change an event afterwards, press ✎ on it: the same form then holds its name, day, time, reminder and repeat; press Save, or Cancel to leave it as it was. Days with events have a dot, and the number on the icon is today\'s events. A reminder shows as a notification in the bottom-right corner and stays until you dismiss it (all-day events count as 09:00). Reminders only fire while this page is open in a tab. Games of your ★ sports favorites appear on their day by themselves (click one to open the game); they are not saved with your own events.</p>' +
-    '<p><b>Repeating events and birthdays:</b> choose a repeat when you add an event, or press ↻ on an existing one to step through Once, Birthday, Yearly, Monthly, Weekly, Daily. A birthday comes back every year; put the birth year in its name (&ldquo;Anna 1990&rdquo;) and it also shows the age.</p>' +
-    '<p><b>Calendars from elsewhere</b> (Settings → Calendar → Calendars from elsewhere). There are two ways, and you can use both:</p><ul>' +
-    '<li><b>Import an .ics file:</b> copies the events into your own calendar, once. You first see what was found and how many there is room for (the calendar holds 300 events of your own). Repeating events keep repeating, one-time events older than a month are left out, and events you already have are skipped. Afterwards they are yours: change the repeat or delete them like any other event. Good for a school term, a sports schedule or moving over from another calendar.</li>' +
-    '<li><b>Follow a calendar by its address:</b> paste the calendar&rsquo;s .ics address and press Follow. Its events show next to yours with the calendar&rsquo;s name after them, and are read again every half hour, so changes made in the other calendar turn up here by themselves. They are not copied and cannot be changed here. You can give each followed calendar a name and a reminder for all its events, and follow up to four. This needs you to be signed in.</li></ul>' +
-    '<p><b>Where to find the address:</b> <b>Google Calendar:</b> Settings → click the calendar under &ldquo;Settings for my calendars&rdquo; → Integrate calendar → <b>Secret address in iCal format</b>. <b>Outlook.com:</b> Settings → Calendar → Shared calendars → Publish a calendar → the <b>ICS</b> link. <b>Apple iCloud:</b> share the calendar as a Public Calendar and copy the link. The file for a one-time import is in the same places (Google: Settings → Import &amp; export → Export). A secret address lets anyone who has it read that calendar, so treat it like a password; it is saved with your settings and used only to read the calendar.</p>' +
-    '<p><b>Taking your events elsewhere:</b> in the same place in Settings, <b>Download my events as an .ics file</b> saves your own events, with their repeats and reminders, as a file that Google Calendar, Outlook and Apple Calendar can import. Calendars you follow and the special days are not in it.</p><p><b>Good to know:</b> times are shown in your own time zone. An event that lasts several days is shown on its first day with the last day in its name. &ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules (such as &ldquo;the last Friday of every third month&rdquo;) are simplified.</p>' +
-    '<p><b>Special days</b> (Settings &rarr; Calendar): have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine\'s, Mother\'s and Father\'s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday. They are worked out for every year by themselves. Hover or click a day to read them, and tick the ones you want a reminder for.</p>' +
-    '<p><b>Next up:</b> the small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is under Settings &rarr; Appearance.</p>';
-  html += '<h3 id="help-ntf">Notifications &amp; summary</h3><p>Small cards appear in the bottom-right corner for: the same story from several of your sources within two hours, a headline with one of your highlight words, a stock on your list moving fast or far, a ★ streamer going live, a ★ team\'s game starting, scoring and ending, a new episode of a TV show or podcast you follow (for podcasts: only shows with a ☆, or every show, chosen right under its switch), new mail, and calendar reminders. Click a card to open it, ✕ to dismiss. The <b>bell</b> in the menu box keeps the last 30, and its number is how many you have not looked at; opening it clears the number. Hover the mail tile to see your latest unread subjects. Everything can be turned on or off and tuned in <b>Settings &rarr; Notifications</b>, including the ping sound, the alarm volume, a <b>Show a test notification</b> button, and whether to also send desktop notifications (which also keeps the boxes that notify you at their usual pace while the tab is in the background).</p><p><b>While the tab is in the background</b> (another tab is selected, or the window is minimized), everything still updates, in calmer steps the longer you are away: after 10 minutes, then 15, then 30, then every hour. The boxes, the bell and the count in the tab&rsquo;s title stay current. When you come back and the last update is more than 15 minutes old, everything is fetched at once and the gaps are filled: Telegram fetches back to the posts it already had (up to about 100 per channel), and News and Reddit (sorted by New) keep what they had, so nothing posted while you were away is skipped and there is no need to reload the page.</p>' +
-    '<p><b>Good to know:</b> a card goes away by itself after 20 seconds, counted only while you are looking at the page, so one that arrived while the tab was in the background is still there when you come back. The ping can only play once you have clicked somewhere on the page; that is a rule of the browser. Heard something and saw nothing? <b>Settings &rarr; Notifications</b> ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.</p>' +
-    '<p><b>On all your devices:</b> pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing its history are saved to your account. Do it on the computer and the phone shows the same within a minute, and nothing is announced twice.</p><p><b>Count in the tab title:</b> the page&rsquo;s tab shows how many new things are waiting, like &ldquo;(5) OmniTree&rdquo;, so you see it from other tabs. Under <b>Settings &rarr; Notifications &rarr; Count in the tab title</b> you switch it on or off and tick what counts: new mail, new Telegram posts, new headlines, new Reddit posts, streamers live on Twitch, new podcast episodes and unread notifications in the bell (mail, Telegram, Twitch, podcasts and the bell to begin with). It can also put a small dot on the tab&rsquo;s icon. The numbers are the same ones the boxes show.</p>' +
-    '<p><b>By email:</b> tick <i>Also send them to my email</i> to get the same notifications in your connected Gmail inbox, everything from a five-minute stretch in one email. It is off until you switch it on, needs an inbox set up under Mail, and only works while this page is open in a tab.</p>' +
-    '<p><b>Summary:</b> one small window with what happened lately. Open it any time from the cogwheel menu or with <code>b</code>. Everything about it is set under <b>Settings → Summary</b>:</p><ul>' +
-    '<li><b>When it opens by itself:</b> never, on the first visit of the day, when you come back after being away, or both. You choose how long &ldquo;away&rdquo; is (30 minutes to 8 hours); away means the page was closed or its tab was in the background for that long.</li>' +
-    '<li><b>How far back it looks:</b> the last 6, 12 or 24 hours, or the last 2 days.</li>' +
-    '<li><b>What is in it:</b> weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live on Twitch, ★ streamers who were live while you were away, TV episodes of your shows, new podcast episodes, sports results and sports coming up. Tick the parts you want and put them in your own order with ▲ ▼. A part with nothing to show is left out by itself.</li>' +
-    '<li><b>Narrowing a part down:</b> press <b>Choose…</b> on a part to pick which news sources, Telegram channels, subreddits or sports it uses, or to keep it to your ★ channels and ★ teams only. New sources you add later are included by themselves.</li>' +
-    '<li><b>How it looks:</b> a list, cards side by side, or a compact version, and how many items each part shows at most (3 to 15).</li></ul>' +
-    '<p><b>Hover previews:</b> rest the mouse on a news headline or Telegram post to see its picture and text without opening it. <b>Stocks:</b> click a stock to see its chart plus recent news and comments about it.</p>';
+  html += h3("twitch", "Twitch") +
+    h4("Connecting") +
+    ol(["Open " + S("Twitch") + " and press <b>Connect</b>.", "Log in on Twitch if asked and press <b>Authorize</b>. The page only reads who you follow; it cannot chat, follow or change anything."]) +
+    h4("The box") +
+    ul(["Who you follow that is live, with game and viewers. Sort it or pick a category with the dropdowns.",
+      "Point at a channel for a preview, the title and how long it has been live; click it to watch inside the page.",
+      "★ a streamer in Edit mode to be told when they go live. Starred streamers who are offline are listed dimmed under the live ones, with when they were last live (switch off in " + S("Twitch") + ")."]) +
+    h4("Discover (the compass button)") +
+    ul(["Starts with the biggest live streams right now. Pick a category for its ten biggest streams; <b>Show 10 more</b> for the next ten, <b>All categories</b> and <b>More categories</b> for further ones.",
+      "Type in the field to search for a channel or a game, and choose a language to see only streams in it.",
+      "Click a stream to watch it; the player has a <b>Discover</b> button to go back.",
+      "☆ puts a channel on your own list without following it on Twitch: it then shows in the box when live, among your ★ streamers when not, and you are told when it goes live.",
+      "Discover needs your Twitch account connected. Each answer is kept for a minute."]) +
+    h4("Chat asks you to log in, or ads despite Turbo or a sub?") +
+    p("The player inside the page is a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login from it, so Twitch thinks you are logged out. This is a browser setting; <b>Connect</b> does not change it. Two fixes:") +
+    ol(["<b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on " + S("Twitch") + " " + A + " <b>Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.",
+      "<b>Let the embed see your login</b> by allowing third-party cookies for Twitch only. Quickest in Chrome and Edge: click the icon at the left end of the address bar on this page and allow third-party cookies. Or in the browser&rsquo;s settings:" + ul([
+        "Chrome: Settings " + A + " Privacy and security " + A + " Third-party cookies " + A + " <i>Sites allowed to use third-party cookies</i> " + A + " Add " + A + " <code>[*.]twitch.tv</code>.",
+        "Edge: Settings " + A + " Cookies and site permissions " + A + " Manage and delete cookies " + A + " <i>Allow</i> " + A + " Add <code>[*.]twitch.tv</code> (and set Tracking prevention to Balanced).",
+        "Firefox: Settings " + A + " Privacy &amp; Security " + A + " Cookies and Site Data " + A + " Manage Exceptions " + A + " add <code>https://www.twitch.tv</code> and <code>https://player.twitch.tv</code> as <i>Allow</i>.",
+        "Brave: the lion icon on this site " + A + " Advanced " + A + " Cookies: <i>Allow all</i>.",
+        "Safari cannot allow this per site; use Pop out."]) + "Then be logged in at twitch.tv in the same browser and reload this page."]);
 
-  html += '<h3 id="help-wallpaper">Wallpaper</h3><p>Open <b>Settings</b> &rarr; <b>Wallpaper</b>. Click <b>Choose image</b> to pick a picture, then choose how it should fit the screen: Fill, Fit, or Original size. Press <b>Reposition</b> to drag the image where you want it, then press <b>Done</b>.</p>';
+  html += h3("youtube", "YouTube") +
+    p("The box shows new videos from the channels you subscribe to. YouTube does not let a website read your subscriptions or your recommendations, so you hand the page a small file, once. It takes about five minutes and the file only holds channel names.") +
+    ol(["Go to <a href=\"https://takeout.google.com\" target=\"_blank\" rel=\"noopener\">takeout.google.com</a>, signed in to your YouTube account.",
+      "Click <b>Deselect all</b> near the top.",
+      "Scroll down to <b>YouTube and YouTube Music</b> and tick it.",
+      "On the same row, click <b>All YouTube data included</b>; untick everything, then tick only <b>subscriptions</b>.",
+      "Click <b>Next step</b>, then <b>Create export</b>.",
+      "Google emails you a download link, usually within minutes. Download the file.",
+      "Open it and find <code>subscriptions.csv</code> (in the &ldquo;YouTube and YouTube Music&rdquo; folder).",
+      "Here, open " + S("YouTube") + ", click <b>Choose subscriptions.csv</b> and pick that file."]);
 
-  html += '<h3 id="help-edit">Colors, text size &amp; layout</h3><p><b>Settings</b> &rarr; <b>Appearance</b> covers the theme, every color (including the dim text used for times, sources and notes), how see-through the boxes are, overall text size, the glow behind the page, the shadows and rounded or square corners everywhere (boxes, menus, windows and buttons). A phone has its own overall text size: changing it on a phone leaves the computer as it is. At the bottom, <b>Signal colors per box</b> changes the green and red in Stocks, the live dot in Twitch and the live red and icons in Sports, each with a strength slider to tone it down.</p><p>To move or resize the boxes, click the cogwheel icon and choose <b>Edit</b> (or press E). Nothing moves when Edit is turned on: the boxes get a dashed outline and a small ⠿ tab on their top edge, and a bar with <b>Undo</b>, <b>Cancel</b> and <b>Done</b> appears at the bottom of the screen. <b>Click a box</b> for its buttons: ◀ / ▶ move it one column, ▲ / ▼ move it up or down, W&minus; / W+ make it narrower or wider, H&minus; / H+ show fewer or more rows of a list, and T&minus; / T+ change that box&rsquo;s own text size. The buttons also show the box&rsquo;s size and its text size, and change with them. <b>Drag the edge or corner</b> of the selected box to resize it: the 12 columns appear and the width snaps to them, the height to whole rows, and the other boxes make room as you drag. <b>Drag the ⠿ tab</b> to move a box: its place stays open as an outlined gap so you see where it lands, and it stays in the column you drop it in (Esc puts it back). On a list, the ☆ and ✕ of a row show when you point at it, and on every row of the selected box. Hidden boxes come back from the chips in the bar. <b>Done</b> keeps the changes, <b>Cancel</b> puts everything back. With the keyboard: arrows move the selected box, Shift + arrows resize it.</p>' +
-    '<p><b>Phone and computer:</b> a phone has its own layout. List lengths, text sizes and the order you change on a phone apply to phones only (the bar says which layout you are editing); whatever you never changed on a phone follows the computer layout. On a phone the boxes sit in one column, so only ▲ / ▼, the height and the text size are offered, and both bars sit at the bottom within reach of your thumb. Hold the ⠿ tab to move a box, so scrolling works as usual everywhere else. Hidden boxes are the same on every device.</p>';
+  html += h3("radio", "Radio") +
+    h4("The box") +
+    ul(["The small box next to the menu icons is an internet radio. Pick a station in the list and press ▶. While it plays, the same button stops it (■).",
+      "⏭ goes to the next station of your list, also while playing; choosing another station while it plays switches straight to it.",
+      "The speaker button opens a volume slider. The radio keeps playing while you use the rest of the page.",
+      "<b>What is playing</b>: point at the box for the song, artist and album cover; press ⓘ (or click the box) for the album, year, length, who wrote it, links to the song and lyrics, the last five songs, and a note about the station (genre, language, country, sound quality, website).",
+      "A red play button means that station could not be reached just now.",
+      "With the Podcasts box on, the first button of the box switches between radio and podcasts."]) +
+    h4("Choosing stations (" + S("Radio") + ")") +
+    ul(["Tick the stations you want in the list. They are sorted by genre; the tag after a name is the presenters&rsquo; language.",
+      "<b>Add a station of your own</b>: type a name, city or genre (<code>BBC Radio 1</code>, <code>Stockholm</code>, <code>jazz</code>). The results come from Radio Browser, a free public catalogue of tens of thousands of stations. ▶ lets you listen first; <b>Add</b> puts it under &ldquo;My stations&rdquo;. You can also paste a stream address that starts with https://.",
+      "Up to 25 of your own; ✕ removes one. A station you already have is not added twice (it is ticked instead).",
+      "The song shows for your own stations too, whenever the station sends it."]);
 
-  html += '<h3 id="help-dock">Watching while you browse</h3><p>Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone: <b>Dock to top</b>). It keeps playing in a strip on that side of the page while you use the rest of the site. You can dock up to 3 at once, and drag the edge of a strip to resize it. Hover a docked player for its <b>Chat</b> and close buttons; drag the bottom or right edge of the chat to resize it (double-click an edge to reset). To have chat open by itself when you dock a stream, tick it in Settings &rarr; Twitch.</p>';
+  html += h3("pod", "Podcasts") +
+    p("The box is off at first: switch it on in " + S("Layout &amp; boxes") + ". Shows and episodes come from Apple&rsquo;s public podcast directory; a few shows that are only on one app are missing.") +
+    h4("Finding shows") +
+    ul(["<b>Popular</b> (the list at the top of the box) shows the most listened shows of a country, by topic.",
+      "⌕ searches every podcast by name, topic or person.",
+      "<b>+</b> follows a show; ✓ means you follow it.",
+      "Click a show&rsquo;s name for its page in the box: its latest episodes (<b>Older episodes</b> loads 20 more), <b>+ Follow</b>, and ☆ for a notification when a new episode comes out. <b>&larr; Back</b> returns to the list.",
+      "Point at a show for who makes it, its topic, a description and its latest episode."]) +
+    h4("Your episodes") +
+    ul(["<b>Following</b> lists the newest episodes of your shows. New ones are marked; the number at the top marks them all seen.",
+      "Click an episode to play it. One you started shows how much is left and a thin progress line; ✓ means played.",
+      "Point at an episode for its notes, the date and how much is left.",
+      "<b>Shows</b> lists the shows you follow, with ☆ and ✕ (stop following)."]) +
+    h4("Playing") +
+    ul(["Episodes play in the Radio box. Its first button switches between radio and podcasts (it is only there while you use podcasts).",
+      "The box shows the title and time left, play and pause, jump back, jump forward and the volume (one volume for radio and podcasts).",
+      "Click the title for the player: the cover, a bar to jump anywhere, the jump buttons, the speed (0.8&times; to 2&times;), the volume, <b>Mark as played</b>, the episode&rsquo;s notes and <b>Up next</b>.",
+      "The radio and a podcast never play at the same time.",
+      "Where you stopped is saved with your account, so you can go on on another device. On a phone it keeps playing with the screen off and can be paused from the lock screen."]) +
+    h4("Settings (" + S("Podcasts") + ")") +
+    ul(["The playing speed and how far the jump buttons go.", "Whether played episodes stay in the list (dimmed) or leave it, and the country of the Popular list.",
+      "Folded under <b>In the Radio box</b>: the progress line, the time left, the jump buttons (in a narrow box they step aside by themselves) and whether a long title is cut short or rolls across.",
+      "Which shows notify you (only ☆ shows, or all) is chosen in " + S("Notifications") + "."]);
 
-  html += '<h3 id="help-account">Account &amp; privacy</h3><p>Under <b>Settings</b>, the Account sections are:</p><ul>' +
-    '<li><b>Sign-in &amp; security:</b> set a new password (typed twice); if you forget it, click the person icon, then <b>Forgot password?</b>, and a reset link is emailed to you. Below it, every device and browser signed in to your account right now and the latest sign-ins, with a button to sign out everywhere else. You can also be emailed the first time a new browser signs in (needs an inbox under Mail).</li>' +
-    '<li><b>Your data:</b> <b>Backup</b> downloads all settings, sources, notes and layout as a file you can restore later; <b>Delete account</b> removes the account and everything saved in it, for good.</li></ul>' +
-    '<p>Everything you set up is private to your own account &mdash; nobody else using this site can see it. It is saved to the account and follows you to every device: settings, sources, bookmarks, notes, calendar, timers, world clocks, and what you have already seen and opened. Changes made on one device reach the others within a minute, and two devices changing different things never overwrite each other. The full <a href="privacy" target="_blank" rel="noopener">privacy policy</a> says what is stored and why. To run the site, it counts how long the page is open and how often each kind of button is used per account; never what you read, type, search or save. Each visit to the page, signed in or not, is also noted with its IP address, country and browser; that log is kept for 90 days and only the site owner can see it. Text you translate in the search bar goes to the MyMemory translation service, and radio stations are played straight from the stations\' own servers. A bookmark set to show &ldquo;the site\'s own icon&rdquo; fetches that icon from the site itself.</p>';
+  html += h3("mail", "Mail (Gmail)") +
+    p("The Mail box shows how many unread emails you have, without giving this site your Google password. It needs a small piece of free code in your own Google account, once per inbox. It is all copy and paste: follow the steps in order.") +
+    '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google&rsquo;s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
+    h4("Setting it up") +
+    ol(["Go to <a href=\"https://script.google.com\" target=\"_blank\" rel=\"noopener\">script.google.com</a>, signed in as the Gmail account you want to show (check the top right corner).",
+      "Click <b>New project</b> (top left).",
+      "Click inside the box with sample code, press Ctrl+A (Cmd+A on a Mac) and Delete.",
+      "Copy the code below and paste it into the empty box (Ctrl+V or Cmd+V)."]) +
+    '<div class="codebox"><button class="lnk2 copybtn" data-a="copycode">Copy the code</button><pre id="gsCode">' + GS_CODE + "</pre></div>" +
+    ol(["Click the untitled project name at the top, rename it (for example &ldquo;Mail for my start page&rdquo;) and press Enter.",
+      "Press Ctrl+S (Cmd+S) to save.",
+      "Click the blue <b>Deploy</b> button (top right) " + A + " <b>New deployment</b>.",
+      "Click the gear next to &ldquo;Select type&rdquo; and choose <b>Web app</b>.",
+      "Set <b>Execute as</b> to <b>Me</b> and <b>Who has access</b> to <b>Anyone</b> (not &ldquo;Anyone with a Google account&rdquo;).",
+      "Click <b>Deploy</b>.",
+      "Google asks you to authorize the script: click <b>Authorize access</b> and choose your account. If it warns that the app is not verified, click <b>Advanced</b> " + A + " <b>Go to &hellip; (unsafe)</b> " + A + " <b>Allow</b>. This is normal for your own private script.",
+      "Copy the <b>Web app URL</b> (it ends in <code>/exec</code>).",
+      "Open that address in a new tab. It shows a <b>token</b>, a long code in quotes. Copy it now; it is shown only once. (If you lose it, the code itself explains how to reset it.)",
+      "Here, open " + S("Mail") + ", fill in a name (&ldquo;Personal&rdquo;), the web app address and the token, and press <b>Save</b>.",
+      "Within a minute your unread count appears."], 5) +
+    p("For a second inbox, repeat the steps while signed in to that Gmail account.") +
+    h4("Using it") +
+    ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only).",
+      "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by the same script to its own address. Set it up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same."]);
 
+  // ---- Tools ----
+  html += h3("notes", "Notes, to-dos &amp; read later") +
+    p("Click the notepad icon (or press <code>N</code>). It has three tabs:") +
+    ul(["<b>To-do</b>: type a task and press Enter. Click the circle to tick it off; finished tasks move under <i>Completed</i>, which you can open or clear. The number on the icon is how many are open.",
+      "<b>Notes</b>: write in the first card and press Save (or Ctrl+Enter).",
+      "<b>Read later</b>: what you put aside (see below).",
+      "In To-do and Notes, click any text (or ✎) to edit it; point at one for pin ★, edit ✎ and delete ✕. Enter or clicking elsewhere saves."]) +
+    h4("Quick ways to add") +
+    ul(["In the search bar: <code>note buy milk</code> or <code>todo call the bank</code>, then Enter.", "Press Ctrl+V on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the card that appears. Switch that off in " + S("Layout &amp; boxes") + "."]) +
+    h4("Read later") +
+    ul(["Put a headline, Telegram post, Reddit post or video aside: point at its row and press the small bookmark button where the time is, or press <b>Read later</b> in its window (the way on a phone).",
+      "Saved rows keep a small bookmark mark. In the Read later tab, click an item to open it and press ✓ when you are done.",
+      "Up to 100 items, the same on all your devices."]) +
+    p("Notes can stay open beside the boxes: see Docking.");
+
+  html += h3("cal", "Calendar") +
+    h4("Your events") +
+    ol(["Click the calendar icon (or press <code>C</code>) and pick a day.", "Type the event and, if you like, a time, a reminder and a repeat.", "Press <b>Add</b>."]) +
+    ul(["To change an event, press ✎ on it: the form holds its name, day, time, reminder and repeat. Press Save, or Cancel.",
+      "Days with events have a dot; the number on the icon is today&rsquo;s events.",
+      "<b>Repeats</b>: choose one when adding, or press ↻ on an event to step through Once, Birthday, Yearly, Monthly, Weekly and Daily. Put the birth year in a birthday&rsquo;s name (&ldquo;Anna 1990&rdquo;) and it shows the age.",
+      "<b>Reminders</b> show as a notification that stays until you dismiss it (an all-day event counts as 09:00), while this page is open in a tab.",
+      "Games of your ★ sports favorites, sports events you added and your TV shows&rsquo; episodes appear on their day too.",
+      "The small line under the date at the top of the page is the next thing in your calendar; click it to open that day. Its color is in " + S("Date &amp; time") + "."]) +
+    h4("Calendars from elsewhere (" + S("Calendar") + ")") +
+    ul(["<b>Import an .ics file</b>: copies the events into your calendar, once. You see what was found first, and how many fit (your calendar holds 300 events). Repeats keep repeating, one-time events older than a month are left out, and events you already have are skipped. Afterwards they are yours to change.",
+      "<b>Follow a calendar by its address</b>: paste its .ics address and press Follow. Its events show next to yours with the calendar&rsquo;s name, and are read again every half hour, so changes turn up by themselves. They cannot be changed here. Give each one a name and a reminder for all its events; up to four. Needs you to be signed in."]) +
+    p("<b>Where to find the address</b>: Google Calendar: Settings " + A + " click the calendar under &ldquo;Settings for my calendars&rdquo; " + A + " Integrate calendar " + A + " <b>Secret address in iCal format</b>. Outlook.com: Settings " + A + " Calendar " + A + " Shared calendars " + A + " Publish a calendar " + A + " the <b>ICS</b> link. Apple iCloud: share the calendar as a Public Calendar and copy the link. The file for an import is in the same places (Google: Settings " + A + " Import &amp; export " + A + " Export). A secret address lets anyone who has it read that calendar, so treat it like a password.") +
+    h4("Taking your events elsewhere") +
+    p("<b>Download my events as an .ics file</b> (" + S("Calendar") + ") saves your own events, with their repeats and reminders, for Google Calendar, Outlook or Apple Calendar. Followed calendars and special days are not in it.") +
+    h4("Special days (" + S("Calendar") + ")") +
+    ul(["Have the calendar mark big days (Christmas, Easter&hellip;), smaller days (Valentine&rsquo;s, Mother&rsquo;s and Father&rsquo;s Day, Halloween&hellip;), the public holidays of the countries you tick (red dates), seasons and clock changes, full moons, week numbers and your payday.",
+      "They are worked out for every year. Point at or click a day to read them, and tick the ones you want a reminder for."]) +
+    h4("Good to know") +
+    ul(["Times are in your own time zone.", "An event of several days shows on its first day with the last day in its name.", "&ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules are simplified."]);
+
+  html += h3("timers", "Timers &amp; calculator") +
+    ul(["The Tools icon (four small squares, first in the menu box) has <b>Timer</b>, <b>Countdown</b>, <b>Stopwatch</b> and <b>Calculator</b>. <code>I</code> starts a timer and <code>O</code> a stopwatch.",
+      "Several can run at once, with names; they keep running if you close the tab.",
+      "A finished timer or countdown rings every few seconds until you press <b>Stop</b> or remove it. Set how loud in " + S("Notifications") + " " + A + " <b>Alarm volume</b>."]) +
+    h4("Calculator") +
+    ul(["Click the keys or type: digits, + &minus; * / ^ % ( ), Enter for the result, Backspace for one step back, Delete to clear.",
+      "<b>f(x)</b> shows more: brackets, powers, square root, sin, cos and tan, &pi;, e, ln, log, n! and 1/x, and <b>Ans</b> for the last result. <b>DEG</b>/<b>RAD</b> switches how angles are counted.",
+      "The answer shows under the sum while you type. The calculator can be docked (see Docking)."]);
+
+  html += h3("keys", "Search bar &amp; shortcuts") + searchHelpHtml() +
+    h4("Keyboard shortcuts") +
+    p("They work when you are not typing in a box: " + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close." : "switched off.") + " Change any key, or switch them off, in " + S("Keyboard shortcuts") + ".");
+
+  html += h3("bm", "Bookmarks bar") +
+    p("A slim row of your own links at the very top of the page. Switched off, it takes no room.") +
+    ol(["Open " + S("Bookmarks") + " and tick <b>Show the bookmarks bar</b>.", "Add a link: an address and, if you like, a name; choose whether it goes on the bar or into a folder; press Add."]) +
+    ul(["<b>+ New folder</b> makes a folder: one button on the bar that opens a small list.",
+      "On each link: click the icon to change it, the small square to color it, ◀ ▶ to move it.",
+      "The bar can be aligned left, centered or right, links can open in a new tab, and one color can be set for all.",
+      "&ldquo;The site&rsquo;s own icon&rdquo; is fetched from that site; pick a built-in icon if you would rather not contact it."]) +
+    h4("Bringing your browser&rsquo;s bookmarks") +
+    ol(["Save them to a file in your browser. Chrome, Edge, Brave, Opera: Bookmark manager " + A + " ⋮ " + A + " Export bookmarks. Firefox: Bookmarks " + A + " Manage bookmarks " + A + " Import and Backup " + A + " Export Bookmarks to HTML. Safari: File " + A + " Export " + A + " Bookmarks.",
+      "In " + S("Bookmarks") + " " + A + " <b>Import from your browser</b>, choose that file.",
+      "Tick the folders you want (the browser&rsquo;s own bookmarks bar is ticked already) and choose for each whether it becomes a folder or separate links."]) +
+    p("Links you already have are skipped, a folder takes up to 60 links, and the file is read on your device, not uploaded.");
+
+  html += h3("embed", "Web page boxes") +
+    p("Show up to three web pages in boxes of their own: a dashboard, a live map, a webcam or a shared document.") +
+    ol(["Open " + S("Web page boxes") + " and paste the page&rsquo;s address. The box appears on your page.", "Move it with Edit like any other box; H&minus; H+ change its height."]) +
+    ul(["The small arrow in its corner opens the page in its own tab; ↻ loads it again. It can also reload by itself every 1, 5, 15 or 60 minutes.",
+      "Many large sites (Google, Facebook, banks, most news sites) do not allow being shown inside another page; the box then stays empty, and when you are signed in the settings say so as soon as you paste the address. Look for an &ldquo;embed&rdquo; address on such a site (usually under Share " + A + " Embed).",
+      "The page in the box cannot read anything from OmniTree and cannot take over the tab."]);
+
+  html += h3("dock", "Docking") +
+    h4("Notes, calendar and calculator") +
+    ul(["Open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it stays open beside the boxes. ✕ turns it back into a window.",
+      "On a computer, drag a docked panel by its title up or down, or across to the other side (⇄ does that in one click). Drag it in toward the boxes and it attaches right next to them; drag it out and it sits at the screen&rsquo;s edge. The page stays centered as long as the panels fit beside it.",
+      "In Edit mode each panel gets T&minus; T+ for its text size, its bottom edge sets its height and its inner edge the width of all panels on that side (double-click an edge to undo).",
+      "A long list scrolls inside the panel with its buttons always in view.",
+      "On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page."]) +
+    h4("Watching while you browse") +
+    ul(["Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone <b>Dock to top</b>). It keeps playing beside the page. Up to 3 at once; drag a strip&rsquo;s edge to resize it.",
+      "Point at a docked player for its <b>Chat</b> and close buttons. Drag the bottom or right edge of the chat to resize it (double-click to reset). To open chat by itself when you dock, tick it in " + S("Twitch") + "."]);
+
+  // ---- Alerts ----
+  html += h3("ntf", "Notifications") +
+    p("Small cards appear in the bottom-right corner. Click one to open it, ✕ to dismiss it. Switch each kind on or off in " + S("Notifications") + ".") +
+    h4("What you can be told about") +
+    ul(["Big news: the same story from several of your sources within two hours (you choose how many sources).", "A headline with one of your highlight words.", "A stock on your list moving fast or far.", "A ★ streamer going live.", "A ★ team&rsquo;s game starting, every goal (football, ice hockey) and the final score.", "A new episode of a TV show or podcast you follow (for podcasts: only ☆ shows, or every show).", "Calendar reminders.", "New mail."]) +
+    h4("The bell") +
+    ul(["The bell in the menu box keeps the last 30. Its number is how many you have not looked at; opening it clears the number.", "A card goes away after 20 seconds, counted only while you look at the page, so one that came while you were in another tab is still there."]) +
+    h4("Sound, desktop and email") +
+    ul(["<b>Ping sound</b>: it can only play once you have clicked somewhere on the page (a rule of the browser). <b>Alarm volume</b> is for timers and alarms.",
+      "<b>Desktop notifications</b>: also as notifications of your computer or phone. The boxes that notify you then keep their usual pace while the tab is in the background.",
+      "<b>To my email</b>: the same notifications in your connected Gmail inbox, everything from five minutes in one email. Off until you switch it on; needs an inbox under Mail and the page open in a tab. <b>Send a test email</b> checks it.",
+      "<b>Show a test notification</b> shows how a card looks and sounds."]) +
+    h4("Count in the tab title") +
+    p("The page&rsquo;s tab shows how many new things are waiting, like &ldquo;(5) OmniTree&rdquo;, so you see it from other tabs. In " + S("Notifications") + " " + A + " <b>Count in the tab title</b>, switch it on or off and tick what counts: new mail, Telegram posts, headlines, Reddit posts, streamers live, podcast episodes and unread notifications (mail, Telegram, Twitch, podcasts and the bell to begin with). It can also put a dot on the tab&rsquo;s icon.") +
+    h4("Heard something and saw nothing?") +
+    p(S("Notifications") + " ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.") +
+    h4("On all your devices") +
+    p("Pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing it are saved to your account: the phone shows the same within a minute, and nothing is announced twice.");
+
+  html += h3("away", "While you are away") +
+    p("While the page&rsquo;s tab is in the background (another tab is selected, or the window is minimized), everything still updates, more calmly the longer you are away: after 10 minutes, then 15, then 30, then every hour. The boxes, the bell and the count in the tab title stay current.") +
+    p("When you come back and the last update is more than 15 minutes old, everything is fetched at once and gaps are filled: Telegram fetches back to the posts it had (up to about 100 per channel), and News and Reddit (sorted by New) keep what they had. Nothing posted while you were away is skipped, and there is no need to reload the page.");
+
+  html += h3("summary", "Summary") +
+    p("One small window with what happened lately. Open it from the cogwheel menu or with <code>B</code>. Set it up in " + S("Summary") + ":") +
+    ul(["<b>When it opens by itself</b>: never, on the first visit of the day, when you come back after being away, or both. You choose how long &ldquo;away&rdquo; is (30 minutes to 8 hours).",
+      "<b>How far back it looks</b>: the last 6, 12 or 24 hours, or 2 days.",
+      "<b>What is in it</b>: weather and warnings, today in your calendar, top stories, Telegram, Reddit, biggest stock movers, mail, who is live, ★ streamers who were live while you were away, TV episodes, new podcast episodes, sports results and sports coming up. Tick the parts you want and order them with ▲ ▼. A part with nothing to show is left out.",
+      "<b>Choose&hellip;</b> on a part picks which sources, channels, subreddits or sports it uses, or keeps it to your ★ ones. New sources you add later are included.",
+      "<b>How it looks</b>: a list, cards side by side, or compact, and how many items each part shows (3 to 15)."]);
+
+  // ---- Account ----
+  html += h3("account", "Account &amp; privacy") +
+    h4("Sign-in &amp; security (" + S("Sign-in &amp; security") + ")") +
+    ul(["Set a new password (typed twice). Forgot it? Click the person icon " + A + " <b>Forgot password?</b> and a reset link is emailed to you.",
+      "Every device and browser signed in to your account right now, the latest sign-ins, and <b>Sign out everywhere else</b>.",
+      "You can be emailed the first time a new browser signs in (needs an inbox under Mail)."]) +
+    h4("Your data (" + S("Your data") + ")") +
+    ul(["<b>Download backup</b> saves all settings, sources, notes and layout as a file; <b>Restore from file</b> brings it back. The file holds your Gmail tokens, so keep it private.",
+      "<b>Delete my account</b> removes the account and everything saved in it, for good."]) +
+    h4("Privacy") +
+    ul(["Everything you set up is private to your account; nobody else using the site can see it. It follows you to every device: settings, sources, bookmarks, notes, calendar, timers, world clocks, and what you have seen and opened. Changes reach your other devices within a minute, and two devices changing different things never overwrite each other.",
+      "When another account signs in on the same browser, the previous account&rsquo;s things are cleared from it first.",
+      "To run the site, it counts how long the page is open and how often each kind of button is used; never what you read, type, search or save. Each visit is noted with its IP address, country and browser, kept for 90 days and seen only by the site owner.",
+      "Text you translate goes to the MyMemory translation service; radio plays straight from the stations&rsquo; servers; a bookmark with &ldquo;the site&rsquo;s own icon&rdquo; fetches it from that site.",
+      "The full <a href=\"privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a> says what is stored and why."]) +
+    h4("Feedback") +
+    p("Found a bug or have an idea? Cogwheel " + A + " <b>Feedback</b>: pick what kind it is, answer the short questions and press Send. It works without an account too.");
+
+  html += "</div>";
   openModal("Help", html);
 }
 function acctHtml() {
@@ -8481,7 +8768,7 @@ function spGetX(list) {
       if (!Array.isArray(d[lg.x])) return;
       var pri = SP_CATALOG.indexOf(lg), side = function (s) {
         s = s || {};
-        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: String(s.ab || "").slice(0, 4).toUpperCase(), lines: [], st: {}, lead: [], slug: /^[\w-]{2,80}$/.test(String(s.slug || "")) ? String(s.slug) : "" };
+        return { n: String(s.n || "?"), ab: String(s.ab || s.n || "?").slice(0, 4).toUpperCase(), s: s.s == null ? null : s.s, logo: safeUrl(s.logo), win: !!s.win, id: String(s.ab || "").slice(0, 4).toUpperCase(), lines: [], st: {}, lead: [], slug: /^[\w-]{2,80}$/.test(String(s.slug || "")) ? String(s.slug) : "", uuid: /^[\w-]{6,30}$/.test(String(s.uuid || "")) ? String(s.uuid) : "" };   // (uuid: shl.se's name for an SHL team)
       };
       SP_NOW[lg.id].ev = d[lg.x].map(function (g) {
         var o = { id: lg.id + ":" + g.id, lg: lg.n, sp: lg.sp, kind: "team", pri: pri, ts: +g.ts, state: g.state === "in" || g.state === "post" ? g.state : "pre", detail: String(g.detail || ""), link: safeUrl(g.link),
@@ -8765,7 +9052,7 @@ function spTabHtml(groups, e) {
   return mine.map(function (g) {
     return "<h3>" + esc(mine.length > 1 || !(foot || own) ? g.n || "Table" : "Table") + '</h3><div class="sptabw"><table class="sptab"><tr><th></th><th></th>' + cols.map(function (c) { return "<th>" + c[1] + "</th>"; }).join("") + "</tr>" +
       g.rows.map(function (r) {
-        return '<tr class="' + (ids.indexOf(r.id) >= 0 ? "me" : "") + '"' + (r.note ? ' title="' + esc(r.note) + '"' : "") + '><td class="ps"' + (r.col ? ' style="box-shadow:inset 3px 0 0 ' + r.col + '"' : "") + ">" + r.pos + '</td><td class="tn">' + spTmBtn(spLgId(e), r.id, r.n, spCrest({ logo: r.logo }) + esc(r.n)) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" +
+        return '<tr class="' + (ids.indexOf(r.id) >= 0 ? "me" : "") + '"' + (r.note ? ' title="' + esc(r.note) + '"' : "") + '><td class="ps"' + (r.col ? ' style="box-shadow:inset 3px 0 0 ' + r.col + '"' : "") + ">" + r.pos + '</td><td class="tn">' + spTmBtn(spLgId(e), spLgId(e) === "x/shl" ? shlUuidOf(r.id) : r.id, r.n, spCrest({ logo: r.logo }) + esc(r.n)) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" +
           cols.map(function (c, i) { return "<td" + (i === cols.length - 1 && (foot || own) ? ' class="pt"' : "") + ">" + esc(r.s[c[0]] != null ? r.s[c[0]] : "") + "</td>"; }).join("") + "</tr>";
       }).join("") + "</table></div>";
   }).join("");
@@ -8968,7 +9255,7 @@ function spSumDraw(e, d) {
     if ($("spLead")) $("spLead").innerHTML = "";   // the player lines say more than the three "top performers" from the scoreboard
     h += '<h3 class="sph">Players <span class="chips">' + (pgs && pgs.length > 1 ? pgs.map(function (b, i) { return '<button data-a="spgame" data-k="' + i + '"' + (i === gi ? ' class="on"' : "") + ' title="Game ' + (i + 1) + '">G' + (i + 1) + "</button>"; }).join("") + '<i class="chsep"></i>' : "") +[["h", e.home], ["a", e.away]].filter(function (x) { return d.pl[x[0]].length; }).map(function (x) { return '<button data-a="spside" data-k="' + x[0] + '"' + (s === x[0] ? ' class="on"' : "") + ">" + esc(x[1].ab) + "</button>"; }).join("") + "</span></h3>" +
       '<div class="sptabw sppl"><table class="sptab">' + d.pl[s].map(function (g) {
-        return "<tr><th></th>" + g.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>" + g.rows.map(function (r) { return '<tr><td class="tn">' + spPlBtn(spLgId(e), r.id, r.full || r.n, esc(r.n)) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" + r.v.map(function (v) { return "<td>" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("");
+        return "<tr><th></th>" + g.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr>" + g.rows.map(function (r) { return '<tr><td class="tn">' + (spLgId(e) === "x/shl" ? spPlBtn("x/shl", (s === "h" ? e.home : e.away).uuid, r.n) : spPlBtn(spLgId(e), r.id, r.full || r.n, esc(r.n))) + (spIsFav(r.n) ? ' <i class="fv">★</i>' : "") + "</td>" + r.v.map(function (v) { return "<td>" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("");
       }).join("") + "</table></div>";
   }
   // football line-ups
@@ -9156,7 +9443,7 @@ function openSport(id, back) {
   } else {
     // an esports team's name opens the team: roster, results, what is next, titles
     var esKey = e.sp === "esports" ? e.id.slice(2, e.id.lastIndexOf(":")) : "";
-    var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + (esKey && t.slug ? '<button class="lnk" data-a="esteam" data-k="' + esc(esKey + "|" + t.slug) + '" title="About this team"><b' + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + " ›</b></button>" : spTmBtn(lgId, t.id, t.n, "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + (spLink(lgId) && t.id ? " ›" : "") + "</b>")) + favBtn(t.n) + "</div>"; };
+    var team = function (t) { return '<div class="spteam">' + (t.logo ? '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(t.logo) + '">' : "") + (esKey && t.slug ? '<button class="lnk" data-a="esteam" data-k="' + esc(esKey + "|" + t.slug) + '" title="About this team"><b' + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + " ›</b></button>" : spTmBtn(lgId, lgId === "x/shl" ? t.uuid : t.id, t.n, "<b" + (t.win ? ' class="win"' : "") + ">" + esc(t.n) + (spIdOk(lgId, lgId === "x/shl" ? t.uuid : t.id) ? " ›" : "") + "</b>")) + favBtn(t.n) + "</div>"; };
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big' + (e.state !== "pre" && (String(e.home.s) + String(e.away.s)).length > 6 ? " long" : "") + '">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
       // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
@@ -9183,14 +9470,16 @@ function spxGet(u, ttl) {
   p.catch(function () { delete SPX[u]; });
   return p;
 }
-function spLink(lg) { return !!lg && lg.indexOf("x/") !== 0 && lg.indexOf("mma/") !== 0; }   // leagues whose teams and players have windows
+function spLink(lg) { return !!lg && (lg === "x/shl" || (lg.indexOf("x/") !== 0 && lg.indexOf("mma/") !== 0)); }   // leagues whose teams and players have windows
+// an id that can open a window: ESPN numbers; for SHL shl.se's team name (a player is found by name in their team)
+function spIdOk(lg, id) { return lg === "x/shl" ? /^[\w-]{6,30}$/.test(String(id || "")) : /^\d+$/.test(String(id || "")); }
 function spTmBtn(lg, id, name, label) {
   var l = label != null ? label : esc(name);
-  return spLink(lg) && /^\d+$/.test(String(id || "")) ? '<button class="lnk spl" data-a="spteam" data-k="' + esc(lg + "|" + id + "|" + name) + '" title="About ' + esc(name) + '">' + l + "</button>" : l;
+  return spLink(lg) && spIdOk(lg, id) ? '<button class="lnk spl" data-a="spteam" data-k="' + esc(lg + "|" + id + "|" + name) + '" title="About ' + esc(name) + '">' + l + "</button>" : l;
 }
 function spPlBtn(lg, id, name, label) {
   var l = label != null ? label : esc(name);
-  return spLink(lg) && /^\d+$/.test(String(id || "")) ? '<button class="lnk spl" data-a="spplayer" data-k="' + esc(lg + "|" + id + "|" + name) + '" title="About ' + esc(name) + '">' + l + "</button>" : l;
+  return spLink(lg) && spIdOk(lg, id) ? '<button class="lnk spl" data-a="spplayer" data-k="' + esc(lg + "|" + id + "|" + name) + '" title="About ' + esc(name) + '">' + l + "</button>" : l;
 }
 // ← Back: what the sports window showed before, for as long as it stays open
 function spNavStep(cur, back) {
@@ -9208,6 +9497,7 @@ function spClock(ts) { return ts ? new Date(ts).toLocaleTimeString("en-GB", { ti
 
 function spTeamOpen(k, back) {
   var p = String(k).split("|"), lg = p[0], id = p[1], name = p.slice(2).join("|");
+  if (lg === "x/shl") { shlTeamOpen(k, back); return; }
   if (!spLink(lg) || !/^\d+$/.test(id)) return;
   spNavStep(["team", k], back);
   var base = "https://site.api.espn.com/apis/site/v2/sports/" + lg + "/teams/" + id, none = function () { return null; };
@@ -9236,10 +9526,7 @@ function spTeamHtml(lg, id, name, s, fx, ro) {
   var past = games.filter(function (g) { return g.st === "post"; }).sort(function (a, b) { return b.ts - a.ts; });
   var next = games.filter(function (g) { return g.st !== "post"; }).sort(function (a, b) { return a.ts - b.ts; });
   var form = past.slice(0, 5).reverse().map(function (g) { return '<i class="fm fm' + g.r + '" title="' + esc(spDay(g.ts) + " · " + (g.home ? "vs " : "at ") + g.opp.n + " · " + g.us + "–" + g.them) + '">' + g.r + "</i>"; }).join("");
-  var row = function (g, done) {
-    return '<div class="sptg"><span class="mut">' + esc(spDay(g.ts)) + '</span><span class="mut">' + (g.home ? "vs" : "at") + "</span><span>" + spTmBtn(lg, g.opp.id, g.opp.n, spCrest({ logo: g.opp.logo }) + esc(g.opp.n)) + "</span>" +
-      (done ? '<span class="r"><b>' + esc(g.us) + "–" + esc(g.them) + "</b> " + (g.r ? '<i class="fm fm' + g.r + '">' + g.r + "</i>" : "") + "</span>" : '<span class="r mut">' + (g.st === "in" ? '<span class="pill live">LIVE</span>' : esc(spClock(g.ts))) + "</span>") + "</div>";
-  };
+  var row = function (g, done) { return spGRow(lg, g, done); };
   var coach = ro && ro.coach && ro.coach[0] ? [ro.coach[0].firstName, ro.coach[0].lastName].filter(Boolean).join(" ") : "";
   var h = '<div class="sphead">' + (logo ? '<img class="spbig" alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(logo) + '">' : "") + '<div><h2 class="mh">' + esc(t.displayName || name) + " " + spFavBtn(name) + '</h2><div class="mut sn">' +
     esc([t.standingSummary, t.recordSummary ? "record " + t.recordSummary : "", coach ? "coach " + coach : ""].filter(Boolean).join(" · ")) + "</div>" + (form ? '<div class="spform">' + form + "</div>" : "") + "</div></div>";
@@ -9247,6 +9534,12 @@ function spTeamHtml(lg, id, name, s, fx, ro) {
     "<div><h3>Coming up</h3>" + (next.slice(0, 6).map(function (g) { return row(g, false); }).join("") || '<p class="mut sn">Nothing scheduled yet.</p>') + "</div></div>";
   h += spSquadHtml(lg, ro);
   return h;
+}
+// one game in a team's window: the day, vs (at home) or at (away), the opponent (opens them), then the score and W/D/L,
+// or the start time. x: "OT" / "SO" for a game decided in overtime or a shootout.
+function spGRow(lg, g, done) {
+  return '<div class="sptg"><span class="mut">' + esc(spDay(g.ts)) + '</span><span class="mut">' + (g.home ? "vs" : "at") + "</span><span>" + spTmBtn(lg, g.opp.id, g.opp.n, spCrest({ logo: g.opp.logo }) + esc(g.opp.n)) + "</span>" +
+    (done ? '<span class="r"><b>' + esc(g.us) + "–" + esc(g.them) + "</b>" + (g.x ? ' <small class="mut">' + esc(g.x) + "</small>" : "") + " " + (g.r ? '<i class="fm fm' + g.r + '">' + g.r + "</i>" : "") + "</span>" : '<span class="r mut">' + (g.st === "in" ? '<span class="pill live">LIVE</span>' : esc(spClock(g.ts))) + "</span>") + "</div>";
 }
 function spFavBtn(n) { return '<button class="ib sm' + (spIsFav(n) ? " on" : "") + '" data-a="spfav" data-k="' + esc(n) + '" title="' + (spIsFav(n) ? "Remove from favorites" : "Add to favorites") + '">' + (spIsFav(n) ? "★" : "☆") + "</button>"; }
 // the squad, by position: number, name, age and nationality; ! = injured
@@ -9279,6 +9572,7 @@ var SP_PSTAT = {
 };
 function spPlayerOpen(k, back) {
   var p = String(k).split("|"), lg = p[0], id = p[1], name = p.slice(2).join("|"), sp = lg.split("/")[0], league = lg.split("/")[1] || "";
+  if (lg === "x/shl") { shlPlayerOpen(k, back); return; }
   if (!spLink(lg) || !/^\d+$/.test(id)) return;
   spNavStep(["player", k], back);
   openModal(spLgNameOf(lg) || name, '<div class="spwin spent">' + spBackBtn() + '<h2 class="mh">' + esc(name) + '</h2><p class="mut sn">Loading…</p></div>');
@@ -9362,6 +9656,95 @@ function tnRound(s) {
 }
 // a match's sets as seen from one player: "7-6 6-4"
 function tnSets(f, side) { var me = f["s" + side] || [], op = f["s" + (side === "a" ? "b" : "a")] || []; return me.map(function (g, i) { return g + "–" + (op[i] != null ? op[i] : ""); }).join(" "); }
+
+// ---- SHL teams and players (shl.se, through the feeds function, so you need to be signed in) ----
+// One answer per team holds the club, its standing, the season's games, the team's figures, the squad and every player's
+// details and figures; a player's window is built from their team's answer (shl.se has no pages of its own for players).
+var SHLT = {};
+function shlTeamGet(uuid) {
+  var c = SHLT[uuid];
+  if (c && Date.now() - c.t < 600000) return Promise.resolve(c.d);
+  if (!sb || !USER) return Promise.reject(new Error("Sign in to see SHL teams and players (they come through your account)."));
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { shlteam: uuid } }).then(function (r) {
+    var d = r.data && r.data.shlteam;
+    if (!d || typeof d !== "object") throw new Error(r.data && !("shlteam" in r.data) ? "This needs the newest feeds function (redeploy super-function)." : "shl.se did not answer for this team right now.");
+    if (Object.keys(SHLT).length > 20) SHLT = {};
+    SHLT[uuid] = { t: Date.now(), d: d };
+    return d;
+  });
+}
+// shl.se's name for a team, from its short code (the league table only has the code)
+function shlUuidOf(code) {
+  var u = "";
+  [SP_NOW, SP_PAST].forEach(function (store) { Object.keys(store).forEach(function (k) { ((store[k] && store[k].ev) || []).forEach(function (e) { if (u || e.id.indexOf("x/shl:") !== 0) return; [e.home, e.away].forEach(function (t) { if (!u && t && t.ab === code && t.uuid) u = t.uuid; }); }); }); });
+  return u;
+}
+function natName(cc) { cc = String(cc || "").toUpperCase(); if (!/^[A-Z]{2}$/.test(cc)) return ""; try { return new Intl.DisplayNames(["en"], { type: "region" }).of(cc); } catch (e) { return cc; } }   // ("N/A" and the like: nothing)
+function spOrd(n) { n = +n; var s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+function shlMsg(k, name, msg) { if (SPCUR && SPCUR[1] === k && !$("modal").hidden) $("mBody").innerHTML = '<div class="spwin spent">' + spBackBtn() + '<h2 class="mh">' + esc(name) + '</h2><p class="mut sn">' + esc(msg) + "</p></div>"; }
+function shlTeamOpen(k, back) {
+  var p = String(k).split("|"), uuid = p[1], name = p.slice(2).join("|");
+  spNavStep(["team", k], back);
+  openModal("SHL", '<div class="spwin spent">' + spBackBtn() + '<h2 class="mh">' + esc(name) + '</h2><p class="mut sn">Loading…</p></div>');
+  shlTeamGet(uuid).then(function (d) {
+    if (!SPCUR || SPCUR[1] !== k || $("modal").hidden) return;
+    $("mBody").innerHTML = '<div class="spwin spent">' + spBackBtn() + shlTeamHtml(uuid, d) + "</div>";
+  }).catch(function (e) { shlMsg(k, name, String((e && e.message) || e)); });
+}
+function shlTeamHtml(uuid, d) {
+  var lg = "x/shl", games = d.games || [], past = games.filter(function (g) { return g.st === "post"; }).reverse(), next = games.filter(function (g) { return g.st !== "post"; });
+  var form = past.slice(0, 5).reverse().map(function (g) { return '<i class="fm fm' + g.r + '" title="' + esc(spDay(g.ts) + " · " + (g.home ? "vs " : "at ") + g.opp.n + " · " + g.us + "–" + g.them + (g.x ? " " + g.x : "")) + '">' + g.r + "</i>"; }).join("");
+  var line1 = [d.rank ? spOrd(d.rank) + " in SHL" + (d.pts ? " · " + d.pts + " pts" + (d.gp ? " after " + d.gp + " games" : "") : "") : "", d.coach ? "coach " + d.coach : ""].filter(Boolean).join(" · ");
+  var line2 = [d.founded ? "Founded " + d.founded : "", d.golds ? d.golds + " Swedish title" + (d.golds === 1 ? "" : "s") : "", d.finals ? d.finals + " finals" : "", d.arena].filter(Boolean).join(" · ");
+  var h = '<div class="sphead">' + (d.logo ? '<img class="spbig" alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(d.logo) + '">' : "") + '<div><h2 class="mh">' + esc(d.long || d.n) + " " + spFavBtn(d.n) + "</h2>" +
+    (line1 ? '<div class="mut sn">' + esc(line1) + "</div>" : "") + (line2 ? '<div class="mut sn">' + esc(line2) + "</div>" : "") + (form ? '<div class="spform">' + form + "</div>" : "") + "</div></div>";
+  var hd = d.hdr || {}, tf = [[hd.gpg, "Goals per game"], [hd.gapg, "Goals against per game"], [hd.pp != null ? hd.pp + "%" : null, "Power play"], [hd.pk != null ? hd.pk + "%" : null, "Penalty kill"]].filter(function (x) { return x[0] != null; });
+  if (tf.length) h += '<div class="spst">' + tf.map(function (x) { return "<div><b>" + esc(x[0]) + "</b><small>" + x[1] + "</small></div>"; }).join("") + "</div>";
+  if (games.length) h += '<div class="sptm2"><div><h3>Results</h3>' + (past.slice(0, 6).map(function (g) { return spGRow(lg, g, true); }).join("") || '<p class="mut sn">None yet this season.</p>') + "</div>" +
+    "<div><h3>Coming up</h3>" + (next.slice(0, 6).map(function (g) { return spGRow(lg, g, false); }).join("") || '<p class="mut sn">Nothing scheduled yet.</p>') + "</div></div>";
+  // the team's best scorers this season
+  var top = (d.sk || []).slice().sort(function (a, b) { return (b.tp || 0) - (a.tp || 0) || (b.g || 0) - (a.g || 0); }).slice(0, 6);
+  if (top.length && top[0].gp) h += '<h3>Top scorers</h3><div class="sptabw"><table class="sptab"><tr><th></th><th>GP</th><th>G</th><th>A</th><th>P</th><th>+/-</th></tr>' + top.map(function (p) {
+    return '<tr><td class="tn">' + spPlBtn(lg, uuid, p.n) + "</td><td>" + esc(p.gp) + "</td><td>" + esc(p.g) + "</td><td>" + esc(p.a) + '</td><td class="pt">' + esc(p.tp) + "</td><td>" + (p.pm > 0 ? "+" : "") + esc(p.pm) + "</td></tr>";
+  }).join("") + "</table></div>";
+  if ((d.squad || []).length) h += "<h3>Squad</h3>" + d.squad.map(function (g) {
+    return '<div class="spsqh">' + esc(g.pos) + '</div><div class="spsq">' + g.players.map(function (pl) {
+      return "<div>" + (pl.num != null ? '<small class="mut">' + esc(pl.num) + "</small> " : "") + spPlBtn(lg, uuid, pl.n) + (/^[A-Z]{2}$/.test(pl.nat || "") ? ' <small class="mut">' + esc(pl.nat) + "</small>" : "") + "</div>";
+    }).join("") + "</div>";
+  }).join("");
+  return h;
+}
+// a player, found by name in their team (also by the short "F. Lastname" a game's sheet uses)
+function shlFind(d, name) {
+  var n = String(name || "").toLowerCase().trim(), m = n.match(/^([^\s.])\.\s*(.+)$/);   // (also Ö. and Å.)
+  var same = function (x) { var f = String(x.n || "").toLowerCase(); return f === n || (m && f.charAt(0) === m[1] && f.split(" ").slice(1).join(" ") === m[2]); };
+  var sk = (d.sk || []).filter(same)[0], gk = (d.gk || []).filter(same)[0], sq = null;
+  (d.squad || []).forEach(function (g) { g.players.forEach(function (p) { if (!sq && same(p)) sq = Object.assign({ grp: g.pos }, p); }); });
+  return { sk: sk, gk: gk, sq: sq };
+}
+function shlPlayerOpen(k, back) {
+  var p = String(k).split("|"), uuid = p[1], name = p.slice(2).join("|");
+  spNavStep(["player", k], back);
+  openModal("SHL", '<div class="spwin spent">' + spBackBtn() + '<h2 class="mh">' + esc(name) + '</h2><p class="mut sn">Loading…</p></div>');
+  shlTeamGet(uuid).then(function (d) {
+    if (!SPCUR || SPCUR[1] !== k || $("modal").hidden) return;
+    var f = shlFind(d, name), x = f.gk || f.sk || {}, sq = f.sq || {}, full = x.n || sq.n || name;
+    if (!f.gk && !f.sk && !f.sq) { shlMsg(k, name, "This player is not in " + (d.n || "the team") + "'s squad on shl.se right now."); return; }
+    var POS = { F: "Forward", D: "Defence", GK: "Goalie" }, age = "";
+    if (x.born) { var bd = new Date(x.born + "T12:00:00"), nd = new Date(); age = nd.getFullYear() - bd.getFullYear() - (nd < new Date(nd.getFullYear(), bd.getMonth(), bd.getDate()) ? 1 : 0); }
+    var facts = [
+      ["Team", spTmBtn("x/shl", uuid, d.n)], ["Position", esc(POS[x.pos] || (sq.grp || "").replace(/s$/, ""))], ["Number", esc(x.num != null ? x.num : sq.num != null ? sq.num : "")],
+      ["Age", esc(x.born ? age + " (born " + new Date(x.born + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep") + ")" : "")],
+      ["Nationality", esc(natName(x.nat || sq.nat))], ["Height", esc(x.h ? x.h + " cm" : "")], ["Weight", esc(x.w ? x.w + " kg" : "")], ["Shoots", esc(x.sh === "L" ? "Left" : x.sh === "R" ? "Right" : "")]
+    ].filter(function (q) { return q[1]; });
+    var st = f.gk ? [[x.gp, "Games"], [x.gpi, "Played in"], [x.svp != null ? x.svp + "%" : null, "Save %"], [x.gaa, "Goals against per game"], [x.svs, "Saves"], [x.ga, "Goals against"], [x.wins, "Wins"], [x.so, "Shutouts"]]
+      : [[x.gp, "Games"], [x.g, "Goals"], [x.a, "Assists"], [x.tp, "Points"], [x.pm != null ? (x.pm > 0 ? "+" : "") + x.pm : null, "Plus/minus"], [x.pim, "Penalty minutes"], [x.sog, "Shots"], [x.toi, "Ice time per game"], [x.ppg, "Power-play goals"], [x.gwg, "Game-winning goals"]];
+    st = st.filter(function (q) { return q[0] != null && q[0] !== ""; });
+    var h = '<div class="sphead">' + (sq.img ? '<img class="spbig sphs" alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc(sq.img) + '">' : "") + '<div><h2 class="mh">' + esc(full) + " " + spFavBtn(full) + '</h2><div class="spfacts">' + facts.map(function (q) { return "<span>" + q[0] + "</span><b>" + q[1] + "</b>"; }).join("") + "</div></div></div>" +
+      (st.length ? '<h3>This season</h3><div class="spst">' + st.map(function (q) { return "<div><b>" + esc(q[0]) + "</b><small>" + q[1] + "</small></div>"; }).join("") + "</div>" : '<p class="mut sn">No games for ' + esc(d.n || "the team") + " yet this season.</p>");
+    $("mBody").innerHTML = '<div class="spwin spent">' + spBackBtn() + h + "</div>";
+  }).catch(function (e) { shlMsg(k, name, String((e && e.message) || e)); });
+}
 
 // ---- Sports events in your own calendar ----
 // One event: "Add to calendar" in its window makes it an event of your own, with a reminder 30 minutes before (change or

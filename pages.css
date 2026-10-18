@@ -44,3 +44,8 @@ body.page{background:var(--bg);color:var(--fg)}
 /* pieces of the in-app Help that the Help page reuses */
 .pmain .safe{margin:8px 0 12px}
 .pmain img{max-width:100%}
+.pmain .hlp{font-size:15px}
+.pmain .hlp h3{font-size:18px;margin:26px 0 6px}
+.pmain .hlp h4{margin:14px 0 4px}
+.pmain .hlp .helptoc a{color:var(--fg);text-decoration:none;border:1px solid var(--line);background:var(--card)}
+.pmain .hlp .helptoc a:hover{border-color:var(--ac)}
