@@ -1,4 +1,4 @@
-var VERSION = 189;
+var VERSION = 191;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6873,6 +6873,7 @@ document.addEventListener("click", function (e) {
   if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") { if (ES_CUR && !$("modal").hidden) { spToggleFav(k); esOpen(ES_CUR); } else spToggleFav(k, SP_OPEN); return; }
+  if (a === "spcal" || a === "spcallg" || a === "spautooff") { spCalAct(a, k); return; }
   if (a === "fighter") { openFighter(k); return; }
   if (a === "spside") { SP_SIDE = k === "a" ? "a" : "h"; var se = spFind(SP_OPEN), sd = se && SP_SUM[se.id]; if (sd) spSumDraw(se, sd.d); return; }
   if (a === "spses") { SP_SES = k; openSport(SP_OPEN); return; }
@@ -7410,7 +7411,7 @@ function openHelp() {
     '<p><b>Results:</b> choose <b>Results</b> in the view list to go back in time: finished games, fight cards, races and tournaments, newest first, with a small heading for each day. Click one for the same full details as a live game (a finished UFC card opens with every fight, and each fight with its numbers). Team leagues go back to the start of the month (in the first week of a month, the month before as well); UFC cards, Formula 1 weekends and golf tournaments four weeks; tennis, SHL and esports about a week. The list shows the 120 newest; pick one sport in the first list to see further back in that sport.</p>' +
     '<p><b>Search:</b> press ⌕ at the top of the box and type a team, player, fighter, league or event. It looks through everything that is loaded for the leagues you follow, whatever the view: what is live, what is coming up this month and the recent results, in that order. Several words narrow it down (for example <code>ufc allen</code>). Press ⌕ again to close the search.</p>' +
     '<p><b>Favorites:</b> press ☆ next to a team, fighter or player in a game\'s window. Favorites are marked ★ and listed first. You get a notification when their game starts, at every goal (football and ice hockey) and at the final score, and their games appear in the calendar (both can be switched off in Settings).</p>' +
-    '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p>';
+    '<p><b>UFC:</b> an upcoming event is one row; click it for the fight card, where the number after each name is the odds to win. While a card is on, every fight is its own row: the one in the cage first with round and clock, then what is next, then the results. Click a fight for both fighters side by side, the numbers of the fight (strikes, takedowns, control time) and a tale of the tape. Hover a fighter\'s name for a small card; click it for the fighter\'s own window.</p><p><b>Sports in your calendar:</b> in the window of a game, a UFC card, a race or a tournament, <b>+ Add to calendar</b> puts that one event in your calendar with a reminder 30 minutes before (change or remove it with ✎ in the calendar). <b>+ Every … event</b> does the same for every coming event of that league, also the ones announced later, and keeps them at the right time when one is moved; an event you delete yourself is not put back. Switch it off with the same button or under Settings &rarr; Sports &rarr; Events in your calendar, and the events still to come leave the calendar again. The reminders need Calendar reminders switched on under Settings &rarr; Notifications.</p>';
   html += '<h3 id="help-tv">TV shows</h3><p>A box for the series you watch. It is off at first: switch it on under <b>Settings &rarr; Layout &amp; boxes</b>.</p>' +
     '<p><b>Follow a show:</b> press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60 shows. <b>The views:</b> <b>My shows: coming up</b> lists the next episode of each show you follow, soonest first, under a heading for each day. Each row is kept to the show, the episode number and the time; point at a row for a small card with what the show is about, where it runs and its next and latest episode, or click it for everything; <b>My shows: just aired</b> lists the latest episode of each, newest first; <b>On today</b> shows the best-known shows airing today in one country, on television and on streaming services, with yours marked ★ (choose the country in Settings &rarr; TV shows).</p>' +
     '<p><b>Click a row</b> for the show: what it is about, where it runs, its rating, the coming episodes with their dates and the latest ones with a short description, and a button to follow it or stop. The next and the latest episode of each show also sit on their day in the calendar, and you get a notification when a new episode goes on air; the first is switched off under Settings, TV shows and the second under Settings, Notifications. Times are in your own time zone. The list of shows you follow, with a button to remove each, is also under Settings &rarr; TV shows. Show information comes from TVmaze.com; films are not included.</p>';
@@ -7847,7 +7848,12 @@ function calAct(a, k) {
     if (k === "0") CALV = null;
     else { var d = new Date(CALV.y, CALV.m + (+k), 1); CALV.y = d.getFullYear(); CALV.m = d.getMonth(); }
   }
-  else if (a === "caldel") { P.cal = (P.cal || []).filter(function (e) { return e.id !== k; }); persist(); render(); }
+  else if (a === "caldel") {
+    // a game that "Every … event" put here, deleted by you: it is not put back at the next sports update
+    var gone = (P.cal || []).filter(function (e) { return e.id === k; })[0];
+    if (gone && gone.spa) { var sk = {}, old = Date.now() - 90 * 86400000; Object.keys(P.spSkip || {}).forEach(function (x) { if (P.spSkip[x] > old) sk[x] = P.spSkip[x]; }); sk[gone.spe] = Date.now(); P.spSkip = sk; }
+    P.cal = (P.cal || []).filter(function (e) { return e.id !== k; }); persist(); render();
+  }
   else if (a === "calrep") {
     // the ↻ button on an event: steps through Once, Birthday, Yearly, Monthly, Weekly, Daily
     var ev = (P.cal || []).filter(function (e) { return e.id === k; })[0], order = Object.keys(REPS);
@@ -8430,11 +8436,11 @@ function spGet(lg, pri, month, past) {
 // and a league whose game is about to start is checked every minute so the kick-off is noticed on time.
 function spAlertsOn() { return NTF().sport !== false && spFavs().length > 0; }
 function fetchSports(force) {
-  var alerts = spAlertsOn();
-  if (boxOff("sports") && !alerts) return;
+  var alerts = spAlertsOn(), auto = spAutoLgs();
+  if (boxOff("sports") && !alerts && !Object.keys(auto).length) return;
   var now = Date.now(), jobs = [], xs = [], sport = spSport();
   spLeagues().forEach(function (lg) {
-    if (sport && lg.sp !== sport && !alerts) return;
+    if (sport && lg.sp !== sport && !alerts && !auto[lg.id]) return;
     var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in" || (e.state === "pre" && e.ts - now < 90000 && now - e.ts < 1200000); });
     var due = force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000);
     if (lg.x) { if (due && sb && USER) xs.push(lg); return; }
@@ -8442,7 +8448,7 @@ function fetchSports(force) {
     // Results and the search also read the finished games of the last days: when that view is opened, then every 30 minutes
     var wantPast = spView() === "past" || !!SPQ;
     if (wantPast && lg.kind && !lg.x) { var pc = SP_PAST[lg.id]; if (!pc || now - pc.t > 1800000) jobs.push(spGet(lg, pri, spPastDates(lg), true)); }
-    if ((spView() !== "now" || SPCALWANT || SPQ) && lg.kind !== "tour" && !lg.x) {
+    if ((spView() !== "now" || SPCALWANT || SPQ || auto[lg.id]) && lg.kind !== "tour" && !lg.x) {   // (a league in your calendar: its coming fixtures too)
       var d = new Date(), months = [d.getFullYear() + pad2(d.getMonth() + 1)];
       if (d.getDate() > 20) { var n = new Date(d.getFullYear(), d.getMonth() + 1, 1); months.push(n.getFullYear() + pad2(n.getMonth() + 1)); }
       if (wantPast && !lg.kind && d.getDate() <= 7) { var pm = new Date(d.getFullYear(), d.getMonth() - 1, 1); months.push(pm.getFullYear() + pad2(pm.getMonth() + 1)); }
@@ -8450,7 +8456,7 @@ function fetchSports(force) {
     }
   });
   if (xs.length) jobs.push(spGetX(xs));
-  if (jobs.length) Promise.all(jobs).then(function () { spAlerts(); render(); refreshCal(); });
+  if (jobs.length) Promise.all(jobs).then(function () { spAlerts(); spAutoCal(); render(); refreshCal(); });
 }
 // Leagues that are not on ESPN, all in one request to the feeds function, which answers every game in one simple shape
 function spGetX(list) {
@@ -9100,9 +9106,13 @@ function openSport(id) {
       // UFC: each name opens the fighter (hover for a small card), the number after it is the odds to win,
       // and the right-hand side opens the fight itself
       if (e.kind === "card" && f.cid) {
-        var who = function (s) { return '<button class="lnk fname' + (f[s + "w"] ? " win" : "") + '" data-a="fighter" data-k="' + esc(f[s + "id"]) + '"><b>' + esc(f[s]) + "</b></button>" + (f.state === "post" ? "" : ' <small class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + f[s + "id"]) + '"></small>'); };
-        return '<div class="row frow' + (f.state === "post" ? " rd" : "") + '"><span>' + favBtn(f.a) + " " + who("a") + ' <span class="mut">v</span> ' + who("b") + " " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") +
-          '</span><span class="r"><button class="lnk" data-a="open" data-k="' + esc("p:" + fightKey(e, f)) + '" title="Open this fight">' + (fightWhen(e, f).replace(/<span class="mut"><\/span>/, "") || "") + " ›</button></span></div>";
+        // a table: ☆ name odds · v · odds name ☆ · weight class · where the fight stands. The names face each other, so
+        // every "v" sits in one line down the card. (On a phone the weight class and the status go on a second line.)
+        var who = function (s) { return '<button class="lnk fname' + (f[s + "w"] ? " win" : "") + '" data-a="fighter" data-k="' + esc(f[s + "id"]) + '"><b>' + esc(f[s]) + "</b></button>"; };
+        var odd = function (s) { return f.state === "post" ? "" : '<small class="od" data-od="' + esc(e.eid + ":" + f.cid + ":" + f[s + "id"]) + '"></small>'; };
+        return '<div class="fgrid' + (f.state === "post" ? " rd" : "") + (f.state === "in" ? " splive" : "") + '"><span class="fgs fgsa">' + favBtn(f.a) + '</span><span class="fgn fga">' + who("a") + '</span><span class="fgo fgoa">' + odd("a") + '</span><span class="fgv mut">v</span>' +
+          '<span class="fgo fgob">' + odd("b") + '</span><span class="fgn fgnb">' + who("b") + '</span><span class="fgs fgsb">' + favBtn(f.b) + '</span><span class="fgw mut"><span class="wl">' + esc(f.wc || "") + '</span><span class="ws">' + esc(String(f.wc || "").replace(/weight$/i, "")) + "</span></span>" +
+          '<span class="fgx"><button class="lnk" data-a="open" data-k="' + esc("p:" + fightKey(e, f)) + '" title="Open this fight">' + (fightWhen(e, f).replace(/<span class="mut"><\/span>/, "") || "") + " ›</button></span></div>";
       }
       var res = f.state === "post" ? (f.aw ? esc(f.a) + " won" : f.bw ? esc(f.b) + " won" : "No result") + (f.detail ? " · " + esc(f.detail) : "") : f.state === "in" ? '<span class="pill live">LIVE</span>' + (e.kind === "tour" && f.detail ? " " + esc(f.detail) : "") : "";
       return '<div class="row"><span>' + favBtn(f.a) + " <b" + (f.aw ? ' class="win"' : "") + ">" + esc(f.a) + '</b> <span class="mut">vs</span> <b' + (f.bw ? ' class="win"' : "") + ">" + esc(f.b) + "</b> " + favBtn(f.b) + (f.wc ? " <small>" + esc(f.wc) + "</small>" : "") + '</span><span class="r mut">' + res + "</span></div>";
@@ -9129,10 +9139,88 @@ function openSport(id) {
       (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + '<div id="spLn">' + spLinesHtml(e) + '</div><div id="spSc"></div><div id="spStats">' + spStatsHtml(e) + '</div><div id="spLead">' + spLeadersHtml(e) + '</div><div id="spSum"></div>' +
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
-  openModal(e.lg, '<div class="spwin">' + body + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
+  openModal(e.lg, '<div class="spwin">' + body + spCalBtns(e) + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
   if (e.kind === "team") { spTabLoad(e); spSumLoad(e); }
   if (e.kind === "race" || e.kind === "tour") spRankLoad(e);
   if (e.kind === "card") fillOdds($("mBody"));
+}
+// ---- Sports events in your own calendar ----
+// One event: "Add to calendar" in its window makes it an event of your own, with a reminder 30 minutes before (change or
+// remove it in the calendar with ✎). A whole league or tour: "Every … event in my calendar" adds all its coming events the
+// same way and keeps adding new ones as they are announced; switched off, the ones still to come are taken out again.
+// An event that is moved to another time follows it. P.spAuto = { leagueId: 1 }; calendar events carry spe (the game)
+// and, when the league added them, spa (the league).
+var SPC_REM = 30;
+function spLgId(e) { var i = String(e.id).lastIndexOf(":"); return i > 0 ? e.id.slice(0, i) : e.id; }
+function spAutoLgs() { return P.spAuto && typeof P.spAuto === "object" ? P.spAuto : {}; }
+function spCalEv(id) { return (P.cal || []).filter(function (x) { return x.spe === id; })[0]; }
+function spEvTs(e) {
+  // Formula 1 and the like: the race itself, the last session of the weekend
+  if (e.kind === "race" && e.sessions && e.sessions.length) { var s = e.sessions[e.sessions.length - 1]; if (s.ts > 0) return s.ts; }
+  return e.ts;
+}
+function spEvTitle(e) {
+  var t = e.kind === "team" && e.home ? e.home.n + " – " + e.away.n : String(e.title || e.lg || "Event");
+  return (t.toLowerCase().indexOf(String(e.lg).toLowerCase()) >= 0 ? t : t + " (" + e.lg + ")").slice(0, 120);
+}
+// puts the event in the calendar (or moves it to its new time); true when something changed
+function spCalPut(e, auto) {
+  var ts = spEvTs(e);
+  if (!e || !(ts > 0)) return false;
+  var d = new Date(ts), ds = ymd(d), tm = pad2(d.getHours()) + ":" + pad2(d.getMinutes()), have = spCalEv(e.id);
+  if (have) { if (have.d !== ds || have.tm !== tm) { have.d = ds; have.tm = tm; return true; } return false; }
+  P.cal = P.cal || [];
+  if (P.cal.length >= 300) return false;
+  var o = { id: "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), t: spEvTitle(e), d: ds, tm: tm, rem: SPC_REM, spe: e.id };
+  if (auto) o.spa = spLgId(e);
+  P.cal.push(o);
+  return true;
+}
+// after every sports update: the leagues you put in the calendar get their new events, and moved events their new time
+function spAutoCal() {
+  var on = spAutoLgs(), now = Date.now(), seen = Object.assign({}, P.spSkip || {}), ch = false;   // (the ones you deleted are left out)
+  if (!Object.keys(on).length && !(P.cal || []).some(function (x) { return x.spe; })) return;
+  [SP_NOW, SP_UP].forEach(function (store) {
+    Object.keys(store).forEach(function (k) {
+      ((store[k] && store[k].ev) || []).forEach(function (e) {
+        if (seen[e.id]) return;
+        seen[e.id] = 1;
+        if (spCalEv(e.id) ? e.state === "pre" : on[spLgId(e)] && e.state === "pre" && spEvTs(e) > now && spEvTs(e) - now < 45 * 86400000) { if (spCalPut(e, !spCalEv(e.id))) ch = true; }
+      });
+    });
+  });
+  if (ch) { persist(); refreshCalAny(); }
+}
+function spLgName(id) { var l = SP_CATALOG.filter(function (x) { return x.id === id; })[0]; return l ? l.n : id; }
+function spCalBtns(e) {
+  var lg = spLgId(e), on = !!spAutoLgs()[lg], have = spCalEv(e.id);
+  return '<p class="tools spcal">' + (e.state === "post" ? "" : '<button data-a="spcal" data-k="' + esc(e.id) + '"' + (have ? ' class="on"' : "") + ' title="' + (have ? "In your calendar with a reminder. Click to take it out again" : "Put this in your calendar, with a reminder 30 minutes before") + '">' + (have ? "✓ In your calendar" : "+ Add to calendar") + "</button>") +
+    '<button data-a="spcallg" data-k="' + esc(e.id) + '"' + (on ? ' class="on"' : "") + ' title="' + (on ? "Every coming event of this league is put in your calendar. Click to stop" : "Put every coming event of this league in your calendar, each with a reminder 30 minutes before") + '">' + (on ? "✓ Every " + esc(e.lg) + " event is in your calendar" : "+ Every " + esc(e.lg) + " event") + "</button></p>";
+}
+function spCalAct(a, k) {
+  if (a === "spautooff") { spAutoSet(k, false); renderSpList(); return; }
+  var e = spEvents().filter(function (x) { return x.id === k; })[0] || spFind(k);
+  if (!e) return;
+  if (a === "spcal") {
+    var have = spCalEv(e.id);
+    if (have) P.cal = P.cal.filter(function (x) { return x !== have; });
+    else { if (P.spSkip) delete P.spSkip[e.id]; spCalPut(e, false); if (NTF().desktop) askNotify(); }
+  } else spAutoSet(spLgId(e), !spAutoLgs()[spLgId(e)], e);
+  persist(); render(); refreshCalAny(); openSport(SP_OPEN || e.id);
+}
+function spAutoSet(lg, on, e) {
+  P.spAuto = Object.assign({}, spAutoLgs());
+  if (on) {
+    P.spAuto[lg] = 1;
+    if (e && e.state === "pre") spCalPut(e, true);
+    if (NTF().desktop) askNotify();
+  } else {
+    // the events this league added that are still to come leave the calendar; the past ones stay as a record
+    delete P.spAuto[lg];
+    var today = ymd(new Date());
+    P.cal = (P.cal || []).filter(function (x) { return !(x.spa === lg && x.d >= today); });
+  }
+  persist(); render(); refreshCalAny(); fetchSports(true);
 }
 // Settings > Sports: one switch per league, grouped by sport
 function renderSpList() {
@@ -9144,6 +9232,9 @@ function renderSpList() {
       return "<label>" + esc(l.n) + ' <input type="checkbox" data-a="sptoggle" data-k="' + l.id + '"' + (on[l.id] ? " checked" : "") + "></label>";
     }).join("") + "</div>";
   }).join("");
+  // the leagues whose every event goes into the calendar
+  var auto = Object.keys(spAutoLgs());
+  if ($("spAutoList")) $("spAutoList").innerHTML = auto.length ? auto.map(function (id) { return '<div class="row"><span><b>' + esc(spLgName(id)) + '</b> <small class="mut">every coming event</small></span><button data-a="spautooff" data-k="' + esc(id) + '">Stop</button></div>'; }).join("") : '<div class="mut sn">No league yet.</div>';
   // favorite sport: one of the sports you follow a league of
   var mine = spSports().slice(1);
   $("spFavSel").innerHTML = '<option value="">None</option>' + mine.map(function (s) { return '<option value="' + s[0] + '"' + (s[0] === spFavSport() ? " selected" : "") + ">" + s[1] + "</option>"; }).join("");
