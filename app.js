@@ -1,4 +1,4 @@
-var VERSION = 199;
+var VERSION = 200;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1444,11 +1444,11 @@ document.addEventListener("change", function (e) {
   persist(); render(); renderEmbSet();
 });
 
-// ---- TV shows: new episodes of the shows you follow, and what is on today (data from TVmaze, read straight from the browser) ----
+// ---- TV shows: new episodes of the shows you follow, and Discover (data from TVmaze, read straight from the browser) ----
 // P.tv = { on, shows: [{ id, n }], view, cc }. The box is off until you switch it on (Settings > Layout & boxes, or TV shows).
 // Per followed show one small request every six hours (its next and its latest episode), kept on this device in between.
-var TVAPI = "https://api.tvmaze.com/", TVC = load("sp_tvc", {}), TVSCH = { t: 0, key: "", ev: [] }, TVQ = "", TVFIND = false, TVRES = null, TVRESQ = "", tvBusy = 0, TVERR = "", TVSHOW = {};
-var TV_VIEWS = [["mine", "My shows: coming up"], ["recent", "My shows: just aired"], ["today", "On today"]];
+var TVAPI = "https://api.tvmaze.com/", TVC = load("sp_tvc", {}), TVSCH = { t: 0, key: "", ev: [] }, tvBusy = 0, TVERR = "", TVSHOW = {};
+var TV_VIEWS = [["mine", "Coming up"], ["recent", "Just aired"]];
 var TV_CC = [["US", "United States"], ["GB", "United Kingdom"], ["SE", "Sweden"], ["NO", "Norway"], ["DK", "Denmark"], ["FI", "Finland"], ["DE", "Germany"], ["NL", "Netherlands"], ["FR", "France"], ["ES", "Spain"], ["IT", "Italy"], ["CA", "Canada"], ["AU", "Australia"], ["JP", "Japan"], ["KR", "South Korea"]];
 function tvp() { if (!P.tv || typeof P.tv !== "object") P.tv = {}; if (!Array.isArray(P.tv.shows)) P.tv.shows = []; return P.tv; }
 function tvShows() { return (P.tv && Array.isArray(P.tv.shows) ? P.tv.shows : []).filter(function (s) { return s && /^\d{1,9}$/.test(String(s.id)); }).slice(0, 60); }
@@ -1474,29 +1474,39 @@ function fetchTv(force) {
     }).catch(function (e) { TVERR = String((e && e.message) || e); if (TVC[s.id]) TVC[s.id].t = Date.now() - 20700000; }).then(next);   // a failed one is tried again in five minutes
   };
   if (todo.length && !tvBusy) { for (var i = 0; i < 4; i++) { tvBusy++; next(); } }
-  if (tvView() === "today" || force) fetchTvToday(force);
 }
-// "On today": everything that airs today in the chosen country, on television and on streaming services
-function fetchTvToday(force) {
-  var day = new Date().toLocaleDateString("en-CA", { timeZone: TZ }), key = tvCc() + day;
-  if (!force && TVSCH.key === key && Date.now() - TVSCH.t < 3600000) return;
-  TVSCH.key = key; TVSCH.t = Date.now();
+// What airs on one day (0 today, 1 tomorrow…) in the chosen country, on television and on streaming services (Discover).
+// Today's list is also kept in TVSCH, where the small card of a show looks for tonight's episode.
+var TVDAY = {};
+function tvDate(n) { return new Date(Date.now() + n * 86400000).toLocaleDateString("en-CA", { timeZone: TZ }); }
+function fetchTvDay(n, force) {
+  var day = tvDate(n), key = tvCc() + day, c = TVDAY[key];
+  if (c && !force && (c.busy || Date.now() - c.t < 3600000)) return;
+  TVDAY[key] = { t: Date.now(), busy: 1, ev: c ? c.ev : null };
   var one = function (path) { return tvGet(path).catch(function () { return []; }); };
-  Promise.all([one("schedule?country=" + tvCc() + "&date=" + day), one("schedule/web?country=" + tvCc() + "&date=" + day)]).then(function (r) {
-    if (TVSCH.key !== key) return;
+  // the country's television and streaming, and the streaming services that release worldwide (Netflix, Disney+, Max…):
+  // TVmaze lists television for few countries, so without the worldwide part most countries would be empty
+  Promise.all([one("schedule?country=" + tvCc() + "&date=" + day), one("schedule/web?country=" + tvCc() + "&date=" + day), one("schedule/web?date=" + day)]).then(function (r) {
     var seen = {}, ev = [];
-    r[0].concat(r[1]).forEach(function (e) {
+    // of the worldwide list only the services that really are worldwide (a service tied to one country has its country set)
+    var world = r[2].filter(function (e) { var s = (e._embedded && e._embedded.show) || {}; return !(s.webChannel && s.webChannel.country); });
+    r[0].concat(r[1], world).forEach(function (e) {
       var s = e.show || (e._embedded && e._embedded.show), ep = tvEp(e);
       if (!s || !ep || seen[s.id + ":" + ep.s + ":" + ep.e]) return;
       seen[s.id + ":" + ep.s + ":" + ep.e] = 1;
       // daily programmes (news, talk and game shows, soaps numbered by the year) would bury everything else; yours are always kept
       if ((/^(News|Talk Show|Game Show|Sports)$/.test(String(s.type)) || ep.s >= 1900) && !tvHas(s.id)) return;
+      // a streaming service often releases several episodes at once: one row per show, "S01E30–E34"
+      var had = ev.filter(function (x) { return x.id === s.id && x.ep.s === ep.s; })[0];
+      if (had) { if (ep.e > (had.last || had.ep.e)) had.last = ep.e; if (ep.e && ep.e < had.ep.e) { had.last = had.last || had.ep.e; had.ep = ep; } return; }
       ev.push({ id: s.id, n: String(s.name || "").slice(0, 80), net: tvNet(s), w: +s.weight || 0, ep: ep });
     });
     // the 60 best-known shows of the day (and all of yours), in the order they air
     ev.sort(function (a, b) { return (tvHas(b.id) ? 1 : 0) - (tvHas(a.id) ? 1 : 0) || b.w - a.w; });
-    TVSCH.ev = ev.slice(0, 60).sort(function (a, b) { return a.ep.ts - b.ep.ts || b.w - a.w; });
-    render();
+    ev = ev.slice(0, 60).sort(function (a, b) { return a.ep.ts - b.ep.ts || b.w - a.w; });
+    TVDAY[key] = { t: Date.now(), ev: ev };
+    if (n === 0) TVSCH = { t: Date.now(), key: key, ev: ev };
+    tvdDraw();
   });
 }
 function tvDayName(ts) {
@@ -1514,41 +1524,97 @@ function tvRow(id, name, ep, net, star) {
   return '<div class="row tvrow"><span><button class="lnk tv1" data-a="tvopen" data-k="' + esc(String(id)) + '"><b>' + esc(name) + "</b>" + (tvCode(ep) ? " <small>" + esc(tvCode(ep)) + "</small>" : "") + "</button></span>" +
     '<span class="r">' + (star ? '<i class="fv">★</i>' : "") + '<span class="mut">' + (ep ? tvTime(ep.ts) : "") + "</span></span></div>";
 }
+// The box is only about your own shows; finding new ones is in Discover (the compass button)
 function tvBody() {
-  var find = TVFIND || TVQ ? '<input type="search" id="tvQ" class="flt" placeholder="Search a show to follow, e.g. Severance" aria-label="Search TV shows">' : "", view = tvView(), mine = tvShows(), now = Date.now();
-  if (TVQ) {
-    if (TVRESQ !== TVQ || !TVRES) return find + '<div class="empty">Searching…</div>';
-    return find + (TVRES.length ? lst("tv", TVRES.map(function (s) {
-      return '<div class="row tvrow"><span><button class="lnk" data-a="tvopen" data-k="' + s.id + '"><b>' + esc(s.n) + "</b> <small>" + esc([s.y, s.net, s.st === "Ended" ? "ended" : ""].filter(Boolean).join(" · ")) + "</small></button></span>" +
-        '<span class="r"><button class="ib sm' + (tvHas(s.id) ? " on" : "") + '" data-a="tvfav" data-k="' + s.id + "|" + esc(s.n) + '" title="' + (tvHas(s.id) ? "Stop following" : "Follow this show") + '" aria-label="' + (tvHas(s.id) ? "Stop following " : "Follow ") + esc(s.n) + '">' + (tvHas(s.id) ? "★" : "☆") + "</button></span></div>";
-    }).join(""), 8) : '<div class="empty">No show found for “' + esc(TVQ) + "”.</div>");
-  }
-  var rows = [], head = "", html = "";
-  if (view === "today") {
-    if (!TVSCH.ev.length) return find + '<div class="empty">' + (Date.now() - TVSCH.t < 8000 ? "Loading today’s shows…" : "Nothing found for today in " + esc((TV_CC.filter(function (o) { return o[0] === tvCc(); })[0] || ["", ""])[1]) + ". Choose another country in Settings, TV shows.") + "</div>";
-    rows = TVSCH.ev.map(function (e) { return { id: e.id, n: e.n, ep: e.ep, net: e.net, star: tvHas(e.id), hd: e.ep.ts < now - 3600000 ? "Earlier today" : "Coming up today" }; });
-  } else {
-    if (!mine.length) return find + '<div class="empty">No shows yet. Press ⌕ above and type the name of a show to follow it.<br><button data-a="tvfilt">Find a show</button></div>';
-    var got = mine.map(function (s) { return { s: s, c: TVC[s.id] }; }).filter(function (x) { return x.c; });
-    if (view === "mine") rows = got.filter(function (x) { return x.c.next && x.c.next.ts > now - 10800000; }).sort(function (a, b) { return a.c.next.ts - b.c.next.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.next, net: x.c.net, hd: tvDayName(x.c.next.ts) }; });
-    else rows = got.filter(function (x) { return x.c.prev && now - x.c.prev.ts < 45 * 86400000; }).sort(function (a, b) { return b.c.prev.ts - a.c.prev.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.prev, net: x.c.net, hd: tvDayName(x.c.prev.ts) }; });
-    if (!rows.length) return find + '<div class="empty">' + (got.length < mine.length && tvBusy ? "Loading your shows…" : TVERR && !got.length ? "TV shows unavailable: " + esc(TVERR) : view === "mine" ? "None of your " + mine.length + " shows has a new episode announced. Try “just aired”." : "None of your shows aired an episode in the last weeks.") + "</div>";
-  }
+  var view = tvView(), mine = tvShows(), now = Date.now(), rows = [], head = "", html = "";
+  if (!mine.length) return '<div class="empty">No shows yet. Find one with <button class="lnk2" data-a="tvdopen">Discover</button>.</div>';
+  var got = mine.map(function (s) { return { s: s, c: TVC[s.id] }; }).filter(function (x) { return x.c; });
+  if (view === "mine") rows = got.filter(function (x) { return x.c.next && x.c.next.ts > now - 10800000; }).sort(function (a, b) { return a.c.next.ts - b.c.next.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.next, net: x.c.net, hd: tvDayName(x.c.next.ts) }; });
+  else rows = got.filter(function (x) { return x.c.prev && now - x.c.prev.ts < 45 * 86400000; }).sort(function (a, b) { return b.c.prev.ts - a.c.prev.ts; }).map(function (x) { return { id: x.s.id, n: x.c.n || x.s.n, ep: x.c.prev, net: x.c.net, hd: tvDayName(x.c.prev.ts) }; });
+  if (!rows.length) return '<div class="empty">' + (got.length < mine.length && tvBusy ? "Loading your shows…" : TVERR && !got.length ? "TV shows unavailable: " + esc(TVERR) : view === "mine" ? "None of your " + mine.length + " shows has a new episode announced. Try “Just aired”." : "None of your shows aired an episode in the last weeks.") + "</div>";
   rows.forEach(function (r) { if (r.hd !== head) { head = r.hd; html += '<div class="spday">' + r.hd + "</div>"; } html += tvRow(r.id, r.n, r.ep, r.net, r.star); });
-  return find + lst("tv", html, 8);
+  return lst("tv", html, 8);
 }
 function tvTile() {
-  return tile("tv", "TV shows", tvBody(), 0, '<select data-s="tvview" aria-label="Which shows">' + opts(TV_VIEWS, tvView()) + '</select><button class="ib sm' + (TVFIND || TVQ ? " on" : "") + '" data-a="tvfilt" title="Search a show to follow" aria-label="Search a show to follow">⌕</button>');
+  return tile("tv", "TV shows", tvBody(), 0, '<select data-s="tvview" aria-label="Which episodes">' + opts(TV_VIEWS, tvView()) + "</select>" + discBtn("tvdopen", "Discover: what is on today and the coming days, and a search for any show", "Discover TV shows"));
 }
-function tvSearch() {
-  var q = TVQ;
-  if (!q) { TVRES = null; render(); return; }
+
+// ---- TV Discover: what airs in a country today and the next six days, and a search for any show ----
+// Read straight from TVmaze in the browser. A show opens inside the same window (← Back returns to the list);
+// ☆ follows it. The country is the one in Settings > TV shows, and can be changed here too.
+var TVD_T = "Discover TV shows", TVD = { day: 0, q: "", res: null, resq: "", show: "", n: 0 };
+// the compass button at the top of a box (Twitch, YouTube, TV shows, Podcasts)
+function discBtn(a, title, label) {
+  return '<button class="ib sm twdb" data-a="' + a + '" title="' + title + '" aria-label="' + label + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
+}
+function tvdOpen() { return !$("modal").hidden && $("mTitle").textContent === TVD_T; }
+function tvdDayLab(n) { return n === 0 ? "Today" : n === 1 ? "Tomorrow" : new Date(Date.now() + n * 86400000).toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", day: "numeric" }); }
+function tvdStar(id, name) {
+  var on = tvHas(id);
+  return '<button class="twdf' + (on ? " on" : "") + '" data-a="tvfav" data-k="' + esc(String(id)) + "|" + esc(name) + '" title="' + (on ? "Following. Click to stop" : "Follow this show") + '" aria-label="' + (on ? "Stop following " : "Follow ") + esc(name) + '">' + (on ? "★" : "☆") + "</button>";
+}
+function tvdRow(id, name, sub, right) {
+  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="tvdshow" data-k="' + esc(String(id)) + '">' + esc(name) + '</button><small class="ytdm">' + esc(sub) + '</small></span><span class="r">' + (right ? '<span class="mut">' + right + "</span>" : "") + tvdStar(id, name) + "</span></div>";
+}
+function tvdListHtml() {
+  if (TVD.show) {
+    var c = TVSHOW[TVD.show];
+    return '<button class="lnk2 ytdbk" data-a="tvdback">&larr; Back</button>' + (c ? tvShowHtml(c.j) : '<p class="mut sn">Loading…</p>');
+  }
+  if (TVD.q) {
+    if (TVD.resq !== TVD.q || !TVD.res) return "<h3>Results for “" + esc(TVD.q) + "”</h3>" + '<p class="mut sn">Searching…</p>';
+    return "<h3>Results for “" + esc(TVD.q) + "”</h3>" + (TVD.res.length ? TVD.res.map(function (s) { return tvdRow(s.id, s.n, [s.y, s.net, s.st === "Ended" ? "ended" : ""].filter(Boolean).join(" · "), ""); }).join("") : '<p class="mut sn">No show found.</p>');
+  }
+  var d = TVDAY[tvCc() + tvDate(TVD.day)], cn = (TV_CC.filter(function (o) { return o[0] === tvCc(); })[0] || ["", ""])[1], now = Date.now(), head = "", html = "";
+  if (!d || !d.ev) return '<p class="mut sn">Loading…</p>';
+  if (!d.ev.length) return '<p class="mut sn">Nothing found for this day.</p>';
+  d.ev.forEach(function (e) {
+    // grouped by your own day: a US evening show is on in the night in Europe, so it may well be "Tomorrow" here
+    var hd = e.ep.ts < now - 3600000 && tvDayName(e.ep.ts) === "Today" ? "Earlier today" : tvDayName(e.ep.ts);
+    if (hd !== head) { head = hd; html += "<h3>" + hd + "</h3>"; }
+    html += tvdRow(e.id, e.n, [tvCode(e.ep) + (e.last && tvCode(e.ep) ? "–E" + pad2(e.last) : ""), e.net].filter(Boolean).join(" · "), tvTime(e.ep.ts));
+  });
+  return html + '<p class="mut sn">Television in ' + esc(cn) + " and streaming worldwide. Show information from TVmaze.com.</p>";
+}
+function tvdChips() {
+  var out = "";
+  for (var n = 0; n < 7; n++) out += '<button class="twdc' + (!TVD.q && !TVD.show && TVD.day === n ? " on" : "") + '" data-a="tvdday" data-k="' + n + '">' + tvdDayLab(n) + "</button>";
+  return out;
+}
+function tvdHtml() {
+  return '<div class="twd"><div class="twdtop"><input type="search" id="tvdQ" placeholder="Search any show…" aria-label="Search any show" value="' + esc(TVD.q) + '"><select id="tvdCc" aria-label="Country">' + opts(TV_CC, tvCc()) + '</select></div><div id="tvdChips" class="twdcats all">' + tvdChips() + '</div><div id="tvdList">' + tvdListHtml() + "</div></div>";
+}
+function tvdDraw() {
+  if (!tvdOpen() || !$("tvdList")) return;
+  $("tvdChips").innerHTML = tvdChips(); $("tvdList").innerHTML = tvdListHtml();
+}
+function openTvDiscover(id) {
+  if (id) TVD.show = String(id);
+  openModal(TVD_T, tvdHtml());
+  if (TVD.show) tvdShow(TVD.show); else fetchTvDay(TVD.day);
+}
+function tvdShow(id) {
+  TVD.show = String(id); tvdDraw();
+  var m = document.querySelector("#modal .mbox"); if (m) m.scrollTop = 0;
+  var c = TVSHOW[id];
+  if (c && Date.now() - c.t < 3600000) return;
+  tvGet("shows/" + id + "?embed=episodes").then(function (j) { TVSHOW[id] = { t: Date.now(), j: j }; tvdDraw(); })
+    .catch(function () { if (TVD.show === String(id) && $("tvdList")) $("tvdList").innerHTML = '<button class="lnk2 ytdbk" data-a="tvdback">&larr; Back</button><p class="mut sn">Could not load this show right now.</p>'; });
+}
+function tvdSearch() {
+  var q = TVD.q;
+  if (!q) { tvdDraw(); return; }
+  tvdDraw();
   tvGet("search/shows?q=" + encodeURIComponent(q)).then(function (j) {
-    if (TVQ !== q) return;
-    TVRES = (Array.isArray(j) ? j : []).map(function (x) { var s = x.show || {}; return { id: +s.id, n: String(s.name || "").slice(0, 80), y: String(s.premiered || "").slice(0, 4), net: tvNet(s), st: String(s.status || "") }; }).filter(function (s) { return s.id && s.n; }).slice(0, 10);
-    TVRESQ = q; render();
-  }).catch(function () { if (TVQ === q) { TVRES = []; TVRESQ = q; render(); } });
+    if (TVD.q !== q) return;
+    TVD.res = (Array.isArray(j) ? j : []).map(function (x) { var s = x.show || {}; return { id: +s.id, n: String(s.name || "").slice(0, 80), y: String(s.premiered || "").slice(0, 4), net: tvNet(s), st: String(s.status || "") }; }).filter(function (s) { return s.id && s.n; }).slice(0, 15);
+    TVD.resq = q; tvdDraw();
+  }).catch(function () { if (TVD.q === q) { TVD.res = []; TVD.resq = q; tvdDraw(); } });
 }
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "tvdQ") return;
+  debounced("tvdQ", function () { if (!$("tvdQ")) return; var v = $("tvdQ").value.replace(/\s+/g, " ").trim().slice(0, 60); if (v.length < 2) v = ""; if (v === TVD.q) return; TVD.q = v; TVD.show = ""; tvdSearch(); });
+});
 function tvFollow(id, name) {
   var T = tvp(), i = -1;
   T.shows.forEach(function (s, n) { if (String(s.id) === String(id)) i = n; });
@@ -1585,25 +1651,25 @@ function openTv(id) {
 }
 function tvAct(a, k) {
   if (a === "tvopen") { openTv(k); return; }
-  if (a === "tvfilt") { TVFIND = !(TVFIND || TVQ); if (!TVFIND) { TVQ = ""; TVRES = null; } render(); var q = $("tvQ"); if (q) { q.value = ""; q.focus(); } return; }
+  if (a === "tvdopen") { openTvDiscover(); return; }
+  if (a === "tvdday") { TVD.day = +k || 0; TVD.q = ""; TVD.show = ""; if ($("tvdQ")) $("tvdQ").value = ""; tvdDraw(); fetchTvDay(TVD.day); return; }
+  if (a === "tvdshow") { tvdShow(k); return; }
+  if (a === "tvdback") { TVD.show = ""; tvdDraw(); if (!TVD.q) fetchTvDay(TVD.day); return; }
   if (a === "tvfav") {
     var p = String(k).split("|");
     tvFollow(p[0], p.slice(1).join("|"));
     if (WIZ && $("wzPage") && $("wzPage").dataset.p === "tv") { WIZMSG = "Following " + p.slice(1).join("|") + "."; wizRender(); return; }
+    if (tvdOpen()) { var sc = document.querySelector("#modal .mbox"), st = sc ? sc.scrollTop : 0; tvdDraw(); if (sc) sc.scrollTop = st; return; }
     if (!$("modal").hidden && $("mTitle").textContent === "TV shows" && TVSHOW[TVOPEN]) $("mBody").innerHTML = tvShowHtml(TVSHOW[TVOPEN].j);
     return;
   }
   if (a === "tvdel") { tvFollow(k, ""); }
 }
-document.addEventListener("input", function (e) {
-  if (e.target.id !== "tvQ") return;
-  debounced("tvQ", function () { TVQ = $("tvQ") ? $("tvQ").value.trim().slice(0, 60) : ""; render(); tvSearch(); });
-});
 document.addEventListener("change", function (e) {
   var t = e.target;
   if (t && t.dataset && t.dataset.s === "tvview") { tvp().view = t.value; persist(); render(); fetchTv(); }
   else if (t && t.id === "tvCalOn") { tvp().cal = t.checked; tvCalKey = ""; persist(); render(); refreshCalAny(); }
-  else if (t && t.id === "tvCc") { tvp().cc = t.value; TVSCH = { t: 0, key: "", ev: [] }; persist(); render(); fetchTv(); }
+  else if (t && (t.id === "tvCc" || t.id === "tvdCc")) { tvp().cc = t.value; TVSCH = { t: 0, key: "", ev: [] }; persist(); renderTvSet(); if (tvdOpen()) { TVD.show = ""; tvdDraw(); if (!TVD.q) fetchTvDay(TVD.day); } }
 });
 REFRESH.tv = function () { fetchTv(true); };
 setInterval(function () { if (!document.hidden) fetchTv(); }, 900000);
@@ -1617,7 +1683,7 @@ function renderTvSet() {
   el.innerHTML = mine.length ? mine.map(function (s) {
     var c = TVC[s.id];
     return '<div class="row"><span><button class="lnk" data-a="tvopen" data-k="' + s.id + '"><span class="bnm">' + esc((c && c.n) || s.n || "Show") + "</span></button> <small class=\"mut\">" + esc(c ? [c.net, c.next ? "next " + tvDayName(c.next.ts) : c.st === "Ended" ? "ended" : "no date yet"].filter(Boolean).join(" · ") : "") + '</small></span><button data-a="tvdel" data-k="' + s.id + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></div>';
-  }).join("") : '<div class="mut sn">You follow no shows yet. Switch the box on, press ⌕ in it and type a name.</div>';
+  }).join("") : '<div class="mut sn">You follow no shows yet. Switch the box on and find shows with its compass button (Discover).</div>';
 }
 
 // ---- Podcasts: the newest episodes of the shows you follow, the popular shows of a country, and a search of every
@@ -1626,8 +1692,8 @@ function renderTvSet() {
 // switches between radio and podcasts. P.pod = { on, f: [{ id, n, a, img, g, since }], star, pos: { episode: [seconds,
 // when] }, done: { episode: when }, seen, cur, mode, view, cc, genre, speed, back, fwd, doneMode, ntf, line, time, jump, roll }.
 // The box is off until you switch it on (Settings > Layout & boxes, or Podcasts). ----
-var PODAPI = "https://itunes.apple.com/", PODC = load("sp_podc", {}), PODD = {}, PODQ = "", PODFIND = false, PODRES = null, PODRESQ = "", podBusy = false, PODERR = "";
-var PODSHOW = "", PODSH = {}, PODCHART = {}, PODMENU = false, PODMORE = {}, PODDESC = {};
+var PODAPI = "https://itunes.apple.com/", PODC = load("sp_podc", {}), PODD = {}, podBusy = false, PODERR = "";
+var PODSH = {}, PODCHART = {}, PODMORE = {}, PODDESC = {};
 var POD_G = [["", "All topics"], ["1489", "News"], ["1303", "Comedy"], ["1545", "Sports"], ["1488", "True crime"], ["1321", "Business"], ["1318", "Technology"], ["1324", "Society & culture"], ["1487", "History"], ["1533", "Science"],
   ["1512", "Health & fitness"], ["1304", "Education"], ["1301", "Arts"], ["1309", "TV & film"], ["1310", "Music"], ["1305", "Kids & family"], ["1483", "Fiction"], ["1502", "Leisure"]];
 var POD_CC = [["ee", "Estonia"], ["se", "Sweden"], ["fi", "Finland"], ["no", "Norway"], ["dk", "Denmark"], ["lv", "Latvia"], ["lt", "Lithuania"], ["pl", "Poland"], ["de", "Germany"], ["nl", "Netherlands"],
@@ -1770,82 +1836,114 @@ function fetchPodChart() {
       if (x.summary && x.summary.label) PODDESC[s.id] = podTxt(x.summary.label).slice(0, 600);
       return podKnow(s);
     }).filter(function (s) { return s.id && s.n; }) };
-    render();
-  }).catch(function () { PODCHART[k] = { t: Date.now() - 3300000, list: [] }; render(); });   // tried again in five minutes
+    pddDraw();
+  }).catch(function () { PODCHART[k] = { t: Date.now() - 3300000, list: [] }; pddDraw(); });   // tried again in five minutes
 }
 function podSearch() {
-  var q = PODQ;
-  if (!q) { PODRES = null; render(); return; }
+  var q = PDD.q;
+  pddDraw();
+  if (!q) return;
   podGet("search?media=podcast&entity=podcast&limit=20&country=" + podCc() + "&term=" + encodeURIComponent(q)).then(function (j) {
-    if (PODQ !== q) return;
-    PODRES = (j.results || []).map(function (x) { return podKnow({ id: String(x.collectionId || ""), n: String(x.collectionName || "").slice(0, 100), a: String(x.artistName || "").slice(0, 80), img: podImg(x), g: String(x.primaryGenreName || "") }); }).filter(function (s) { return s.id && s.n; });
-    PODRESQ = q; render();
-  }).catch(function () { if (PODQ === q) { PODRES = []; PODRESQ = q; render(); } });
+    if (PDD.q !== q) return;
+    PDD.res = (j.results || []).map(function (x) { return podKnow({ id: String(x.collectionId || ""), n: String(x.collectionName || "").slice(0, 100), a: String(x.artistName || "").slice(0, 80), img: podImg(x), g: String(x.primaryGenreName || "") }); }).filter(function (s) { return s.id && s.n; });
+    PDD.resq = q; pddDraw();
+  }).catch(function () { if (PDD.q === q) { PDD.res = []; PDD.resq = q; pddDraw(); } });
 }
-// a show's own page inside the box: its latest episodes, 20 more each time you ask, up to the 200 Apple gives
+// a show's own page (in Discover): its latest episodes, 20 more each time you ask, up to the 200 Apple gives
 function fetchPodShow(id, n) {
   podGet("lookup?id=" + id + "&entity=podcastEpisode&limit=" + n).then(function (j) {
     var eps = [], meta = null;
     (j.results || []).forEach(function (x) { if (x.kind === "podcast-episode" || x.wrapperType === "podcastEpisode") { var e = podEp(x); if (e.id && e.u) eps.push(e); } else if (x.kind === "podcast") meta = x; });
     var s = podKnow({ id: String(id), n: String((meta && meta.collectionName) || (PODKNOWN[id] || {}).n || "").slice(0, 100), a: String((meta && meta.artistName) || (PODKNOWN[id] || {}).a || "").slice(0, 80), img: (meta && podImg(meta)) || (PODKNOWN[id] || {}).img || "", g: String((meta && meta.primaryGenreName) || "") });
     PODSH[id] = { t: Date.now(), n: s.n, a: s.a, img: s.img, g: s.g, cnt: meta ? +meta.trackCount || 0 : 0, eps: eps.sort(function (a, b) { return b.ts - a.ts; }), want: n, ok: 1 };
-    render(); podPlayerRefresh();
-  }).catch(function () { PODSH[id] = Object.assign(PODSH[id] || {}, { t: Date.now(), err: 1, want: n }); render(); });
+    pddDraw(); podPlayerRefresh();
+  }).catch(function () { PODSH[id] = Object.assign(PODSH[id] || {}, { t: Date.now(), err: 1, want: n }); pddDraw(); });
 }
 function openPodShow(id) {
   id = String(id);
   if (!/^\d{1,12}$/.test(id)) return;
-  PODSHOW = id; PODMENU = false; PODFIND = false; PODQ = ""; PODRES = null;
-  if (!PODSH[id] || !PODSH[id].ok || Date.now() - PODSH[id].t > 3600000) { PODSH[id] = Object.assign(PODSH[id] || {}, { want: 20 }); fetchPodShow(id, 20); }
-  render();
-  var l = document.querySelector('[data-list="podcasts"]'); if (l) l.scrollTop = 0;
+  if (pddOpen()) pddShow(id); else openPodDiscover(id);
 }
-function podShowPage(id) {
+function podShowPage(id, tools) {
   var c = PODSH[id] || {}, k = PODKNOWN[id] || podShow(id) || {}, n = c.n || k.n || "", desc = PODDESC[id] || "", open = PODMORE[id];
-  if (!c.ok) return '<div class="empty">' + (c.err ? "Could not load this show right now." : "Loading…") + "</div>";
+  if (!c.ok) return '<p class="mut sn">' + (c.err ? "Could not load this show right now." : "Loading…") + "</p>";
   return '<div class="pdhd">' + podCov(c.img || k.img, "l") + '<div class="pdhi"><b>' + esc(n) + "</b><small>" + esc([c.a || k.a, c.g, c.cnt ? c.cnt + " episodes" : ""].filter(Boolean).join(" · ")) + "</small>" +
-    (desc ? '<div class="pdds' + (open ? " open" : "") + '">' + esc(desc) + (desc.length > 80 ? ' <button class="lnk2" data-a="podmore" data-k="' + esc(id) + '">' + (open ? "less" : "more") + "</button>" : "") + "</div>" : "") + "</div></div>" +
-    (c.eps.length ? c.eps.map(function (e) { return podRow(e, false); }).join("") : '<div class="empty">No episodes to play.</div>') +
-    (c.eps.length >= c.want && c.want < 200 ? '<button class="more" data-a="podolder" data-k="' + esc(id) + '">Older episodes</button>' : "");
+    (desc ? '<div class="pdds' + (open ? " open" : "") + '">' + esc(desc) + "</div>" + (desc.length > 120 ? '<button class="lnk2 pdmore" data-a="podmore" data-k="' + esc(id) + '">' + (open ? "Less" : "More") + "</button>" : "") : "") + "</div></div>" + (tools || "") +
+    (c.eps.length ? c.eps.map(function (e) { return podRow(e, false); }).join("") : '<p class="mut sn">No episodes to play.</p>') +
+    (c.eps.length >= c.want && c.want < 200 ? '<button class="sitemore" data-a="podolder" data-k="' + esc(id) + '">Older episodes</button>' : "");
 }
-// The box is always exactly as tall as its list length (H in Edit mode): a bar on top (back, search, country and topic)
-// takes its height from the list under it, so opening a show, searching or a short list never changes the box's size.
+// The box is only about your own shows: their newest episodes, or the list of the shows themselves. Finding new ones is in
+// Discover (the compass button). The box is always exactly as tall as its list length (H in Edit mode).
 function podTile() {
-  var view = podO("view", "f") === "p" ? "p" : "f", bar = "", body, all = podList();
-  if (PODSHOW) {
-    var fs = podShow(PODSHOW), sh = PODSH[PODSHOW] || {}, kn = PODKNOWN[PODSHOW] || {};
-    bar = '<div class="pdbar"><button class="ib sm" data-a="podback">← Back</button><span class="pdgap"></span>' +
-      (fs ? '<button class="ib sm pdst' + (P.pod.star[PODSHOW] ? " on" : "") + '" data-a="podstar" data-k="' + esc(PODSHOW) + '" title="' + (P.pod.star[PODSHOW] ? "You get a notification for new episodes. Click to stop" : "Get a notification for new episodes") + '" aria-label="Notification for new episodes">' + (P.pod.star[PODSHOW] ? "★" : "☆") + "</button>" : "") +
-      '<button class="ib sm pdw' + (fs ? " on" : "") + '" data-a="podfol" data-k="' + esc(PODSHOW) + '"' + (sh.n || kn.n ? "" : " disabled") + ">" + (fs ? "✓ Following" : "+ Follow") + "</button></div>";
-    body = podShowPage(PODSHOW);
-  } else if (PODFIND || PODQ) {
-    bar = '<div class="pdbar"><input type="search" id="podQ" class="flt" placeholder="Search all podcasts…" aria-label="Search all podcasts" autocomplete="off"></div>';
-    if (!PODQ) body = '<div class="empty">Search every podcast by its name, a topic or a person.</div>';
-    else if (PODRESQ !== PODQ || !PODRES) body = '<div class="empty">Searching…</div>';
-    else {
-      var w = sWords(PODQ), eps = all.filter(function (e) { return sHit(w, e.t); }).slice(0, 8);
-      body = (PODRES.length ? '<div class="pdh">Shows</div>' + PODRES.map(function (s) { return podShowRow(s); }).join("") : "") +
-        (eps.length ? '<div class="pdh">Episodes of your shows</div>' + eps.map(function (e) { return podRow(e, true); }).join("") : "") +
-        (!PODRES.length && !eps.length ? '<div class="empty">No podcast found for “' + esc(PODQ) + "”.</div>" : "");
-    }
-  } else if (view === "p") {
-    bar = '<div class="pdbar"><select data-s="podcc" aria-label="Country">' + opts(POD_CC, podCc()) + '</select><select data-s="podgenre" aria-label="Topic">' + opts(POD_G, podGenre()) + "</select></div>";
-    var ch = PODCHART[podChartKey()];
-    if (!ch || !ch.list) { fetchPodChart(); body = '<div class="empty">Loading the popular shows…</div>'; }
-    else body = ch.list.length ? ch.list.map(function (s, i) { return podShowRow(s, i + 1); }).join("") : '<div class="empty">No popular list for this country and topic right now. Try another topic.</div>';
-  } else if (!podF().length) body = '<div class="empty">You follow no podcasts yet. Choose <b>Popular</b> above, or search with ⌕.</div>';
+  var view = podO("view", "f") === "s" ? "s" : "f", body, all = podList(), f = podF();
+  if (!f.length) body = '<div class="empty">You follow no podcasts yet. Find some with <button class="lnk2" data-a="podfind">Discover</button>.</div>';
+  else if (view === "s") body = f.map(function (s) {
+    var id = esc(String(s.id)), on = P.pod.star[s.id];
+    return '<div class="row pdr"><span><button class="lnk" data-a="podshow" data-k="' + id + '">' + esc(s.n || "Podcast") + "</button>" + (s.a ? " <small>" + esc(s.a) + "</small>" : "") + "</span>" +
+      '<span class="r"><button class="pdi' + (on ? " on" : "") + '" data-a="podstar" data-k="' + id + '" title="' + (on ? "You get a notification for new episodes. Click to stop" : "Get a notification for new episodes") + '" aria-label="Notification for new episodes">' + (on ? "★" : "☆") + '</button><button class="pdi" data-a="podfol" data-k="' + id + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
+  }).join("");
   else body = all.length ? all.slice(0, 60).map(function (e) { return podRow(e, true); }).join("") : '<div class="empty">' + (podBusy ? "Loading your shows…" : PODERR ? "Podcasts unavailable: " + esc(PODERR) : "No episodes yet.") + "</div>";
-  var H = Math.round((layRows().podcasts || 10) * 32.4 * gfs()), lh = Math.max(Math.round(30 * gfs()), H - (bar ? 32 : 0));   // at least one row
+  var lh = Math.max(Math.round(30 * gfs()), Math.round((layRows().podcasts || 10) * 32.4 * gfs()));   // at least one row
   var list = '<div class="list pdlist" data-list="podcasts" style="height:' + lh + "px;max-height:" + lh + 'px">' + body + "</div>";
-  var shows = '<div class="dd"><button class="ib sm pdw" data-a="podmenu" aria-haspopup="true" aria-expanded="' + PODMENU + '" title="The shows you follow">Shows</button>' + (PODMENU ? '<div class="menu pdmenu" id="podMenu">' +
-    (podF().length ? podF().map(function (s) {
-      return '<div class="pdmr"><button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '">' + esc(s.n || "Podcast") + '</button><span><button class="pdi' + (P.pod.star[s.id] ? " on" : "") + '" data-a="podstar" data-k="' + esc(String(s.id)) + '" title="Notification for new episodes" aria-label="Notification for new episodes">' + (P.pod.star[s.id] ? "★" : "☆") + '</button><button class="pdi" data-a="podfol" data-k="' + esc(String(s.id)) + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
-    }).join("") : '<div class="mut sn">You follow no shows yet.</div>') + "</div>" : "") + "</div>";
   var n = podNewN(), nb = n ? '<button class="pill ac" data-a="podseen" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : "";
-  var sel = '<select data-s="podview" aria-label="What the box shows">' + opts([["f", "Following"], ["p", "Popular"]], view) + "</select>";
-  var sb = '<button class="ib sm' + (PODFIND || PODQ ? " on" : "") + '" data-a="podfind" title="Search all podcasts" aria-label="Search all podcasts">⌕</button>';
-  return tile("podcasts", "Podcasts", bar + list, 0, nb + sel + sb + shows);
+  var sel = '<select data-s="podview" aria-label="What the box shows">' + opts([["f", "Episodes"], ["s", "Shows"]], view) + "</select>";
+  return tile("podcasts", "Podcasts", list, 0, nb + sel + discBtn("podfind", "Discover: the most listened shows of a country by topic, and a search for any podcast", "Discover podcasts"));
 }
+
+// ---- Podcasts Discover: the most listened shows of a country by topic, a search of every podcast, and a show's own page ----
+// Everything is read straight from Apple's public directory in the browser, so it also works before you sign in.
+var PDD_T = "Discover podcasts", PDD = { q: "", res: null, resq: "", show: "", all: false };
+function pddOpen() { return !$("modal").hidden && $("mTitle").textContent === PDD_T; }
+function pddRow(s, rank) {
+  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '">' + (rank ? '<span class="pdrn">' + rank + "</span>" : "") + esc(s.n) + '</button><small class="ytdm' + (rank ? " pdrm" : "") + '">' + esc([s.a, s.g].filter(Boolean).join(" · ")) + '</small></span><span class="r">' + podFolBtn(s) + "</span></div>";
+}
+function pddChips() {
+  return POD_G.map(function (g) { return '<button class="twdc' + (!PDD.q && !PDD.show && podGenre() === g[0] ? " on" : "") + '" data-a="podcat" data-k="' + g[0] + '">' + (g[0] ? esc(g[1]) : "Top") + "</button>"; }).join("");
+}
+function pddListHtml() {
+  var cn = (POD_CC.filter(function (o) { return o[0] === podCc(); })[0] || ["", ""])[1];
+  if (PDD.show) {
+    var id = PDD.show, fs = podShow(id), sh = PODSH[id] || {}, kn = PODKNOWN[id] || {}, st = fs && P.pod.star[id];
+    var tools = '<p class="tools pddt"><button class="' + (fs ? "" : "pri") + '" data-a="podfol" data-k="' + esc(id) + '"' + (sh.n || kn.n ? "" : " disabled") + ' title="' + (fs ? "Following. Click to stop following" : "Follow: its new episodes come in your Podcasts box") + '">' + (fs ? "✓ Following" : "+ Follow") + "</button>" +
+      (fs ? '<button data-a="podstar" data-k="' + esc(id) + '" title="' + (st ? "You get a notification for new episodes. Click to stop" : "Get a notification for new episodes") + '">' + (st ? "★ Notifying" : "☆ Notify me") + "</button>" : "") + "</p>";
+    return '<button class="lnk2 ytdbk" data-a="podback">&larr; Back</button>' + podShowPage(id, tools);
+  }
+  if (PDD.q) {
+    var h = "<h3>Results for “" + esc(PDD.q) + "”</h3>";
+    if (PDD.resq !== PDD.q || !PDD.res) return h + '<p class="mut sn">Searching…</p>';
+    return h + (PDD.res.length ? PDD.res.map(function (s) { return pddRow(s); }).join("") : '<p class="mut sn">No podcast found.</p>');
+  }
+  var ch = PODCHART[podChartKey()], g = (POD_G.filter(function (o) { return o[0] === podGenre(); })[0] || ["", ""]);
+  var head = "<h3>Popular in " + esc(cn) + (g[0] ? ' <small class="mut">' + esc(g[1]) + "</small>" : "") + "</h3>";
+  if (!ch || !ch.list) return head + '<p class="mut sn">Loading…</p>';
+  return head + (ch.list.length ? ch.list.map(function (s, i) { return pddRow(s, i + 1); }).join("") : '<p class="mut sn">No popular list for this country and topic right now. Try another topic.</p>');
+}
+function pddHtml() {
+  return '<div class="twd"><div class="twdtop"><input type="search" id="pddQ" placeholder="Search any podcast…" aria-label="Search any podcast" value="' + esc(PDD.q) + '"><select id="pddCc" aria-label="Country">' + opts(POD_CC, podCc()) + '</select></div><div id="pddCats" class="twdcats' + (PDD.all ? " all" : "") + '">' + pddChips() + '</div><button class="lnk2 twdall" id="pddAll" data-a="podallt">' + (PDD.all ? "Fewer topics ▴" : "All topics ▾") + '</button><div id="pddList">' + pddListHtml() + "</div></div>";
+}
+function pddDraw() {
+  if (!pddOpen() || !$("pddList")) return;
+  var sc = document.querySelector("#modal .mbox"), st = sc ? sc.scrollTop : 0;
+  $("pddCats").innerHTML = pddChips(); $("pddCats").classList.toggle("all", !!PDD.all); $("pddList").innerHTML = pddListHtml();
+  $("pddAll").textContent = PDD.all ? "Fewer topics ▴" : "All topics ▾";
+  if (sc) sc.scrollTop = st;
+}
+function pddShow(id) {
+  PDD.show = String(id);
+  if (!PODSH[id] || !PODSH[id].ok || Date.now() - PODSH[id].t > 3600000) { PODSH[id] = Object.assign(PODSH[id] || {}, { want: 20 }); fetchPodShow(id, 20); }
+  pddDraw();
+  var sc = document.querySelector("#modal .mbox"); if (sc) sc.scrollTop = 0;
+}
+function openPodDiscover(id) {
+  openModal(PDD_T, pddHtml());
+  if (id) { pddShow(id); return; }
+  PDD.show = ""; pddDraw();
+  if (PDD.q) podSearch(); else fetchPodChart();
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "pddQ") return;
+  debounced("pddQ", function () { if (!$("pddQ")) return; var v = $("pddQ").value.replace(/\s+/g, " ").trim().slice(0, 60); if (v.length < 2) v = ""; if (v === PDD.q) return; PDD.q = v; PDD.show = ""; if (v) podSearch(); else { pddDraw(); fetchPodChart(); } });
+});
 function podFollow(id) {
   id = String(id);
   var p = podp(), i = -1;
@@ -1854,7 +1952,7 @@ function podFollow(id) {
   if (i >= 0) { p.f.splice(i, 1); delete p.star[id]; delete PODC[id]; podSaveC(); podNote("Stopped following " + name); }
   else if (p.f.length >= 40) { podNote("You follow 40 podcasts", "That is the most the box takes. Stop following one first."); return; }
   else { p.f.push({ id: id, n: String(k.n || "").slice(0, 100), a: String(k.a || "").slice(0, 80), img: safeUrl(k.img || ""), since: Date.now() }); podNote("Following " + name, "Its newest episodes are in your list now."); }
-  persist(); render(); renderPodSet(); fetchPod();
+  persist(); render(); renderPodSet(); fetchPod(); pddDraw();
 }
 // A short note for something you just did (following a show): it shows on the right for a moment and is not kept in the bell
 function podNote(title, body) {
@@ -2039,45 +2137,36 @@ function podAct(a, k) {
     if (podMode() === "pod") { if (PODST === "play" || PODST === "load") podPause(); p.mode = "radio"; } else p.mode = "pod";
     persist(); render(); return;
   }
-  if (a === "podshow") { openPodShow(k); return; }
-  if (a === "podshowx") { closeModal(); openPodShow(k); var c = document.querySelector('[data-id="podcasts"]'); if (c) c.scrollIntoView({ block: "nearest" }); return; }
-  if (a === "podback") { PODSHOW = ""; render(); return; }
-  if (a === "podmore") { PODMORE[k] = !PODMORE[k]; if (/^n:/.test(k)) podPlayerRefresh(); else render(); return; }
+  if (a === "podshow" || a === "podshowx") { openPodShow(k); return; }
+  if (a === "podfind") { openPodDiscover(); return; }
+  if (a === "podback") { PDD.show = ""; pddDraw(); if (!PDD.q) fetchPodChart(); return; }
+  if (a === "podcat") { podp().genre = k; PDD.q = ""; PDD.show = ""; if ($("pddQ")) $("pddQ").value = ""; persist(); pddDraw(); fetchPodChart(); return; }
+  if (a === "podallt") { PDD.all = !PDD.all; pddDraw(); return; }
+  if (a === "podmore") { PODMORE[k] = !PODMORE[k]; if (/^n:/.test(k)) podPlayerRefresh(); else pddDraw(); return; }
   if (a === "podolder") { var s = PODSH[k]; if (s) { s.want = Math.min(200, (s.want || 20) + 20); fetchPodShow(k, s.want); } return; }
-  if (a === "podmenu") { PODMENU = !PODMENU; render(); return; }
   if (a === "podfol") { podFollow(k); return; }
   if (a === "podstar") {
     var pp = podp(), sh = podShow(k);
     if (!sh) return;
     if (pp.star[k]) { delete pp.star[k]; podNote("No more notifications", sh.n); } else { pp.star[k] = 1; podNote("You will be told about new episodes", sh.n); }
-    persist(); render(); renderPodSet(); return;
+    persist(); render(); renderPodSet(); pddDraw(); return;
   }
   if (a === "podseen") { podp().seen = Date.now(); persist(); render(); return; }
-  if (a === "podfind") { PODFIND = !(PODFIND || PODQ); PODSHOW = ""; if (!PODFIND) { PODQ = ""; PODRES = null; } render(); var q = $("podQ"); if (q) { q.value = ""; q.focus(); } return; }
   if (a === "poddone") { podSetDone(k, !podDone(k)); var cc = podCur(); if (cc && cc.id === k && podDone(k) && (PODST === "play" || PODST === "load")) { if (PODA) PODA.pause(); PODST = ""; } persist(); render(); podPlayerRefresh(); return; }
   if (a === "poddel") { podFollow(k); }
 }
-document.addEventListener("click", function (e) {
-  // the Shows list closes when you click anywhere else
-  if (PODMENU && !(e.target.closest && e.target.closest("#podMenu, [data-a=podmenu]"))) { PODMENU = false; setTimeout(render, 0); }
-}, true);
 document.addEventListener("input", function (e) {
   var t = e.target;
-  if (t.id === "podQ") debounced("podQ", function () { PODQ = $("podQ") ? $("podQ").value.trim().slice(0, 60) : ""; render(); podSearch(); });
-  else if (t.id === "podSeek") podSeekTo(+t.value);
+  if (t.id === "podSeek") podSeekTo(+t.value);
   else if (t.id === "podVol") { var v = +t.value; if (RAD.a) RAD.a.volume = v / 100; if (PODA) PODA.volume = v / 100; P.radio = P.radio || {}; P.radio.vol = v; debounced("radVol", function () { persist(); }); }
 });
-document.addEventListener("keydown", function (e) {
-  if (e.target.id === "podQ" && e.key === "Escape") { e.stopPropagation(); PODQ = ""; PODFIND = false; PODRES = null; render(); }
-}, true);
 document.addEventListener("change", function (e) {
   var t = e.target, s = t && t.dataset && t.dataset.s;
-  if (s === "podview") { podp().view = t.value; PODSHOW = ""; PODFIND = false; PODQ = ""; persist(); render(); }
-  else if (s === "podcc") { podp().cc = t.value; persist(); render(); }
-  else if (s === "podgenre") { podp().genre = t.value; persist(); render(); }
+  if (s === "podview") { podp().view = t.value; persist(); render(); }
+  else if (t.id === "pddCc") { podp().cc = t.value; persist(); renderPodSet(); PDD.show = ""; pddDraw(); if (PDD.q) podSearch(); else fetchPodChart(); }
   else if (t.id === "podSpeed") { podp().speed = +t.value; if (PODA) PODA.playbackRate = podSpeed(); persist(); render(); renderPodSet(); }
 });
-REFRESH.podcasts = function () { fetchPod(true); if (podO("view", "f") === "p") { delete PODCHART[podChartKey()]; render(); } };
+REFRESH.podcasts = function () { fetchPod(true); };
 setInterval(function () { if (!document.hidden) fetchPod(); }, 600000);
 window.addEventListener("resize", function () { setTimeout(podRoll, 60); });
 // Settings > Podcasts
@@ -2094,7 +2183,7 @@ function renderPodSet() {
   $("podSet").innerHTML = mine.length ? mine.map(function (s) {
     return '<div class="row"><span><button class="lnk" data-a="podshow" data-k="' + esc(String(s.id)) + '"><span class="bnm">' + esc(s.n || "Podcast") + "</span></button>" + (s.a ? ' <small class="mut">' + esc(s.a) + "</small>" : "") + "</span>" +
       '<span class="r"><button data-a="podstar" data-k="' + esc(String(s.id)) + '" title="Notification for new episodes" aria-label="Notification for new episodes">' + (P.pod.star[s.id] ? "★" : "☆") + '</button><button data-a="poddel" data-k="' + esc(String(s.id)) + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
-  }).join("") : '<div class="mut sn">You follow no podcasts yet. Switch the box on and choose Popular in it, or search with ⌕.</div>';
+  }).join("") : '<div class="mut sn">You follow no podcasts yet. Switch the box on and find shows with its compass button (Discover).</div>';
 }
 POD_SET.forEach(function (o) {
   $(o[0]).onchange = function () {
@@ -2597,9 +2686,9 @@ function icsExport() {
 
 // ---- A box keeps its size while its search field is open ----
 // The boxes are packed by their heights, so a box that grows by the height of a search field can send the boxes under it
-// to other places. While the field of News, Telegram, Reddit, Sports or TV shows is open, the list under it is therefore made shorter by
+// to other places. While the field of News, Telegram, Reddit or Sports is open, the list under it is therefore made shorter by
 // exactly the field's height (and held at that height, also when a search finds little or nothing).
-var FLT_BOX = [["news", "newsQ"], ["telegram", "tgQ"], ["reddit", "rdQ"], ["sports", "spQ"], ["tv", "tvQ"]], FLT_H = {};
+var FLT_BOX = [["news", "newsQ"], ["telegram", "tgQ"], ["reddit", "rdQ"], ["sports", "spQ"]], FLT_H = {};
 // before a redraw: how tall each of these lists is while its field is closed
 function fltNote() {
   FLT_BOX.forEach(function (p) {
@@ -6887,7 +6976,7 @@ document.addEventListener("click", function (e) {
   if (a === "acctmenu2") { e.stopPropagation(); if (!USER) { MENU_OPEN = ""; ACCTMSG = ""; render(); openAuth(); return; } MENU_OPEN = MENU_OPEN === "acct" ? "" : "acct"; render(); return; }
   if (a === "authtab") { ACCTMSG = ""; openAuth(k); return; }
   if (a === "sumshow" || a === "sumpick" || a === "summv") { sumAct(a, k); return; }
-  if (/^tv(open|filt|fav|del)$/.test(a)) { tvAct(a, k); return; }
+  if (/^tv(open|fav|del|dopen|dday|dshow|dback)$/.test(a)) { tvAct(a, k); return; }
   if (a === "sxopen") { $("panel").hidden = true; openSxSet(); return; }
   if (a === "sxint" || a === "sxgo") { sxAct(a, k); return; }
   if (/^pod/.test(a)) { podAct(a, k); return; }
@@ -7603,13 +7692,18 @@ function openHelp() {
 
   html += h3("tv", "TV shows") +
     p("The box is off at first: switch it on in " + S("Layout &amp; boxes") + ". Show information comes from TVmaze.com; films are not included. Times are in your own time zone.") +
-    ul(["<b>Follow a show</b>: press ⌕ at the top of the box, type its name and press ☆ on the right one. Up to 60.",
-      "<b>My shows: coming up</b> lists the next episode of each show, soonest first, under a heading per day. Point at a row for a small card about the show.",
-      "<b>My shows: just aired</b> lists the latest episode of each, newest first.",
-      "<b>On today</b> shows the best-known shows airing today in one country, on television and streaming, with yours marked ★. Choose the country in " + S("TV shows") + ".",
+    h4("The box: your shows") +
+    ul(["<b>Coming up</b> lists the next episode of each show you follow, soonest first, under a heading per day. Point at a row for a small card about the show.",
+      "<b>Just aired</b> lists the latest episode of each, newest first.",
       "<b>Click a row</b> for the show: what it is about, where it runs, its rating, coming and latest episodes, and a button to follow it or stop.",
       "The next and the latest episode of each show sit on their day in the calendar (switch off in " + S("TV shows") + "), and you can be told when a new one airs (" + S("Notifications") + ").",
-      "The shows you follow, each with ✕, are listed in " + S("TV shows") + "."]);
+      "The shows you follow, each with ✕, are listed in " + S("TV shows") + ". Up to 60."]) +
+    h4("Discover (the compass button)") +
+    ul(["Shows what airs today, with chips for tomorrow and the five days after: the best-known shows on television in the chosen country and on streaming services that release worldwide (Netflix, Max, Prime Video…). Several episodes of one show on one day are one row (S01E30–E34).",
+      "The list next to the search field chooses the country (also in " + S("TV shows") + "). TVmaze has full listings for the US and the UK; for most other countries the streaming part is what fills the list.",
+      "Type in the field to search for any show.",
+      "Click a show for its page in the same window; <b>&larr; Back</b> returns. ☆ follows a show, ★ means you follow it.",
+      "Shortcut: <code>V</code>."]);
 
   html += h3("twitch", "Twitch") +
     h4("Connecting") +
@@ -7670,17 +7764,17 @@ function openHelp() {
 
   html += h3("pod", "Podcasts") +
     p("The box is off at first: switch it on in " + S("Layout &amp; boxes") + ". Shows and episodes come from Apple&rsquo;s public podcast directory; a few shows that are only on one app are missing.") +
-    h4("Finding shows") +
-    ul(["<b>Popular</b> (the list at the top of the box) shows the most listened shows of a country, by topic.",
-      "⌕ searches every podcast by name, topic or person.",
-      "<b>+</b> follows a show; ✓ means you follow it.",
-      "Click a show&rsquo;s name for its page in the box: its latest episodes (<b>Older episodes</b> loads 20 more), <b>+ Follow</b>, and ☆ for a notification when a new episode comes out. <b>&larr; Back</b> returns to the list.",
-      "Point at a show for who makes it, its topic, a description and its latest episode."]) +
-    h4("Your episodes") +
-    ul(["<b>Following</b> lists the newest episodes of your shows. New ones are marked; the number at the top marks them all seen.",
+    h4("The box: your podcasts") +
+    ul(["<b>Episodes</b> lists the newest episodes of the shows you follow. New ones are marked; the number at the top marks them all seen.",
       "Click an episode to play it. One you started shows how much is left and a thin progress line; ✓ means played.",
-      "Point at an episode for its notes, the date and how much is left.",
-      "<b>Shows</b> lists the shows you follow, with ☆ and ✕ (stop following)."]) +
+      "Point at an episode for its notes, the date and how much is left; point at a show&rsquo;s name for who makes it and a description.",
+      "<b>Shows</b> lists the shows you follow, with ☆ (a notification for new episodes) and ✕ (stop following). Click a show for its page."]) +
+    h4("Discover (the compass button)") +
+    ul(["Starts with the most listened shows of a country. The chips choose a topic (News, Comedy, Sports, True crime…); <b>All topics</b> shows the rest. The list next to the search field chooses the country.",
+      "Type in the field to search every podcast by name, topic or person.",
+      "<b>+</b> follows a show; ✓ means you follow it.",
+      "Click a show for its page: a description, its latest episodes (click one to play it; <b>Older episodes</b> loads 20 more), <b>+ Follow</b> and, once you follow it, <b>☆ Notify me</b>. <b>&larr; Back</b> returns.",
+      "It works without signing in. Shortcut: <code>P</code>."]) +
     h4("Playing") +
     ul(["Episodes play in the Radio box. Its first button switches between radio and podcasts (it is only there while you use podcasts).",
       "The box shows the title and time left, play and pause, jump back, jump forward and the volume (one volume for radio and podcasts).",
@@ -7688,7 +7782,7 @@ function openHelp() {
       "The radio and a podcast never play at the same time.",
       "Where you stopped is saved with your account, so you can go on on another device. On a phone it keeps playing with the screen off and can be paused from the lock screen."]) +
     h4("Settings (" + S("Podcasts") + ")") +
-    ul(["The playing speed and how far the jump buttons go.", "Whether played episodes stay in the list (dimmed) or leave it, and the country of the Popular list.",
+    ul(["The playing speed and how far the jump buttons go.", "Whether played episodes stay in the list (dimmed) or leave it, and the country Discover starts with.",
       "Folded under <b>In the Radio box</b>: the progress line, the time left, the jump buttons (in a narrow box they step aside by themselves) and whether a long title is cut short or rolls across.",
       "Which shows notify you (only ☆ shows, or all) is chosen in " + S("Notifications") + "."]);
 
@@ -10324,7 +10418,7 @@ var WIZ_BOXES = [
   ["sports", "Sports", "Live scores, fixtures and results: football, hockey, basketball, UFC, F1, tennis, esports and more."],
   ["mail", "Mail", "Unread counts for up to two Gmail inboxes."],
   ["live", "Radio", "Internet radio: pick a station and press play."],
-  ["tv", "TV shows", "New episodes of the shows you follow, and what is on today."],
+  ["tv", "TV shows", "New episodes of the shows you follow; Discover shows what is on and finds any show."],
   ["podcasts", "Podcasts", "New episodes of the podcasts you follow; they play in the Radio box."]
 ];
 var WIZ_SETUP = ["news", "telegram", "reddit", "stocks", "tv", "podcasts", "twitch", "youtube", "mail"];
@@ -10378,10 +10472,10 @@ function wizPage(id) {
   if (id === "telegram") return "<p>Add public Telegram channels by name or link. Only public channels work (the ones you can open at <code>t.me/s/name</code> without logging in).</p>" +
     mock("t.me/s/ClashReport", mkl(70) + mkl(90) + mkl(55) + '<span class="mknote">a public channel preview: this is what the box reads</span>') + wizChips(tgSrc()) + wizAddRow("tg", "Channel name or t.me link, e.g. ClashReport") +
     '<p class="mut sn">Back after a while? The small list button at the top of the box opens all posts in one window, starting at the oldest one you have not seen.</p>';
-  if (id === "tv") return "<p>Follow the series you watch. The box then shows the next episode of each show, the ones that just aired, and what is on today. Type a name, press Search and then Follow on the right one.</p>" + wizChips(tvShows().map(function (s) { return s.n; })) + wizAddRow("tv", "Name of a show, e.g. Severance", "Search") + '<div id="wzRes"></div>' +
-    '<p class="mut sn">Later you add more with ⌕ in the TV shows box itself. Click a show there for its episodes. New episodes also show in your calendar, and you get a notification when one airs.</p>';
+  if (id === "tv") return "<p>Follow the series you watch. The box then shows the next episode of each show and the ones that just aired. Type a name, press Search and then Follow on the right one.</p>" + wizChips(tvShows().map(function (s) { return s.n; })) + wizAddRow("tv", "Name of a show, e.g. Severance", "Search") + '<div id="wzRes"></div>' +
+    '<p class="mut sn">Later, the compass button at the top of the TV shows box (Discover) shows what is on today and the coming days, and finds any show. Click a show for its episodes. New episodes also show in your calendar, and you get a notification when one airs.</p>';
   if (id === "podcasts") return "<p>Follow the podcasts you listen to. The box then shows their newest episodes, and they play in the Radio box. Type a name, a topic or a person, press Search and then Follow on the right one.</p>" + wizChips(podF().map(function (s) { return s.n; }).filter(Boolean)) + wizAddRow("pod", "Name, topic or person, e.g. history", "Search") + '<div id="wzRes"></div>' +
-    '<p class="mut sn">Later, choose Popular in the Podcasts box for the most listened shows of your country, or search with ⌕. A ☆ on a show gives you a notification for its new episodes.</p>';
+    '<p class="mut sn">Later, the compass button at the top of the Podcasts box (Discover) shows the most listened shows of your country by topic, and finds any podcast. A ☆ on a show you follow gives you a notification for its new episodes.</p>';
   if (id === "reddit") return "<p>Add the subreddits you want to follow. In the box you can switch between Best, Hot, New, Top and Rising.</p>" + wizChips(rdSrc().map(function (x) { return "r/" + x; })) + wizAddRow("reddit", "Subreddit, e.g. worldnews");
   if (id === "stocks") return "<p>Type a company name and pick it from the list, or type symbols separated by commas. Stocks, indices, gold and crypto all work.</p>" + wizChips((P.stocks || []).map(function (x) { return tk(x.id); })) + wizAddRow("stocks", "e.g. Tesla, or NVDA, AAPL, BTCUSD") + '<div id="wzRes"></div>' +
     '<p class="mut sn">Have a portfolio somewhere else? In Settings → Stocks you can import a file from your broker, a Google Sheet or a shared TradingView watchlist in one go. The small clock button in the Stocks box shows whether the markets your stocks trade on are open, and when they open or close; the bell next to it sets an alert for a price you choose.</p>';
@@ -10424,11 +10518,11 @@ function wizPage(id) {
     "<li><b>Notes, to-dos and calendar</b> are icons in the menu box; timers, the stopwatch and a calculator are under <b>Tools</b> (the four squares). All of them can be docked at the side of the page, and on a computer dragged up, down or to the other side.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
-    "<li><b>Twitch:</b> the compass button at the top of the box finds live streams and channels you do not follow.</li>" +
+    "<li><b>Discover:</b> the compass button at the top of the Twitch, YouTube, TV shows and Podcasts boxes finds new things: live streams, any video or channel, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
     "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
-    "<li><b>Podcasts:</b> choose Popular in the Podcasts box, or search with ⌕, and press + to follow a show. Episodes play in the Radio box; its first button switches between radio and podcasts.</li>" +
+    "<li><b>Podcasts:</b> press + on a show in Discover to follow it. Episodes play in the Radio box; its first button switches between radio and podcasts.</li>" +
     "<li><b>Stocks:</b> click a stock for its chart and news. The switch above the chart changes between a simple price line (point anywhere for the price) and the full chart.</li>" +
     "<li><b>Notifications:</b> choose what you are told about, and what counts in the browser tab’s title, in Settings → Notifications. The page keeps updating while its tab is in the background.</li>" +
     "<li><b>Looks:</b> theme, colors, text size and rounded or square corners in Settings → Appearance; a picture of your own in Settings → Wallpaper.</li>" +
@@ -11119,6 +11213,8 @@ var KEY_ACTS = [
   ["site", "q", "Search all boxes", function () { openSearch(); $("srchIn").value = cmdW("ss") + " "; srchShow(); }],
   ["discover", "d", "Discover on Twitch", function () { openDiscover(); }],
   ["ytdiscover", "y", "Discover on YouTube", function () { openYtDiscover(); }],
+  ["tvdiscover", "v", "Discover TV shows", function () { openTvDiscover(); }],
+  ["poddiscover", "p", "Discover podcasts", function () { openPodDiscover(); }],
   ["timer", "i", "New timer", function () { audio(); openClock("t"); }],
   ["stopwatch", "o", "Start a stopwatch", function () { audio(); startStopwatch(); }],
   ["undock", "u", "Close the docked players", function () { DOCK.slice().forEach(function (d) { undock(d.uid); }); }],

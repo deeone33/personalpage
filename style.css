@@ -1889,3 +1889,14 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .ytdh>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ytdbk{display:block;margin:12px 0 0;font-size:12px}
 .twd .ytdbk+.ytdh{margin-top:4px}
+/* Discover for TV shows and Podcasts (same window as YouTube Discover) */
+.pdrn{display:inline-block;min-width:20px;color:var(--mut);font-size:12px;font-weight:400}
+.ytdm.pdrm{padding-left:20px}
+.pddt{margin:8px 0 6px;display:flex;flex-wrap:wrap;gap:6px}
+.twd .pdhd{margin-top:6px}
+.twd .tvwin{margin-top:6px}
+.twd .pdds:not(.open){-webkit-line-clamp:2}
+.pdmore{font-size:12px;margin-top:2px}
+.twd .row.pdr>span:first-child{flex:1 1 auto;min-width:0;display:block;white-space:normal}
+.twd .row.pdr>span:first-child>.lnk{display:block;width:100%;max-width:100%;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
+.twd .row.pdr>span:first-child>small{display:block;color:var(--mut);font-size:12px}
