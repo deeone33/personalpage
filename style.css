@@ -1878,3 +1878,14 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .hlp .helptoc button,.hlp .helptoc a{font-size:12px;padding:3px 10px;border-radius:99px}
 .hlp .shelp{margin:4px 0 8px}
 @media (max-width:640px){.hlp .htg{grid-template-columns:1fr;gap:4px}.hlp .htg>span{padding-top:2px}}
+/* YouTube Discover: the Twitch Discover window with a second line per video (channel · when · length) */
+.ytdr>span:first-child{white-space:normal}
+.ytdr .lnk{font-weight:500}
+.ytdm{display:block;margin-top:1px;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ytdch{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer}
+.ytdch:hover{color:var(--ac);text-decoration:underline}
+.ytdr .lnk .dot{margin-right:6px}
+.ytdh{display:flex;align-items:center;gap:8px}
+.ytdh>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ytdbk{display:block;margin:12px 0 0;font-size:12px}
+.twd .ytdbk+.ytdh{margin-top:4px}

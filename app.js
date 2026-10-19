@@ -1,4 +1,4 @@
-var VERSION = 197;
+var VERSION = 199;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -833,7 +833,7 @@ function render() {
     vids = vids.filter(function (v) { per[v.n] = (per[v.n] || 0) + 1; return per[v.n] <= 2; });
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
     yb = (vids.length ? lst("youtube", vids.map(function (v) {
-      return row(v.key, esc(v.t), v.n, '<span class="mut">' + ago(v.ts) + "</span>" + (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : ""), PREVIEW ? 0 : "v:" + v.id);
+      return row(v.key, esc(v.t), v.n, (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : "") + '<span class="mut">' + ago(v.ts) + "</span>", PREVIEW ? 0 : "v:" + v.id);
     }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : USER ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
   } else {
     var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
@@ -4233,9 +4233,6 @@ var YTD = { cat: "top", q: "", ch: "", chName: "", list: [], cont: "", busy: fal
 var YTD_CATS = [["top", "Top today"], ["week", "Top this week"], ["live", "Live now"], ["music", "Music", "music"], ["gaming", "Gaming", "gaming"], ["news", "News", "news"],
   ["sports", "Sports", "sports highlights"], ["pods", "Podcasts", "podcast"], ["comedy", "Comedy", "comedy"], ["tech", "Tech", "tech review"], ["science", "Science", "science"],
   ["trailers", "Trailers", "official trailer"], ["food", "Food", "cooking"], ["travel", "Travel", "travel"], ["fitness", "Fitness", "workout"], ["cars", "Cars", "cars"], ["learn", "Learning", "explained"]];
-// the country whose YouTube is shown (what is popular differs a lot); your own country to begin with
-function ytdGls() { return SX_C.filter(function (c) { return /^[A-Z]{2}$/.test(c[0]); }).map(function (c) { return [c[0], c[1]]; }).sort(function (a, b) { return a[1].localeCompare(b[1]); }); }
-function ytdGl() { var g = (P.ytd && P.ytd.gl) || sxCc() || "US"; return ytdGls().some(function (x) { return x[0] === g; }) ? g : "US"; }
 function ytdBtn() {
   return '<button class="ib sm twdb" data-a="ytdopen" title="Discover: any video or channel, also ones you are not subscribed to" aria-label="Discover on YouTube"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
 }
@@ -4260,14 +4257,14 @@ function ytdCatsHtml() {
 }
 function ytdListHtml() {
   var cat = YTD_CATS.filter(function (c) { return c[0] === YTD.cat; })[0] || YTD_CATS[0];
-  var head = YTD.ch ? '<h3 class="ytdh"><button class="lnk2" data-a="ytdback">&larr; Back</button><span>' + esc(YTD.chName || "Channel") + "</span>" + ytdStar(YTD.ch, YTD.chName) + "</h3>"
+  var head = YTD.ch ? '<button class="lnk2 ytdbk" data-a="ytdback">&larr; Back</button><h3 class="ytdh"><span>' + esc(YTD.chName || "Channel") + "</span>" + ytdStar(YTD.ch, YTD.chName) + "</h3>"
     : "<h3>" + (YTD.q ? "Results for “" + esc(YTD.q) + "”" : esc(cat[1]) + (cat[2] ? ' <small class="mut">most viewed this week</small>' : "")) + "</h3>";
   return head + YTD.list.map(ytdRow).join("") +
     (YTD.busy ? '<p class="mut sn">Loading…</p>' : YTD.err ? '<p class="mut sn">YouTube did not answer: ' + esc(YTD.err) + "</p>" : !YTD.list.length ? '<p class="mut sn">' + (YTD.q ? "Nothing found." : YTD.ch ? "No videos found." : "Nothing here right now.") + "</p>" : YTD.cont && YTD.list.length < 200 ? '<button class="sitemore" data-a="ytdmore">Show 20 more</button>' : "");
 }
 function ytdHtml() {
   if (PREVIEW || !sb || !USER) return '<div class="twd"><p>Discover finds any video or channel on YouTube, also ones you are not subscribed to: the most viewed of today and this week, what is live, topics, and a search. Click a video to watch it here; ☆ puts its channel in your YouTube box.</p>' + (PREVIEW ? previewNote() : "<p class=\"mut sn\">Sign in to use it.</p>") + "</div>";
-  return '<div class="twd"><div class="twdtop"><input type="search" id="ytdQ" placeholder="Search YouTube…" aria-label="Search a video or a channel" value="' + esc(YTD.q) + '"><select id="ytdGl" aria-label="Country of the videos">' + opts(ytdGls(), ytdGl()) + '</select></div><div id="ytdCats" class="twdcats' + (YTD.all ? " all" : "") + '">' + ytdCatsHtml() + '</div><button class="lnk2 twdall" id="ytdAll" data-a="ytdall">' + (YTD.all ? "Fewer topics ▴" : "All topics ▾") + '</button><div id="ytdList">' + ytdListHtml() + "</div></div>";
+  return '<div class="twd"><div class="twdtop"><input type="search" id="ytdQ" placeholder="Search YouTube…" aria-label="Search a video or a channel" value="' + esc(YTD.q) + '"></div><div id="ytdCats" class="twdcats' + (YTD.all ? " all" : "") + '">' + ytdCatsHtml() + '</div><button class="lnk2 twdall" id="ytdAll" data-a="ytdall">' + (YTD.all ? "Fewer topics ▴" : "All topics ▾") + '</button><div id="ytdList">' + ytdListHtml() + "</div></div>";
 }
 function ytdDraw() {
   if (!ytdOpen() || !$("ytdList")) return;
@@ -4279,7 +4276,6 @@ function ytdLoad(reset) {
   if (reset) { YTD.list = []; YTD.cont = ""; }
   YTD.busy = true; YTD.err = ""; ytdDraw();
   var b = YTD.ch ? { m: "ch", ch: YTD.ch } : YTD.q ? { m: "q", q: YTD.q } : cat[2] ? { m: "topic", q: cat[2] } : { m: cat[0] };
-  b.gl = ytdGl() === "UK" ? "GB" : ytdGl();
   if (!reset && YTD.cont) b.cont = YTD.cont;
   var fail = function (e) { if (n !== YTD.n) return; YTD.busy = false; YTD.err = String(e || "no answer").slice(0, 120); ytdDraw(); };
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { ytd: b } }).then(function (r) {
@@ -4317,10 +4313,6 @@ function ytdAct(a, k, el) {
 document.addEventListener("input", function (e) {
   if (e.target.id !== "ytdQ") return;
   debounced("ytdQ", function () { if (!$("ytdQ")) return; var v = $("ytdQ").value.replace(/\s+/g, " ").trim().slice(0, 80); if (v.length < 2) v = ""; if (v === YTD.q) return; YTD.q = v; YTD.ch = ""; ytdLoad(true); });
-});
-document.addEventListener("change", function (e) {
-  if (e.target.id !== "ytdGl") return;
-  P.ytd = { gl: e.target.value }; persist(); ytdLoad(true);
 });
 document.addEventListener("change", function (e) {
   var ds = e.target.dataset && e.target.dataset.s;
@@ -7646,7 +7638,7 @@ function openHelp() {
     p("The box shows new videos from the channels you choose: your subscriptions (from a file, once) and channels you add with Discover. Click a video to watch it inside the page; it can be docked like a Twitch stream.") +
     h4("Discover (the compass button)") +
     ul(["Starts with the most viewed videos of today. The chips switch to <b>Top this week</b>, <b>Live now</b> (sorted by viewers) and topics such as Music, Gaming, News, Sports and Podcasts (most viewed this week); <b>All topics</b> shows the rest.",
-      "Type in the field to search for any video or channel; matching channels come first. The list next to it chooses the country whose YouTube is shown (yours to begin with).",
+      "Type in the field to search for any video or channel; matching channels come first.",
       "Each row shows the title, the channel, how long ago and how long, and the views (for live: how many are watching). <b>Show 20 more</b> loads the next ones.",
       "Click a video to watch it; the player has a <b>Discover</b> button to go back. Click a channel&rsquo;s name for its newest videos; <b>&larr; Back</b> returns.",
       "☆ puts a channel in your YouTube box, next to your subscriptions; ★ takes it out again. This works without the file below.",
@@ -8550,7 +8542,7 @@ function sumParts(S) {
   }
   out.cal = evsOn(ymd(new Date())).slice(0, Math.max(N, 6)).map(function (e) { return '<div class="row"><span><b class="ctm">' + (e.tm || "all day") + "</b> " + esc(e.t) + "</span></div>"; }).join("");
   out.top = (NEWS.length ? topStories(N, S.span, function (src) { return !!S.x["n:" + src]; }) : []).map(function (g) {
-    return '<div class="row' + (g.some(function (x) { return isRead(x.u); }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r"><span class="mut">' + ago(g[0].ts) + "</span>" + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + "</span></div>";
+    return '<div class="row' + (g.some(function (x) { return isRead(x.u); }) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("a:" + g[0].u) + '">' + esc(g[0].t) + "</button> <small>" + esc(g.map(function (x) { return x.s; }).join(" · ")) + '</small></span><span class="r">' + (g.length > 1 ? '<span class="pill ac">' + g.length + "</span>" : "") + '<span class="mut">' + ago(g[0].ts) + "</span></span></div>";   // the time is always the last thing on the row, as in the News box
   }).join("");
   out.tg = TGP.filter(function (g) { return g.ts > cut && shown("g:" + g.s) && !S.x["g:" + g.s]; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, N).map(function (g) {
     return '<div class="row' + (isRead(g.u) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("m:" + g.u) + '">' + esc(String(g.t).slice(0, 140)) + "</button> <small>" + esc(g.s) + '</small></span><span class="r mut">' + ago(g.ts) + "</span></div>";
