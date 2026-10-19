@@ -1,4 +1,4 @@
-var VERSION = 200;
+var VERSION = 201;
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -788,7 +788,7 @@ function render() {
   var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Search headlines" aria-label="Search headlines">⌕</button>' : "";
-  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + (NEWS.length ? rdrBtn("news") : "") + fltBtn + ctlN);
+  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + ctlN + (NEWS.length ? rdrBtn("news") : "") + fltBtn);   // the count, the dropdowns, the buttons (↻ is added last)
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
@@ -801,7 +801,7 @@ function render() {
     var cls = (isNewItem(g, "tg") && !isRead(g.u) ? " new" : "") + (isRead(g.u) ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
     // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + (tp.length ? rdrBtn("tg") + fBtn("tg") : "") + ctlG);
+  }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + ctlG + (tp.length ? rdrBtn("tg") + fBtn("tg") : ""));
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -821,7 +821,7 @@ function render() {
     var vv = x.v >= 1000 ? (x.v / 1000).toFixed(1) + "k" : x.v;
     return row(x.key, '<span class="dot"></span>' + esc(x.name || x.id), x.sub, '<span class="mut">' + vv + "</span>", TWC ? 1 : 0, " favr");
   }).join("") + offRows) : '<div class="empty">Nobody you follow is live.' + (TWC ? ' <button class="lnk2" data-a="twdopen">Discover streams</button>' : "") + "</div>") +
-    (TWC || !window.TWITCH_CLIENT_ID || PREVIEW ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, twdBtn() + ctlT);
+    (TWC || !window.TWITCH_CLIENT_ID || PREVIEW ? "" : '<button data-a="twConnect">Connect Twitch to show your real follows</button>'), 0, ctlT + twdBtn());
 
   var yb;
   if ((P.yt && P.yt.ch && P.yt.ch.length) || PREVIEW) {
@@ -853,7 +853,7 @@ function render() {
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (FON.rd || FQ.rd ? '<input type="search" id="rdQ" class="flt" placeholder="Search posts…" aria-label="Search the Reddit posts">' : "") + (rq.length || rNote ? lst("reddit", rq.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
-  }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + (rp.length ? rdrBtn("rd") + fBtn("rd") : "") + ctlR);
+  }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR + (rp.length ? rdrBtn("rd") + fBtn("rd") : ""));
 
   T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
