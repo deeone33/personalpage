@@ -1,4 +1,4 @@
-var VERSION = "0.20.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.21.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -747,9 +747,9 @@ function render() {
   T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + "°</b>" + (wWarn.length ? '<span class="warn" title="' + esc(wxWarnText(wWarn)) + '" aria-label="Weather warning">!</span>' : "") + '<span class="mut">' + esc(note) + "</span></div>", 1);
   T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
-    if (!cfg || !cfg.url) { val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>'; click = PREVIEW; }
+    if (!mailOn(cfg)) { val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>'; click = PREVIEW; }
     else if (!m) val = '<span class="mut">Loading...</span>';
-    else if (m.error) val = '<span class="mut" title="' + esc(m.error) + '">Error</span>';
+    else if (m.error) { val = '<span class="mut" title="' + esc(m.error) + '">Error</span>'; click = true; }
     else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
     return '<div class="mailcell"' + (click ? ' data-a="mail" data-k="' + i + '" tabindex="0" role="button"' : "") + '><span class="mrn">' + esc(nm) + "</span>" + val + "</div>";
   }).join("") + "</div>");
@@ -5148,23 +5148,59 @@ function openTG(u, one) {
   openModal(g.s, '<div class="mut">' + esc(g.s) + " · " + when(g.ts) + "</div>" + media + '<p class="nt">' + esc(g.tx || g.t) + '</p><p class="tools">' + linkBtn(g.u, "Open on Telegram", 1) + laterBtn("m:" + g.u) + "</p>" + (PREVIEW ? previewNote() : ""));
   render();
 }
-var MAIL = [], mBusy = false;
+// ---- Mail (Gmail, through the person's own script) ----
+// What opens an inbox (the script's address and token) is kept on the server, encrypted, and never comes back to the
+// page: P.mail[i] only holds { name, kind, on, seen }. Inboxes saved the old way (address and
+// token in the settings) are moved to the server by themselves, and read the old way until the server can keep them.
+var MAIL = [], mBusy = false, MLX = { nokey: false, mig: false }, MLUI = {};
+function mailOn(c) { return !!(c && (c.on || (c.url && c.t))); }
+function mailFix() { P.mail = [0, 1].map(function (i) { return (P.mail && P.mail[i]) || {}; }); return P.mail; }
 function fetchMail() {
   if (!sb || !USER || !P.mail || mBusy) return;
-  var list = P.mail.map(function (c, i) { return c && c.url && c.t ? { i: i, url: c.url, t: c.t, since: c.seen || 0 } : null; }).filter(Boolean);
-  if (!list.length) return;
+  var legacy = P.mail.map(function (c, i) { return c && c.url && c.t ? { i: i, url: c.url, t: c.t, since: c.seen || 0 } : null; }).filter(Boolean);
+  var since = {}, srv = false;
+  P.mail.forEach(function (c, i) { if (c && c.on && !c.url) { since[i] = c.seen || 0; srv = true; } });
+  if (legacy.length && !MLX.nokey) mailMigrate();
+  if (!legacy.length && !srv) return;
   mBusy = true;
-  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: list } }).then(function (r) {
-    mBusy = false;
-    if (r.error || !r.data || !r.data.mail) list.forEach(function (c) { MAIL[c.i] = { error: (r.error && r.error.message) || "no data" }; });
-    else r.data.mail.forEach(function (m, k) {
-      var i = list[k].i, old = MAIL[i];
-      // one failed check (a slow Gmail script, usually) keeps the last good numbers instead of showing "Error"
-      if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
-      MAIL[i] = m; mailAlerts(i, m);
-    });
-    render();
-  }).catch(function () { mBusy = false; });
+  var got = function (i, m) {
+    var old = MAIL[i];
+    // one failed check (a slow Gmail script, usually) keeps the last good numbers instead of showing "Error"
+    if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
+    MAIL[i] = m; mailAlerts(i, m);
+  };
+  var bad = function (msg) { return { error: msg || "no data" }; };
+  var jobs = [];
+  if (legacy.length) jobs.push(sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mail: legacy } }).then(function (r) {
+    if (r.error || !r.data || !r.data.mail) legacy.forEach(function (c) { MAIL[c.i] = bad(r.error && r.error.message); });
+    else r.data.mail.forEach(function (m, k) { got(legacy[k].i, m); });
+  }));
+  if (srv) jobs.push(sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailx: { op: "fetch", since: since } } }).then(function (r) {
+    var d = r.data || {}, seen = {};
+    if (r.error || !d.mail) { Object.keys(since).forEach(function (i) { got(+i, bad((r.error && r.error.message) || d._err)); }); return; }
+    d.mail.forEach(function (m) { seen[m.slot] = 1; got(m.slot, m); });
+    Object.keys(since).forEach(function (i) { if (!seen[i]) MAIL[+i] = bad("This inbox is not connected any more. Settings → Mail → connect it again."); });
+  }));
+  Promise.all(jobs).catch(function () {}).then(function () { mBusy = false; render(); });
+}
+// Inboxes still saved in the settings go to the server, one at a time; only when it took them are they removed here
+function mailMigrate() {
+  if (MLX.mig || MLX.nokey || !sb || !USER) return;
+  var todo = (P.mail || []).map(function (c, i) { return c && c.url && c.t ? i : -1; }).filter(function (i) { return i >= 0; });
+  if (!todo.length) return;
+  MLX.mig = true;
+  var next = function () {
+    var i = todo.shift();
+    if (i == null) { MLX.mig = false; persist(); loadMailForm(); return; }
+    var c = P.mail[i];
+    sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailx: { op: "save", slot: i, url: c.url, t: c.t } } }).then(function (r) {
+      var d = r.data || {};
+      if (d.ok) { c.kind = "gmail"; c.on = true; delete c.url; delete c.t; next(); return; }
+      if (d._err === "nokey" || d._err === "notable") MLX.nokey = true;   // the owner has not set the storage up yet: keep the old way
+      MLX.mig = false; persist(); loadMailForm();
+    }).catch(function () { MLX.mig = false; });
+  };
+  next();
 }
 // A card for each new email since the last check (the first check only notes where you are, so old mail is not announced)
 function mailAlerts(i, m) {
@@ -5194,8 +5230,9 @@ function markRead(i) {
 function showAllMail(i) { var c = P.mail && P.mail[i]; if (!c) return; delete c.seen; persist(); closeModal(); MAIL[i] = null; render(); fetchMail(); }
 function openMail(i) {
   var m = MAIL[i];
-  if (!m || m.error) return;
-  var nm = (P.mail[i] && P.mail[i].name) || "Gmail", n = mailN(i), seen = P.mail[i] && P.mail[i].seen;
+  if (!m) return;
+  if (m.error) { openSettingsAt("Mail"); return; }
+  var c = P.mail[i] || {}, nm = c.name || "Gmail", n = mailN(i), seen = c.seen;
   var items = (m.items || []).slice().sort(function (a, b) { return b.ts - a.ts; }).slice(0, 20);
   var rows = items.map(function (x) {
     var isNew = seen && x.ts > seen * 1000;
@@ -5214,14 +5251,59 @@ function openDemoMail(i) {
     return '<div class="mi"><div class="r2"><b>' + esc(x[0]) + ' <span class="pill ac">new</span></b><small class="mut">' + ago(Date.now() - x[3] * 60000) + "</small></div><div>" + esc(x[1]) + '</div><div class="mut sn">' + esc(x[2]) + "</div></div>";
   }).join("") + previewNote());
 }
+// Settings > Mail: per inbox either its name and "connected" with Replace and Remove, or Connect
 function loadMailForm() {
+  var el = $("mailSet");
+  if (!el) return;
   var M = P.mail || [];
-  [0, 1].forEach(function (i) { var c = M[i] || {}; $("mn" + i).value = c.name || ""; $("mu" + i).value = c.url || ""; $("mt" + i).value = c.t || ""; });
+  el.innerHTML = [0, 1].map(function (i) {
+    var c = M[i] || {}, form = MLUI[i], ex = i ? "Work" : "Personal", h = '<div class="sub"><b>' + (i ? "Second inbox" : "First inbox") + "</b>";
+    if (mailOn(c) && !form) {
+      h += '<label>Name <input type="text" class="mlnm" data-k="' + i + '" value="' + esc(c.name || "") + '" placeholder="' + ex + '"></label>' +
+        '<div class="mlst"><span>Gmail · <span class="mlok">connected ✓</span></span><span class="mlb"><button data-a="mlnew" data-k="' + i + '">Replace</button><button data-a="mldel" data-k="' + i + '">Remove</button></span></div>';
+    } else if (!form) {
+      h += '<div class="mlst"><span class="mut">Not connected</span><span class="mlb"><button data-a="mlpick" data-k="' + i + '">Connect Gmail</button></span></div>';
+    } else {
+      h += '<input type="text" id="mn' + i + '" placeholder="Name, e.g. ' + ex + '" value="' + esc(c.name || "") + '"><input type="text" id="mu' + i + '" placeholder="Script address (ends in /exec)"><input type="text" class="secret" id="mt' + i + '" placeholder="Token" autocomplete="off" spellcheck="false">' +
+        '<span class="mlb"><button class="pri" data-a="mlsave" data-k="' + i + '">Save</button><button data-a="mlcancel" data-k="' + i + '">Cancel</button></span>';
+    }
+    return h + "</div>";
+  }).join("");
 }
-$("mailSave").onclick = function () {
-  P.mail = [0, 1].map(function (i) { return { name: $("mn" + i).value.trim(), url: $("mu" + i).value.trim(), t: $("mt" + i).value.trim(), seen: (P.mail && P.mail[i] && P.mail[i].seen) || undefined }; });
-  persist(); MAIL = []; render(); fetchMail(); $("mailMsg").textContent = "Saved.";
-};
+function mailMsg(t) { var m = $("mailMsg"); if (m) m.textContent = t || ""; }
+function mlAct(a, k) {
+  var p = String(k).split("|"), i = +p[0] === 1 ? 1 : 0, M = mailFix(), c = M[i];
+  mailMsg("");
+  if (a === "mlpick" || a === "mlnew") { MLUI[i] = "gmail"; loadMailForm(); return; }
+  if (a === "mlcancel") { delete MLUI[i]; loadMailForm(); return; }
+  if (a === "mldel") {
+    if (!confirm("Remove " + (c.name || (i ? "the second inbox" : "the first inbox")) + " from this site? Your mailbox itself is not touched.")) return;
+    if (c.on && sb && USER) sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailx: { op: "remove", slot: i } } });
+    M[i] = {}; MAIL[i] = null; delete MLUI[i]; persist(); render(); loadMailForm(); mailMsg("Removed."); return;
+  }
+  var name = $("mn" + i) ? $("mn" + i).value.trim().slice(0, 40) : "";
+  if (a === "mlsave") {
+    var u = $("mu" + i).value.trim(), t = $("mt" + i).value.trim();
+    if (!/^https:\/\/script\.google\.com\/(a\/[\w.-]+\/)?macros\/s\/[\w-]+\/exec$/.test(u)) { mailMsg("The script address should start with https://script.google.com/ and end in /exec."); return; }
+    if (!t) { mailMsg("Paste the token as well."); return; }
+    var done = function (rec) { M[i] = rec; MAIL[i] = null; delete MLUI[i]; persist(); render(); loadMailForm(); mailMsg("Saved."); setTimeout(fetchMail, 300); };
+    var old = function () { done({ name: name, url: u, t: t }); };   // the server cannot keep it yet: saved the old way
+    if (MLX.nokey || !sb || !USER) { old(); return; }
+    mailMsg("Saving…");
+    sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailx: { op: "save", slot: i, url: u, t: t } } }).then(function (r) {
+      var d = r.data || {};
+      if (d.ok) done({ name: name, kind: "gmail", on: true });
+      else if (d._err === "nokey" || d._err === "notable") { MLX.nokey = true; old(); }
+      else mailMsg("Not saved: " + (d._err || (r.error && r.error.message) || "no answer"));
+    }).catch(function () { mailMsg("Not saved: the function did not answer."); });
+  }
+}
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (!t.classList || !t.classList.contains("mlnm")) return;
+  var M = mailFix(), i = +t.dataset.k === 1 ? 1 : 0;
+  M[i].name = t.value.trim().slice(0, 40); persist(); render();
+});
 
 // ---- Bookmarks bar: your own links in one slim row at the very top of the page (Settings > Bookmarks) ----
 // P.bm = { on, nw (open in a new tab), col (color for all), items: [ { id, t, u, ic, c } or a folder { id, t, ic, c, kids: [..] } ] }
@@ -7103,7 +7185,7 @@ document.addEventListener("click", function (e) {
   if (a === "dockchat") { dockChat(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
-  if (a === "mail") { if (PREVIEW && !(P.mail && P.mail[+k] && P.mail[+k].url)) openDemoMail(+k); else openMail(+k); return; }
+  if (a === "mail") { if (PREVIEW && !mailOn(P.mail && P.mail[+k])) openDemoMail(+k); else openMail(+k); return; }
   if (a === "spfilt") { SPFIND = !(SPFIND || SPQ); if (!SPFIND) SPQ = ""; render(); var sq = $("spQ"); if (sq) { sq.value = ""; sq.focus(); } return; }
   if (a === "bfilt") { FON[k] = !(FON[k] || FQ[k]); if (!FON[k]) FQ[k] = ""; render(); var bq = $(k === "tg" ? "tgQ" : "rdQ"); if (bq) { bq.value = ""; bq.focus(); } return; }
   if (a === "nfilt") { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } return; }
@@ -7112,6 +7194,7 @@ document.addEventListener("click", function (e) {
   if (a === "nseen") { markSeen(k); render(); return; }
   if (/^twd/.test(a)) { twdAct(a, k); return; }
   if (/^ytd/.test(a)) { ytdAct(a, k, b); return; }
+  if (/^ml(pick|new|cancel|del|save)$/.test(a)) { mlAct(a, k); return; }
   if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
   if (a === "rdropen") { openReader(k, "", true); return; }
   if (a === "rdrflip") { rdrFlip(); return; }
@@ -7787,8 +7870,8 @@ function openHelp() {
       "Which shows notify you (only ☆ shows, or all) is chosen in " + S("Notifications") + "."]);
 
   html += h3("mail", "Mail (Gmail)") +
-    p("The Mail box shows how many unread emails you have, without giving this site your Google password. It needs a small piece of free code in your own Google account, once per inbox. It is all copy and paste: follow the steps in order.") +
-    '<div class="safe"><b>Is this safe, and is it allowed?</b> Yes to both. The script is made with Google Apps Script, Google&rsquo;s own tool for this, and runs inside your Google account under your name. This site never gets your Google password and cannot sign in as you; it can only ask your script, and the script only answers when shown its secret token. The script counts your unread mail, lists sender, subject and first line of the latest unread ones, and can send an email to your own address if you switch on email notifications. It cannot delete or move mail, or write to anyone else. To stop it, delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
+    p("The Mail box shows how many unread emails you have in up to two Gmail inboxes, without giving this site your Google password. It needs a small piece of free code in your own Google account, once per inbox. It is all copy and paste: follow the steps in order.") +
+    '<div class="safe"><b>Is this safe?</b> Yes. This site never gets your password and cannot sign in as you. What connects an inbox (your Gmail script&rsquo;s address and token) is kept on the server, encrypted, in a place no browser can read; it is never in your settings, your browser or a backup file. The site can only see your unread mail: sender, subject and first line. It cannot delete or move mail, or write to anyone else. To stop it at any time, press <b>Remove</b> in ' + S("Mail") + ', delete the project at <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, or remove its access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</div>' +
     h4("Setting it up") +
     ol(["Go to <a href=\"https://script.google.com\" target=\"_blank\" rel=\"noopener\">script.google.com</a>, signed in as the Gmail account you want to show (check the top right corner).",
       "Click <b>New project</b> (top left).",
@@ -7804,12 +7887,13 @@ function openHelp() {
       "Google asks you to authorize the script: click <b>Authorize access</b> and choose your account. If it warns that the app is not verified, click <b>Advanced</b> " + A + " <b>Go to &hellip; (unsafe)</b> " + A + " <b>Allow</b>. This is normal for your own private script.",
       "Copy the <b>Web app URL</b> (it ends in <code>/exec</code>).",
       "Open that address in a new tab. It shows a <b>token</b>, a long code in quotes. Copy it now; it is shown only once. (If you lose it, the code itself explains how to reset it.)",
-      "Here, open " + S("Mail") + ", fill in a name (&ldquo;Personal&rdquo;), the web app address and the token, and press <b>Save</b>.",
+      "Here, open " + S("Mail") + ", press <b>Connect Gmail</b> at an inbox, fill in a name (&ldquo;Personal&rdquo;), the web app address and the token, and press <b>Save</b>.",
       "Within a minute your unread count appears."], 5) +
-    p("For a second inbox, repeat the steps while signed in to that Gmail account.") +
+    p("For a second Gmail inbox, repeat the steps while signed in to that Gmail account.") +
     h4("Using it") +
     ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only).",
-      "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by the same script to its own address. Set it up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same."]);
+      "In " + S("Mail") + " each inbox shows its name (change it right there), what it is, and <b>Replace</b> and <b>Remove</b>. The address and token cannot be shown again once saved, like a password: to change them, press Replace.",
+      "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same."]);
 
   // ---- Tools ----
   html += h3("notes", "Notes, to-dos &amp; read later") +
@@ -7929,7 +8013,7 @@ function openHelp() {
       "Every device and browser signed in to your account right now, the latest sign-ins, and <b>Sign out everywhere else</b>.",
       "You can be emailed the first time a new browser signs in (needs an inbox under Mail)."]) +
     h4("Your data (" + S("Your data") + ")") +
-    ul(["<b>Download backup</b> saves all settings, sources, notes and layout as a file; <b>Restore from file</b> brings it back. The file holds your Gmail tokens, so keep it private.",
+    ul(["<b>Download backup</b> saves all settings, sources, notes and layout as a file; <b>Restore from file</b> brings it back. Your mail connections are not in it; they stay on the server with your account.",
       "<b>Delete my account</b> removes the account and everything saved in it, for good."]) +
     h4("Privacy") +
     ul(["Everything you set up is private to your account; nobody else using the site can see it. It follows you to every device: settings, sources, bookmarks, notes, calendar, timers, world clocks, and what you have seen and opened. Changes reach your other devices within a minute, and two devices changing different things never overwrite each other.",
@@ -8013,7 +8097,8 @@ function toast(kind, title, body, act, sticky, force, at) {
 // They go through your own Gmail script, which can only ever write to its own address, so nothing can be sent to anyone else.
 // To keep it calm (and inside Gmail's daily limit) everything from a five-minute stretch goes out as ONE email.
 var MAILQ = [], mailQLast = 0;
-function mailCfg() { return (P.mail || []).filter(function (c) { return c && c.url && c.t; })[0] || null; }
+// the Gmail inbox whose script sends them: one still saved in the settings, or one kept on the server
+function mailCfg() { return (P.mail || []).filter(function (c) { return c && ((c.url && c.t) || (c.on && c.kind === "gmail")); })[0] || null; }
 function sendNtfMail(items) {
   var c = mailCfg();
   if (!sb || !USER) return Promise.resolve("Sign in first.");
@@ -8021,7 +8106,8 @@ function sendNtfMail(items) {
   var when = function (t) { return new Date(t).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }); };
   var subject = items.length === 1 ? "OmniTree: " + items[0].t : "OmniTree: " + items.length + " notifications";
   var text = items.map(function (x) { return when(x.ts) + "  " + x.t + (x.b ? "\n       " + x.b : ""); }).join("\n\n") + "\n\n(Sent by your OmniTree page. Switch this off in Settings, Notifications.)";
-  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { mailNotify: { url: c.url, t: c.t, subject: subject, text: text } } }).then(function (r) {
+  var body = c.url ? { mailNotify: { url: c.url, t: c.t, subject: subject, text: text } } : { mailx: { op: "send", subject: subject, text: text } };
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: body }).then(function (r) {
     if (r.error) return r.error.message || "The function did not answer.";
     if (r.data && r.data.sent) return "";
     return (r.data && r.data._err) || "The feeds function needs updating (redeploy super-function).";
@@ -8646,7 +8732,7 @@ function sumParts(S) {
   }).join("");
   var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, N);
   out.movers = mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "";
-  var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!c || !c.url || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
+  var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!mailOn(c) || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
   out.mail = mail ? '<div class="chips">' + mail + "</div>" : "";
   var liveAll = (TWC && TW ? TW : []).filter(function (x) { return !P.hidden["t:" + x.id] && (!S.twFav || P.fav["t:" + x.id]); }), liveIds = {};
   (TWC && TW ? TW : []).forEach(function (x) { liveIds[x.id] = 1; });
@@ -10509,7 +10595,7 @@ function wizPage(id) {
       "<li>Press <b>Deploy</b> (top right) → <b>New deployment</b>. Click the gear next to “Select type” and choose <b>Web app</b>. Set the two boxes exactly like this, then press Deploy:" + mock("New deployment", '<span class="mkrow">Execute as ' + mkb("Me", 1) + '</span><span class="mkrow">Who has access ' + mkb("Anyone", 1) + '</span><span class="mkrow">' + mkb("Deploy", 1) + "</span>") + "</li>" +
       "<li>Google asks for permission. Press <b>Authorize access</b>, pick your account, then <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. Google shows this warning for every script that has not been through its review for public apps. Yours is private: you wrote (pasted) it, and you are the only one using it, so the warning is expected." + mock("Google hasn’t verified this app", mkl(75) + '<span class="mkrow">' + mkb("Advanced", 1) + mkb("Back to safety") + '</span><span class="mknote">then: Go to your project (unsafe) → Allow</span>') + "</li>" +
       "<li>Copy the <b>Web app URL</b> (it ends in <code>/exec</code>). Open it once in a new tab: the page shows a <b>token</b>, a long code between quotation marks. Copy the token too (without the quotation marks); it is shown only this one time. Treat it like a password.</li>" +
-      "<li>Fill in the three fields and press Save:</li></ol>" +
+      "<li>Fill in the three fields and press Save:</li></ol>" + (mailOn(m0) && !m0.url ? '<p class="sn">✓ ' + esc(m0.name || "Your first inbox") + " is connected. Fill in the fields only to replace it.</p>" : "") +
       '<div class="wizmail"><input type="text" id="wzN" placeholder="Name, e.g. Personal" value="' + esc(m0.name || "") + '"><input type="text" id="wzU" placeholder="Web app URL (ends in /exec)" value="' + esc(m0.url || "") + '"><input type="text" class="secret" id="wzT" placeholder="Token" autocomplete="off" spellcheck="false" value="' + esc(m0.t || "") + '"><button class="pri" data-a="wizmail">Save</button></div>' +
       '<div id="wzMsg" class="sn" role="status">' + esc(WIZMSG) + '</div><p class="mut sn">A second inbox can be added the same way later, in Settings → Mail. The full written steps are in Help → Mail.</p>';
   }
@@ -10649,7 +10735,7 @@ var TAB_DEF = { mail: 1, tg: 1, news: 0, rd: 0, live: 1, pod: 1, bell: 1 }, TABD
 function tabc() { var t = P.tabc && typeof P.tabc === "object" ? P.tabc : {}; return { on: t.on !== false, b: Object.assign({}, TAB_DEF, t.b && typeof t.b === "object" ? t.b : {}), dot: !!t.dot }; }
 function tabCounts() {
   return {
-    mail: [0, 1].reduce(function (s, i) { var c = P.mail && P.mail[i], m = MAIL[i]; return s + (c && c.url && m && !m.error ? +mailN(i).n || 0 : 0); }, 0),
+    mail: [0, 1].reduce(function (s, i) { var c = P.mail && P.mail[i], m = MAIL[i]; return s + (mailOn(c) && m && !m.error ? +mailN(i).n || 0 : 0); }, 0),
     tg: boxOff("telegram") ? 0 : +NEWPN.tg || 0,
     news: boxOff("news") ? 0 : +NEWPN.news || 0,
     rd: boxOff("reddit") ? 0 : +NEWPN.rd || 0,

@@ -301,21 +301,9 @@
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Mail">
-    <div class="mut sn">Shows your unread Gmail without giving this site your Google password. Step-by-step instructions are in Help → Mail (Gmail).</div>
-    <div class="sub">
-      <b>First inbox</b>
-      <input type="text" id="mn0" placeholder="Name, e.g. Personal">
-      <input type="text" id="mu0" placeholder="Script address (ends in /exec)">
-      <input type="text" class="secret" id="mt0" placeholder="Token" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="sub">
-      <b>Second inbox</b>
-      <input type="text" id="mn1" placeholder="Name, e.g. Work">
-      <input type="text" id="mu1" placeholder="Script address (ends in /exec)">
-      <input type="text" class="secret" id="mt1" placeholder="Token" autocomplete="off" spellcheck="false">
-    </div>
-    <span><button id="mailSave" class="pri">Save</button></span>
-    <div id="mailMsg" class="mut" role="status"></div>
+    <div class="mut sn" data-kw="gmail inbox email unread">Shows your unread Gmail without giving this site your Google password. What connects an inbox is kept encrypted on the server, never in your settings or backups. The steps are in Help → Mail.</div>
+    <div id="mailSet"></div>
+    <div id="mailMsg" class="mut sn" role="status"></div>
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Calendar">
@@ -517,7 +505,7 @@
 
   <section class="setgrp" data-cat="Account" data-sec="Your data">
     <div class="sub" data-kw="backup restore export download file"><b>Backup</b>
-      <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. The file contains your Gmail tokens, so keep it private.</div>
+      <div class="mut sn">Download all your settings, sources, notes and layout as a file, or restore them from one. Your mail connections are not in it; they stay on the server with your account.</div>
       <span><button id="bkExport">Download backup</button> <label class="filebtn" for="bkFile">Restore from file</label><input type="file" id="bkFile" accept=".json,application/json" class="vis-hidden"></span>
       <div id="bkMsg" class="mut sn" role="status"></div>
     </div>

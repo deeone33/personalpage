@@ -1900,3 +1900,8 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .twd .row.pdr>span:first-child{flex:1 1 auto;min-width:0;display:block;white-space:normal}
 .twd .row.pdr>span:first-child>.lnk{display:block;width:100%;max-width:100%;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
 .twd .row.pdr>span:first-child>small{display:block;color:var(--mut);font-size:12px}
+
+/* Settings > Mail: one line per inbox with what it is and its buttons */
+.mlst{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}
+.mlst .mlok{color:var(--up)}
+.mlb{display:flex;gap:6px;flex-wrap:wrap}
