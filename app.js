@@ -1,4 +1,4 @@
-var VERSION = "0.22.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.22.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4352,11 +4352,12 @@ function ytdRow(x) {
     return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdpl" data-k="' + esc(x.id) + '" data-n="' + esc(x.t) + '" data-c="' + esc(x.c || "") + '" data-m="' + esc(x.n || "") + '">' + esc(x.t) + '</button><small class="ytdm">' + ["Playlist", pc, esc(x.n || "")].filter(Boolean).join(" · ") + '</small></span><span class="r">' + ytdPlStar(x) + "</span></div>";
   }
   // the second line: the channel (click it for its videos), then when and how long
-  var ch = x.c && !v.ch ? (x.cid ? '<button class="ytdch" data-a="ytdch" data-k="' + esc(x.cid) + '" data-n="' + esc(x.c) + '">' + esc(x.c) + "</button>" : esc(x.c)) : "";
+  // (cn: for a video by several channels, the name of the first one, which the click and ☆ go to)
+  var ch = x.c && !v.ch ? (x.cid ? '<button class="ytdch" data-a="ytdch" data-k="' + esc(x.cid) + '" data-n="' + esc(x.cn || x.c) + '">' + esc(x.c) + "</button>" : esc(x.c)) : "";
   var meta = [ch].concat([x.live ? "live now" : x.ago, x.len].filter(Boolean).map(esc)).filter(Boolean).join(" · ");
   // live: "2,283 watching" comes as a full number; shown short like the Twitch box (2.3k)
   var n = x.live ? parseInt(String(x.v || "").replace(/[^\d]/g, ""), 10) : NaN, vv = !isNaN(n) ? (n >= 1000000 ? (n / 1000000).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n)) : x.v || "";
-  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdwatch" data-k="' + esc(x.id + (v.pl ? "|" + v.pl : "")) + '">' + (x.live ? '<span class="dot"></span>' : "") + esc(x.t) + '</button><small class="ytdm">' + meta + '</small></span><span class="r"><span class="mut">' + esc(vv) + "</span>" + (v.ch || v.pl ? "" : ytdStar(x.cid, x.c)) + "</span></div>";
+  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdwatch" data-k="' + esc(x.id + (v.pl ? "|" + v.pl : "")) + '">' + (x.live ? '<span class="dot"></span>' : "") + esc(x.t) + '</button><small class="ytdm">' + meta + '</small></span><span class="r"><span class="mut">' + esc(vv) + "</span>" + (v.ch || v.pl ? "" : ytdStar(x.cid, x.cn || x.c)) + "</span></div>";
 }
 function ytdCatsHtml() {
   var cats = (ytPls().length ? [["saved", "★ Saved"]] : []).concat(YTD_CATS);
