@@ -1,4 +1,4 @@
-var VERSION = "0.24.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.24.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -5172,7 +5172,7 @@ function nwdChips() {
 }
 function nwdListHtml() {
   var c = nwdCcRow(), list = nwdList(), mine = newsSrc().length;
-  var head = "<h3>" + (NWD.q ? "Feeds for “" + esc(NWD.q) + "”" : nwdTab() === "gn" ? "Google News · " + esc(c[1]) : "News sites · " + esc(c[1])) + ' <small class="mut">you have ' + mine + " of 15</small></h3>";
+  var head = "<h3>" + (NWD.q ? "Feeds for “" + esc(NWD.q) + "”" : nwdTab() === "gn" ? "Google News · " + esc(c[1]) : "News sites · " + esc(c[1])) + ' <small class="mut nwdn">you have ' + mine + " of 15</small></h3>";
   var msg = NWD.msg ? '<p class="nwdmsg sn">' + esc(NWD.msg) + "</p>" : "";
   // a web address typed in the search: that site itself first (any site works, through Google News when it has no feed)
   var addr = NWD.q && /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/\S*)?$/i.test(NWD.q) ? NWD.q : "";
@@ -5183,7 +5183,7 @@ function nwdListHtml() {
 }
 function nwdHtml() {
   if (PREVIEW || !sb || !USER) return '<div class="twd"><p>Discover finds news sites to add to your News box: the main sites of your country, Google News sections in your language, and a search for any site&rsquo;s feed. A name shows its newest headlines first; + adds it.</p>' + (PREVIEW ? previewNote() : '<p class="mut sn">Sign in to use it.</p>') + "</div>";
-  return '<div class="twd"><div class="twdtop"><input type="search" id="nwdQ" placeholder="Search a news site or topic…" aria-label="Search a news site, a topic or a web address" value="' + esc(NWD.q) + '"><select id="nwdCc" aria-label="Country">' + opts(NWD_CC.map(function (c) { return [c[0], c[1]]; }), nwdCcRow()[0]) + '</select></div><div id="nwdCats" class="twdcats">' + nwdChips() + '</div><div id="nwdList">' + nwdListHtml() + "</div></div>";
+  return '<div class="twd"><div class="twdtop"><input type="search" id="nwdQ" placeholder="Search sites…" aria-label="Search a news site, a topic or a web address" value="' + esc(NWD.q) + '"><select id="nwdCc" aria-label="Country">' + opts(NWD_CC.map(function (c) { return [c[0], c[1]]; }), nwdCcRow()[0]) + '</select></div><div id="nwdCats" class="twdcats">' + nwdChips() + '</div><div id="nwdList">' + nwdListHtml() + "</div></div>";
 }
 function nwdDraw() {
   if (!nwdOpen() || !$("nwdList")) return;

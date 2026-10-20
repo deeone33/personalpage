@@ -1915,6 +1915,7 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .nwdh small{flex:none}
 .nwdpv .sn{margin:4px 0 0}
 .nwdold{opacity:.55}
+.nwdn{white-space:nowrap}
 .nwdmsg{margin:8px 0 0;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--ac) 12%,transparent)}
 .twd .tvwin{margin-top:6px}
 .twd .pdds:not(.open){-webkit-line-clamp:2}
@@ -1969,6 +1970,9 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 /* Windows with a search field (the Discover windows and Search all boxes) keep one height: a search that empties
    the list for a moment, or finds little, no longer shrinks the window and makes it jump. The list scrolls inside. */
 .mbox:has(.twdtop),.mbox:has(#siteQ){height:90vh;height:90dvh}
+/* News Discover: as tall as its longest list (Google News, nine rows), not more; longer search results scroll inside */
+.mbox:has(#nwdQ){height:min(90vh,650px);height:min(90dvh,650px)}
+@media(max-width:520px){.mbox:has(#nwdQ){height:min(90vh,690px);height:min(90dvh,690px)}.twdtop #nwdCc{max-width:52%}}   /* (narrower: the notes take two lines; the longest country name fits) */
 
 /* Owner box: this month's calls to the server, one slim line under the numbers */
 .admcl{--m:var(--up);display:flex;align-items:center;gap:8px;margin:2px 0 6px;font-size:11.5px;color:var(--mut)}
