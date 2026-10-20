@@ -785,7 +785,7 @@ function render() {
   }
   // the button pops in only when it appears or its number goes up, not on every redraw of the page
   var newBtn = function (n, box) { var pop = n > (NEWPN[box] || 0); NEWPN[box] = n; return n ? '<button class="pill ac' + (pop ? " newp" : "") + '" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : ""; };
-  var ctlN = allSrc.length > 1 ? '<div class="dd">' + srcBtn("news", allSrc.some(function (nm) { return !shown("n:" + nm); })) + '<div class="menu" id="filtNews" hidden>' +
+  var ctlN = allSrc.length > 1 ? '<div class="dd">' + srcBtn("news") + '<div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Search headlines" aria-label="Search headlines">⌕</button>' : "";
   T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + ctlN + (NEWS.length ? rdrBtn("news") : "") + fltBtn + discBtn("nwdopen", "Discover: news sites of your country, Google News sections, and a search for any site", "Discover news sites"));   // the count, the dropdowns, the buttons (↻ is added last)
@@ -794,7 +794,7 @@ function render() {
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
   var tgMulti = !P.hideTgSrc && allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
   var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !isRead(g.u); }).length;
-  var ctlG = allTg.length > 1 ? '<div class="dd">' + srcBtn("tg", allTg.some(function (nm) { return !shown("g:" + nm); })) + '<div class="menu" id="filttg" hidden>' +
+  var ctlG = allTg.length > 1 ? '<div class="dd">' + srcBtn("tg") + '<div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var tq = tgShown(), tNote = foundNote("tg"), tIn = FON.tg || FQ.tg ? '<input type="search" id="tgQ" class="flt" placeholder="Search posts…" aria-label="Search the Telegram posts">' : "";
   T.telegram = tile("telegram", "Telegram", tIn + (tq.length || tNote ? lst("telegram", tq.slice(0, cntOf("tg")).map(function (g) {
@@ -848,7 +848,7 @@ function render() {
   var rq = rdShown(), rNote = foundNote("rd");
   var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !isRead(x.u); }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
-    (rSubs.length > 1 ? '<div class="dd">' + srcBtn("rd", rSubs.some(function (nm) { return !shown("r:" + nm.toLowerCase()); })) + '<div class="menu" id="filtRd" hidden>' +
+    (rSubs.length > 1 ? '<div class="dd">' + srcBtn("rd") + '<div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (FON.rd || FQ.rd ? '<input type="search" id="rdQ" class="flt" placeholder="Search posts…" aria-label="Search the Reddit posts">' : "") + (rq.length || rNote ? lst("reddit", rq.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
@@ -1543,12 +1543,11 @@ function tvTile() {
 // Read straight from TVmaze in the browser. A show opens inside the same window (← Back returns to the list);
 // ☆ follows it. The country is the one in Settings > TV shows, and can be changed here too.
 var TVD_T = "Discover TV shows", TVD = { day: 0, q: "", res: null, resq: "", show: "", n: 0 };
-// the compass button at the top of a box (Twitch, YouTube, TV shows, Podcasts)
 // the Sources list at the top of News, Telegram and Reddit: a funnel, the usual sign for "show only some of these".
-// Lit while a source is hidden, so a box that shows less than everything says so.
-function srcBtn(k, some) {
-  return '<button data-a="filtmenu" data-k="' + k + '" class="ib sm srcb' + (some ? " on" : "") + '" title="Sources: show or hide them' + (some ? " (some are hidden now)" : "") + '" aria-label="Sources"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg></button>';
+function srcBtn(k) {
+  return '<button data-a="filtmenu" data-k="' + k + '" class="ib sm" title="Sources: show or hide them" aria-label="Sources"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg></button>';
 }
+// the compass button at the top of a box (News, Twitch, YouTube, TV shows, Podcasts)
 function discBtn(a, title, label) {
   return '<button class="ib sm twdb" data-a="' + a + '" title="' + title + '" aria-label="' + label + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
 }
@@ -8152,7 +8151,7 @@ function openHelp() {
     ul(["<b>News</b>: give a name and a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website (<code>reuters.com</code>), and press Add. A feed address is the most reliable; with only a website the page finds the news through search services. Up to 15. Start the name with the outlet (&ldquo;BBC World&rdquo;): feeds whose names start the same count as one outlet.",
       "<b>Telegram</b>: type a channel name (<code>ClashReport</code>) or paste a t.me link, and press Add. Only public channels work.",
       "✕ removes a source; <b>Back to default sources</b> starts over. The list shows when each source last delivered, and why one was skipped.",
-      "The funnel button (<b>Sources</b>) at the top of each box hides a source for a while without deleting it. It is lit while a source is hidden."]) +
+      "The funnel button (<b>Sources</b>) at the top of each box hides a source for a while without deleting it."]) +
     h4("Reading the box") +
     ul(["A story you have not seen has an accent bar, and the count at the top counts them. Click the count to mark everything seen. Stories you opened are dimmed.",
       "The same story from several outlets is one row with a count, also when one report is in Swedish and another in English. Three or more outlets within 3 hours make it <b>hot</b>. A story stays where it was first reported; another source joining does not mark it new again.",
