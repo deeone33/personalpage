@@ -1,4 +1,4 @@
-var VERSION = "0.22.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.22.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4310,7 +4310,10 @@ function fetchYT() {
 // list: a playlist this video is played from (the player then goes on through it, and docking takes the rest along)
 function openYT(id, list) {
   var d = YTDS[id], k = "v:" + id + (list ? "|" + list : "");
-  openModal("YouTube", (d ? '<p class="mut sn">' + esc(d.t) + (d.c ? " · " + esc(d.c) : "") + "</p>" : "") + '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + "?autoplay=1" + (list ? "&list=" + encodeURIComponent(list) : "") + '"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + (list ? "&list=" + encodeURIComponent(list) : "") + '">Open on YouTube</a> <button data-a="dock" data-k="' + esc(k) + '">' + DOCK_LAB + '</button> <button class="dkr" data-a="dockr" data-k="' + esc(k) + '">Dock right</button> ' + laterBtn("v:" + id) + ' <button data-a="ytdopen">Discover</button></p>');
+  openModal("YouTube", (d ? '<p class="mut sn">' + esc(d.t) + (d.c ? " · " + esc(d.c) : "") + "</p>" : "") + '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + "?autoplay=1" + (list ? "&list=" + encodeURIComponent(list) : "") + '"></iframe></div>' +
+    // the same row as the Twitch player: docking first, then the rest
+    '<p class="tools"><button data-a="dock" data-k="' + esc(k) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="' + esc(k) + '" title="Keep it playing at the right side of the page">Dock right</button>' + laterBtn("v:" + id) +
+    linkBtn("https://www.youtube.com/watch?v=" + encodeURIComponent(id) + (list ? "&list=" + encodeURIComponent(list) : ""), "Open on YouTube", 1) + '<button data-a="ytdopen">Discover</button></p>');
 }
 
 // ---- YouTube Discover: any video, channel or playlist, also ones you are not subscribed to (the compass button at the top of the YouTube box) ----
@@ -5673,14 +5676,16 @@ function noteTab() { return P.noteTab === "note" || P.noteTab === "later" ? P.no
 function laterList() { return Array.isArray(P.later) ? P.later : []; }
 function isLater(id) { return laterList().some(function (x) { return x.id === id; }); }
 function laterSvg(on) { return '<svg viewBox="0 0 24 24" fill="' + (on ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg>'; }
-function laterBtn(id) { var on = isLater(id); return '<button class="laterb' + (on ? " on" : "") + '" data-a="later" data-k="' + esc(id) + '">' + laterSvg(on) + (on ? "Saved for later" : "Read later") + "</button>"; }
+// a video is "watched" later, everything else "read" later (the same list, in Notes)
+function laterLab(id, on) { return id.charAt(0) === "v" ? (on ? "In Watch later" : "Watch later") : on ? "Saved for later" : "Read later"; }
+function laterBtn(id) { var on = isLater(id); return '<button class="laterb' + (on ? " on" : "") + '" data-a="later" data-k="' + esc(id) + '">' + laterSvg(on) + laterLab(id, on) + "</button>"; }
 // what is known about an item right now, from the box it is in
 function laterInfo(id) {
   var k = id.charAt(0), v = id.slice(2), x;
   if (k === "a") { x = NEWS.concat(NEWSALL, FOUND.news.items).filter(function (n) { return n.u === v; })[0]; return x ? { t: x.t, s: x.s, u: x.u } : null; }
   if (k === "m") { x = tgAll().filter(function (g) { return g.u === v; })[0]; return x ? { t: String(x.tx || x.t || ""), s: x.s, u: x.u } : null; }
   if (k === "r") { x = rdAll().filter(function (p) { return p.u === v; })[0]; return x ? { t: x.t, s: "r/" + x.s, u: x.u } : null; }
-  if (k === "v") { x = (YTV || []).filter(function (y) { return y.id === v; })[0]; return { t: x ? x.t : "Video", s: x ? x.n || "YouTube" : "YouTube", u: "https://www.youtube.com/watch?v=" + encodeURIComponent(v) }; }
+  if (k === "v") { x = (YTV || []).filter(function (y) { return y.id === v; }).map(function (y) { return { t: y.t, c: y.n }; })[0] || YTDS[v]; return { t: x ? x.t : "Video", s: x ? x.c || "YouTube" : "YouTube", u: "https://www.youtube.com/watch?v=" + encodeURIComponent(v) }; }
   return null;
 }
 function laterAct(a, k) {
@@ -5710,7 +5715,7 @@ function laterAct(a, k) {
 }
 // after a change: the buttons in an open window, and the Notes window or side panel if it is showing
 function laterRefresh() {
-  Array.prototype.forEach.call(document.querySelectorAll("#mBody .laterb"), function (b) { var on = isLater(b.dataset.k); b.classList.toggle("on", on); b.innerHTML = laterSvg(on) + (on ? "Saved for later" : "Read later"); });
+  Array.prototype.forEach.call(document.querySelectorAll("#mBody .laterb"), function (b) { var on = isLater(b.dataset.k); b.classList.toggle("on", on); b.innerHTML = laterSvg(on) + laterLab(b.dataset.k, on); });
   if (sideOf("notes")) putWidget("notes");
   else if (!$("modal").hidden && $("mTitle").textContent === "Notes") openNotes(false);
 }
@@ -8139,7 +8144,7 @@ function openHelp() {
     h4("Quick ways to add") +
     ul(["In the search bar: <code>note buy milk</code> or <code>todo call the bank</code>, then Enter.", "Press Ctrl+V on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the card that appears. Switch that off in " + S("Layout &amp; boxes") + "."]) +
     h4("Read later") +
-    ul(["Put a headline, Telegram post, Reddit post or video aside: point at its row and press the small bookmark button where the time is, or press <b>Read later</b> in its window (the way on a phone).",
+    ul(["Put a headline, Telegram post, Reddit post or video aside: point at its row and press the small bookmark button where the time is, or press <b>Read later</b> in its window (<b>Watch later</b> for a video; the way on a phone).",
       "Saved rows keep a small bookmark mark. In the Read later tab, click an item to open it and press ✓ when you are done.",
       "Up to 100 items, the same on all your devices."]) +
     p("Notes can stay open beside the boxes: see Docking.");
