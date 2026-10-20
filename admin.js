@@ -146,7 +146,7 @@
     "ytd:top": "YouTube Discover", "ytd:week": "YouTube Discover", "ytd:live": "YouTube Discover", "ytd:topic": "YouTube Discover", "ytd:q": "YouTube search", "ytd:ch": "YouTube channels",
     "ytd:chpl": "YouTube playlists", "ytd:pl": "YouTube playlists", "ytd:next": "YouTube autoplay (next video)", sportsx: "Sports (SHL and esports)", gamex: "Esports match details",
     teamx: "Esports team pages", playerx: "Esports player pages", shlteam: "SHL team pages", sptable: "SHL table", np: "Radio: what is playing", reddit: "Reddit",
-    rdc: "Reddit comments", article: "Full news articles (reader)", find: "Searching further back", peek: "Link previews", ics: "Followed calendars",
+    rdc: "Reddit comments", "nd:q": "News Discover (search)", "nd:try": "News Discover (preview)", article: "Full news articles (reader)", find: "Searching further back", peek: "Link previews", ics: "Followed calendars",
     frameok: "Web page box check", admin: "Owner panel", track: "Usage counting", deleteAccount: "Account deletion", precheck: "Browser pre-checks", other: "Other" };
   function callLabel(k) { return String(k).split("+").map(function (p) { return CALLK[p] || p; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(" + "); }
   function nf(n) { return Math.round(n).toLocaleString("en-GB"); }

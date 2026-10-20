@@ -1,4 +1,4 @@
-var VERSION = "0.23.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.24.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -777,7 +777,7 @@ function render() {
       var hot = srcs.length >= 3 && nowN - n.ts < 10800000, nw = gNew(g), rd = !nw && g.some(function (x) { return isRead(x.u); });
       var cls = (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : "") + '<span class="mut">' + ago(t0) + "</span>", "a:" + n.u, cls, bk);   // the time is always the last thing on the row
-    }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : "") + nNote, 6) : '<div class="empty">' + (NQ ? "No headline matches that search." : "All news sources hidden or muted. Use Sources to bring one back.") + "</div>");
+    }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : "") + nNote, 6) : '<div class="empty">' + (NQ ? "No headline matches that search." : "All news sources hidden or muted. Use the funnel (Sources) at the top to bring one back.") + "</div>");
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
@@ -785,16 +785,16 @@ function render() {
   }
   // the button pops in only when it appears or its number goes up, not on every redraw of the page
   var newBtn = function (n, box) { var pop = n > (NEWPN[box] || 0); NEWPN[box] = n; return n ? '<button class="pill ac' + (pop ? " newp" : "") + '" data-a="nseen" data-k="' + box + '" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : ""; };
-  var ctlN = allSrc.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="news" class="ib sm">Sources</button><div class="menu" id="filtNews" hidden>' +
+  var ctlN = allSrc.length > 1 ? '<div class="dd">' + srcBtn("news", allSrc.some(function (nm) { return !shown("n:" + nm); })) + '<div class="menu" id="filtNews" hidden>' +
     allSrc.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="n:' + esc(nm) + '"' + (shown("n:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var fltBtn = NEWS.length ? '<button class="ib sm' + (NFILT || NQ ? " on" : "") + '" data-a="nfilt" title="Search headlines" aria-label="Search headlines">⌕</button>' : "";
-  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + ctlN + (NEWS.length ? rdrBtn("news") : "") + fltBtn);   // the count, the dropdowns, the buttons (↻ is added last)
+  T.news = tile("news", "News", nb, 0, newBtn(nNew, "news") + ctlN + (NEWS.length ? rdrBtn("news") : "") + fltBtn + discBtn("nwdopen", "Discover: news sites of your country, Google News sections, and a search for any site", "Discover news sites"));   // the count, the dropdowns, the buttons (↻ is added last)
 
   var allTg = tgSrc(), tmute = wordList(NW().mute), thi = wordList(NW().hi);
   var tp = TGP.filter(function (g) { return shown("g:" + g.s) && !(tmute.length && hasWord(g.tx || g.t, tmute)); });
   var tgMulti = !P.hideTgSrc && allTg.filter(function (nm) { return shown("g:" + nm); }).length > 1;
   var tNew = tp.filter(function (g) { return isNewItem(g, "tg") && !isRead(g.u); }).length;
-  var ctlG = allTg.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="tg" class="ib sm">Sources</button><div class="menu" id="filttg" hidden>' +
+  var ctlG = allTg.length > 1 ? '<div class="dd">' + srcBtn("tg", allTg.some(function (nm) { return !shown("g:" + nm); })) + '<div class="menu" id="filttg" hidden>' +
     allTg.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="g:' + esc(nm) + '"' + (shown("g:" + nm) ? " checked" : "") + "> " + esc(nm) + "</label>"; }).join("") + "</div></div>" : "";
   var tq = tgShown(), tNote = foundNote("tg"), tIn = FON.tg || FQ.tg ? '<input type="search" id="tgQ" class="flt" placeholder="Search posts…" aria-label="Search the Telegram posts">' : "";
   T.telegram = tile("telegram", "Telegram", tIn + (tq.length || tNote ? lst("telegram", tq.slice(0, cntOf("tg")).map(function (g) {
@@ -848,7 +848,7 @@ function render() {
   var rq = rdShown(), rNote = foundNote("rd");
   var rNew = RS === "new" ? rp.filter(function (x) { return isNewItem(x, "rd") && !isRead(x.u); }).length : 0;
   var ctlR = '<select data-s="rdsort" aria-label="Sort posts">' + opts(RD_SORTS.map(function (s) { return [s, s.charAt(0).toUpperCase() + s.slice(1)]; }), RS) + "</select>" +
-    (rSubs.length > 1 ? '<div class="dd"><button data-a="filtmenu" data-k="rd" class="ib sm">Sources</button><div class="menu" id="filtRd" hidden>' +
+    (rSubs.length > 1 ? '<div class="dd">' + srcBtn("rd", rSubs.some(function (nm) { return !shown("r:" + nm.toLowerCase()); })) + '<div class="menu" id="filtRd" hidden>' +
       rSubs.map(function (nm) { return '<label><input type="checkbox" data-a="filttoggle" data-k="r:' + esc(nm.toLowerCase()) + '"' + (shown("r:" + nm.toLowerCase()) ? " checked" : "") + "> r/" + esc(nm) + "</label>"; }).join("") + "</div></div>" : "");
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (FON.rd || FQ.rd ? '<input type="search" id="rdQ" class="flt" placeholder="Search posts…" aria-label="Search the Reddit posts">' : "") + (rq.length || rNote ? lst("reddit", rq.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
@@ -1544,6 +1544,11 @@ function tvTile() {
 // ☆ follows it. The country is the one in Settings > TV shows, and can be changed here too.
 var TVD_T = "Discover TV shows", TVD = { day: 0, q: "", res: null, resq: "", show: "", n: 0 };
 // the compass button at the top of a box (Twitch, YouTube, TV shows, Podcasts)
+// the Sources list at the top of News, Telegram and Reddit: a funnel, the usual sign for "show only some of these".
+// Lit while a source is hidden, so a box that shows less than everything says so.
+function srcBtn(k, some) {
+  return '<button data-a="filtmenu" data-k="' + k + '" class="ib sm srcb' + (some ? " on" : "") + '" title="Sources: show or hide them' + (some ? " (some are hidden now)" : "") + '" aria-label="Sources"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg></button>';
+}
 function discBtn(a, title, label) {
   return '<button class="ib sm twdb" data-a="' + a + '" title="' + title + '" aria-label="' + label + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
 }
@@ -3395,7 +3400,7 @@ document.addEventListener("change", function (e) {
   P.twd = { lang: e.target.value }; persist(); twdLoad(true);
 });
 // ---- The controls at the top of a box always fit on its one line, in every box the same way ----
-// When the title and the controls are wider than the box: (1) the word controls (the lists and Sources) get narrower, each
+// When the title and the controls are wider than the box: (1) the word controls (the lists) get narrower, each
 // by its share, down to a small minimum; (2) the count of new posts loses its word; (3) the gaps and the icon buttons
 // tighten; (4) the word controls go down to their arrow or first letter; (5) the title itself gives way. Nothing is ever
 // moved to a second line, so the height of a box never depends on how many controls it has.
@@ -5063,6 +5068,191 @@ function delSrc(k) {
   srcChanged();
 }
 
+// ---- News Discover: news sites by country, Google News sections, and a search for any site's feed ----
+// A source added here is the same as one added in Settings: its own feed first, then (when that fails or is not fresh)
+// the site's headlines through Google News, Bing and the rest. So the reader, the languages and the merging of the same
+// story from several sources work for it exactly as for the others. A name opens a preview of its newest headlines,
+// fetched just as the box will fetch them. The search asks Feedly's public directory of feeds (through the server).
+var NWD_T = "Discover news", NWD = { q: "", res: null, resq: "", err: "", open: "", pv: {}, msg: "", n: 0 };
+// [code, country, language (as in Languages shown), directory locale, Google News edition, [name, website, feed, its own language]]
+var NWD_CC = [
+  ["world", "World (English)", "en", "en", "hl=en-US&gl=US&ceid=US:en", [["BBC World", "bbc.com", "https://feeds.bbci.co.uk/news/world/rss.xml"], ["Reuters", "reuters.com", ""], ["AP", "apnews.com", ""], ["Al Jazeera", "aljazeera.com", "https://www.aljazeera.com/xml/rss/all.xml"], ["DW", "dw.com", "https://rss.dw.com/rdf/rss-en-all"], ["France 24", "france24.com", "https://www.france24.com/en/rss"], ["Euronews", "euronews.com", "https://www.euronews.com/rss"], ["The Guardian World", "theguardian.com", "https://www.theguardian.com/world/rss"]]],
+  ["ee", "Estonia", "et", "et", "hl=et&gl=EE&ceid=EE:et", [["ERR", "err.ee", "https://www.err.ee/rss"], ["Postimees", "postimees.ee", "https://www.postimees.ee/rss"], ["Delfi", "delfi.ee", ""], ["Õhtuleht", "ohtuleht.ee", "https://www.ohtuleht.ee/rss"], ["Äripäev", "aripaev.ee", ""], ["ERR News (English)", "news.err.ee", "https://news.err.ee/rss", "en"], ["Rus.ERR (Russian)", "rus.err.ee", "https://rus.err.ee/rss", "ru"]]],
+  ["lv", "Latvia", "", "lv", "hl=lv&gl=LV&ceid=LV:lv", [["LSM", "lsm.lv", "https://www.lsm.lv/rss/"], ["TVNET", "tvnet.lv", "https://www.tvnet.lv/rss"], ["Delfi Latvia", "delfi.lv", ""], ["LSM English", "eng.lsm.lv", "", "en"]]],
+  ["lt", "Lithuania", "", "lt", "hl=lt&gl=LT&ceid=LT:lt", [["LRT", "lrt.lt", "https://www.lrt.lt/?rss"], ["15min", "15min.lt", "https://www.15min.lt/rss"], ["Delfi Lithuania", "delfi.lt", ""]]],
+  ["fi", "Finland", "fi", "fi", "hl=fi&gl=FI&ceid=FI:fi", [["Yle", "yle.fi", "https://yle.fi/rss/uutiset/paauutiset"], ["Helsingin Sanomat", "hs.fi", "https://www.hs.fi/rss/tuoreimmat.xml"], ["Ilta-Sanomat", "is.fi", "https://www.is.fi/rss/tuoreimmat.xml"], ["Iltalehti", "iltalehti.fi", "https://www.iltalehti.fi/rss/uutiset.xml"], ["MTV Uutiset", "mtvuutiset.fi", ""], ["Kauppalehti", "kauppalehti.fi", ""]]],
+  ["se", "Sweden", "sv", "sv", "hl=sv&gl=SE&ceid=SE:sv", [["SVT Nyheter", "svt.se", "https://www.svt.se/rss.xml"], ["Dagens Nyheter", "dn.se", "https://www.dn.se/rss/"], ["Aftonbladet", "aftonbladet.se", "https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt/"], ["Expressen", "expressen.se", "https://feeds.expressen.se/nyheter/"], ["Svenska Dagbladet", "svd.se", "https://www.svd.se/feed/articles.rss"], ["Sveriges Radio Ekot", "sverigesradio.se", "https://api.sr.se/api/rss/program/83"], ["Göteborgs-Posten", "gp.se", ""], ["Dagens industri", "di.se", ""], ["Omni", "omni.se", ""]]],
+  ["no", "Norway", "nb", "no", "hl=no&gl=NO&ceid=NO:no", [["NRK", "nrk.no", "https://www.nrk.no/toppsaker.rss"], ["VG", "vg.no", "https://www.vg.no/rss/feed/"], ["Aftenposten", "aftenposten.no", "https://www.aftenposten.no/rss"], ["Dagbladet", "dagbladet.no", ""], ["E24", "e24.no", ""], ["TV 2", "tv2.no", ""]]],
+  ["dk", "Denmark", "nb", "da", "hl=da&gl=DK&ceid=DK:da", [["DR", "dr.dk", "https://www.dr.dk/nyheder/service/feeds/senestenyt"], ["Politiken", "politiken.dk", "https://politiken.dk/rss/senestenyt.rss"], ["Berlingske", "berlingske.dk", ""], ["Ekstra Bladet", "ekstrabladet.dk", ""], ["B.T.", "bt.dk", ""], ["TV 2 Nyheder", "nyheder.tv2.dk", ""]]],
+  ["pl", "Poland", "pl", "pl", "hl=pl&gl=PL&ceid=PL:pl", [["TVN24", "tvn24.pl", "https://tvn24.pl/najnowsze.xml"], ["RMF24", "rmf24.pl", "https://www.rmf24.pl/feed"], ["Onet", "onet.pl", ""], ["Gazeta Wyborcza", "wyborcza.pl", ""], ["Rzeczpospolita", "rp.pl", ""], ["Polsat News", "polsatnews.pl", ""]]],
+  ["de", "Germany", "de", "de", "hl=de&gl=DE&ceid=DE:de", [["Tagesschau", "tagesschau.de", "https://www.tagesschau.de/index~rss2.xml"], ["Der Spiegel", "spiegel.de", "https://www.spiegel.de/schlagzeilen/index.rss"], ["Die Zeit", "zeit.de", "https://newsfeed.zeit.de/index"], ["FAZ", "faz.net", "https://www.faz.net/rss/aktuell/"], ["Süddeutsche Zeitung", "sueddeutsche.de", ""], ["Bild", "bild.de", ""]]],
+  ["nl", "Netherlands", "nl", "nl", "hl=nl&gl=NL&ceid=NL:nl", [["NOS", "nos.nl", "https://feeds.nos.nl/nosnieuwsalgemeen"], ["NU.nl", "nu.nl", "https://www.nu.nl/rss/Algemeen"], ["de Volkskrant", "volkskrant.nl", ""], ["NRC", "nrc.nl", ""], ["De Telegraaf", "telegraaf.nl", ""]]],
+  ["fr", "France", "fr", "fr", "hl=fr&gl=FR&ceid=FR:fr", [["Le Monde", "lemonde.fr", "https://www.lemonde.fr/rss/une.xml"], ["franceinfo", "francetvinfo.fr", "https://www.francetvinfo.fr/titres.rss"], ["Le Figaro", "lefigaro.fr", "https://www.lefigaro.fr/rss/figaro_actualites.xml"], ["Libération", "liberation.fr", ""], ["Le Parisien", "leparisien.fr", ""], ["20 Minutes", "20minutes.fr", ""]]],
+  ["es", "Spain", "es", "es", "hl=es&gl=ES&ceid=ES:es", [["El País", "elpais.com", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada"], ["El Mundo", "elmundo.es", "https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml"], ["RTVE", "rtve.es", ""], ["ABC", "abc.es", ""], ["La Vanguardia", "lavanguardia.com", ""], ["20minutos", "20minutos.es", ""]]],
+  ["it", "Italy", "it", "it", "hl=it&gl=IT&ceid=IT:it", [["ANSA", "ansa.it", "https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml"], ["la Repubblica", "repubblica.it", "https://www.repubblica.it/rss/homepage/rss2.0.xml"], ["Corriere della Sera", "corriere.it", ""], ["Il Sole 24 Ore", "ilsole24ore.com", ""], ["Sky TG24", "tg24.sky.it", ""]]],
+  ["ua", "Ukraine", "ru", "uk", "hl=uk&gl=UA&ceid=UA:uk", [["Ukrainska Pravda", "pravda.com.ua", ""], ["Suspilne", "suspilne.media", ""], ["Ukrinform", "ukrinform.ua", ""], ["The Kyiv Independent (English)", "kyivindependent.com", "", "en"]]],
+  ["gb", "United Kingdom", "en", "en", "hl=en-GB&gl=GB&ceid=GB:en", [["BBC News", "bbc.com", "https://feeds.bbci.co.uk/news/rss.xml"], ["The Guardian", "theguardian.com", "https://www.theguardian.com/uk/rss"], ["Sky News", "news.sky.com", "https://feeds.skynews.com/feeds/rss/home.xml"], ["The Independent", "independent.co.uk", "https://www.independent.co.uk/news/rss"], ["The Telegraph", "telegraph.co.uk", ""], ["Financial Times", "ft.com", ""]]],
+  ["ie", "Ireland", "en", "en", "hl=en-IE&gl=IE&ceid=IE:en", [["RTÉ News", "rte.ie", "https://www.rte.ie/feeds/rss/?index=/news/"], ["The Irish Times", "irishtimes.com", ""], ["Irish Independent", "independent.ie", ""]]],
+  ["us", "United States", "en", "en", "hl=en-US&gl=US&ceid=US:en", [["AP", "apnews.com", ""], ["Reuters", "reuters.com", ""], ["NPR", "npr.org", "https://feeds.npr.org/1001/rss.xml"], ["The New York Times", "nytimes.com", "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"], ["CNN", "cnn.com", ""], ["The Washington Post", "washingtonpost.com", ""], ["CNBC", "cnbc.com", "https://www.cnbc.com/id/100003114/device/rss/rss.html"], ["Bloomberg", "bloomberg.com", ""]]],
+  ["ca", "Canada", "en", "en", "hl=en-CA&gl=CA&ceid=CA:en", [["CBC News", "cbc.ca", "https://www.cbc.ca/webfeed/rss/rss-topstories"], ["The Globe and Mail", "theglobeandmail.com", ""], ["CTV News", "ctvnews.ca", ""]]],
+  ["au", "Australia", "en", "en", "hl=en-AU&gl=AU&ceid=AU:en", [["ABC News", "abc.net.au", "https://www.abc.net.au/news/feed/51120/rss.xml"], ["The Sydney Morning Herald", "smh.com.au", ""], ["The Guardian Australia", "theguardian.com", "https://www.theguardian.com/australia-news/rss"]]]
+];
+// Google News sections, in the language of the chosen country
+// (Google News has no edition of its own for these: asked for one, it answers with a neighbour's)
+var NWD_NOGN = { dk: 1 };
+var NWD_GN = [["", "Top stories"], ["WORLD", "World"], ["NATION", "National"], ["BUSINESS", "Business"], ["TECHNOLOGY", "Technology"], ["SCIENCE", "Science"], ["HEALTH", "Health"], ["SPORTS", "Sport"], ["ENTERTAINMENT", "Entertainment"]];
+// the directory's language codes, as the groups of Languages shown
+var NWD_LG = { en: "en", sv: "sv", no: "nb", nb: "nb", nn: "nb", da: "nb", fi: "fi", et: "et", de: "de", fr: "fr", es: "es", it: "it", pt: "pt", nl: "nl", pl: "pl", tr: "tr", ru: "ru", uk: "ru", bg: "ru", sr: "ru", ar: "ar", he: "ar", fa: "ar", zh: "zh", ja: "zh", ko: "zh", el: "el" };
+function nwdp() { if (!P.nwd || typeof P.nwd !== "object") P.nwd = {}; return P.nwd; }
+function nwdCcRow() {
+  var c = nwdp().cc;
+  if (!NWD_CC.some(function (x) { return x[0] === c; })) { var g = stGuessCc().toLowerCase().replace("uk", "gb"); c = NWD_CC.some(function (x) { return x[0] === g; }) ? g : "world"; }
+  return NWD_CC.filter(function (x) { return x[0] === c; })[0];
+}
+function nwdTab() { return nwdp().tab === "gn" ? "gn" : "sites"; }
+function nwdOpen() { return !$("modal").hidden && $("mTitle").textContent === NWD_T; }
+function nwdGnSite(d, loc) { return "https://news.google.com/rss/search?q=site:" + d + "+when:1d&" + loc; }
+// a row of the window as a source: {name, urls}, and what tells that you already have it
+function nwdSrcOf(x) {
+  if (x.gn != null) return { name: x.n, urls: [x.gn] };
+  return { name: x.n, urls: (x.f ? [x.f] : []).concat(x.d ? [nwdGnSite(x.d, nwdCcRow()[4])] : []) };
+}
+function nwdHave(x) {
+  var nm = String(x.n).toLowerCase(), want = nwdSrcOf(x).urls[0], dm = !x.f && x.d ? "site:" + x.d + "+" : "";
+  for (var i = 0; i < newsSrc().length; i++) {
+    var s = newsSrc()[i];
+    if (String(s.name).toLowerCase() === nm || s.urls.indexOf(want) >= 0 || (dm && s.urls.some(function (u) { return u.indexOf(dm) >= 0; }))) return i;
+  }
+  return -1;
+}
+function nwdLangName(code) { var l = LANGS.filter(function (x) { return x[0] === code; })[0]; return l ? l[1] : ""; }
+function nwdAdd(x) {
+  var s = nwdSrcOf(x);
+  ownSrc();
+  if (P.news.length >= 15) { NWD.msg = "That is the maximum (15 news sources). Remove one with ✓ or in Settings first."; return; }
+  if (P.news.some(function (y) { return y.name.toLowerCase() === s.name.toLowerCase(); })) s.name += " (" + (x.d || nwdCcRow()[1]) + ")";
+  P.news.push(s);
+  // its language is one that Languages shown leaves out: say so, or the source would look empty
+  var lg = x.lg, ok = langList();
+  NWD.msg = "Added " + s.name + "." + (lg && ok.length && ok.indexOf(lg) < 0 ? " Its headlines are in " + nwdLangName(lg) + ", which Languages shown (Settings > News, Telegram & Reddit) leaves out: tick it there to see them." : "");
+  srcChanged();
+}
+function nwdDel(i) {
+  ownSrc();
+  var s = P.news[i]; if (!s) return;
+  P.news.splice(i, 1); NWD.msg = "Removed " + s.name + "."; srcChanged();
+}
+// the rows on show now (kept, so a button can say which one by its number)
+function nwdList() {
+  var c = nwdCcRow();
+  if (NWD.q) return NWD.resq === NWD.q && NWD.res ? NWD.res : [];
+  if (nwdTab() === "gn") return NWD_NOGN[c[0]] ? [] : NWD_GN.map(function (g) { return { n: "Google News " + c[0].toUpperCase().replace("WORLD", "World") + (g[0] ? " · " + g[1] : ""), gn: "https://news.google.com/rss" + (g[0] ? "/headlines/section/topic/" + g[0] : "") + "?" + c[4], sub: g[1], lg: c[2] }; });
+  return c[5].map(function (o) { return { n: o[0], d: o[1], f: o[2], lg: o[3] || c[2] }; });
+}
+function nwdKey(x) { return x.gn || x.f || x.d || x.n; }
+function nwdRow(x, i) {
+  var have = nwdHave(x), k = nwdKey(x), op = NWD.open === k;
+  var meta = x.gn != null ? [x.sub === "Top stories" ? "The main headlines of the day, from many news sites" : x.sub + " headlines, from many news sites"]
+    : [x.d, nwdLangName(x.lg), x.sub ? (x.sub >= 1000 ? Math.round(x.sub / 1000) + "k" : x.sub) + " followers" : "", x.last ? "last post " + ago(x.last) + " ago" : ""];
+  var old = x.last && Date.now() - x.last > 2592000000;
+  return '<div class="row twdr ytdr nwdr' + (old ? " nwdold" : "") + '"><span><button class="lnk" data-a="nwdpv" data-k="' + i + '" aria-expanded="' + op + '"><span class="nwdar">' + (op ? "▾" : "▸") + "</span>" + esc(x.n) + '</button><small class="ytdm">' + esc(meta.filter(Boolean).join(" · ")) + '</small></span><span class="r">' +
+    '<button class="pdf' + (have >= 0 ? " on" : "") + '" data-a="nwdadd" data-k="' + i + '" title="' + (have >= 0 ? "In your News box. Click to remove it" : "Add to your News box") + '" aria-label="' + (have >= 0 ? "Remove " : "Add ") + esc(x.n) + '">' + (have >= 0 ? "✓" : "+") + "</button></span></div>" + (op ? nwdPvHtml(x) : "");
+}
+function nwdPvHtml(x) {
+  var p = NWD.pv[nwdKey(x)];
+  if (!p || p.busy) return '<div class="nwdpv"><p class="mut sn">Fetching its newest headlines, as the News box would…</p></div>';
+  if (!p.items.length) return '<div class="nwdpv"><p class="mut sn">Nothing came through right now' + (p.why ? ": " + esc(p.why.slice(0, 160)) : "") + ". It may still work later; sites that block servers can only be followed through Google News.</p></div>";
+  return '<div class="nwdpv">' + p.items.map(function (n) {
+    var u = safeUrl(n.u);
+    return '<div class="nwdh">' + (u ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + esc(n.t) + "</a>" : esc(n.t)) + '<small class="mut">' + ago(n.ts) + "</small></div>";
+  }).join("") + (p.via ? '<p class="mut sn">Read through ' + esc(p.via.replace(/api\.|www\./g, "")) + "</p>" : "") + "</div>";
+}
+function nwdChips() {
+  if (NWD.q) return "";
+  return [["sites", "News sites"], ["gn", "Google News"]].map(function (t) { return '<button class="twdc' + (nwdTab() === t[0] ? " on" : "") + '" data-a="nwdtab" data-k="' + t[0] + '">' + t[1] + "</button>"; }).join("");
+}
+function nwdListHtml() {
+  var c = nwdCcRow(), list = nwdList(), mine = newsSrc().length;
+  var head = "<h3>" + (NWD.q ? "Feeds for “" + esc(NWD.q) + "”" : nwdTab() === "gn" ? "Google News · " + esc(c[1]) : "News sites · " + esc(c[1])) + ' <small class="mut">you have ' + mine + " of 15</small></h3>";
+  var msg = NWD.msg ? '<p class="nwdmsg sn">' + esc(NWD.msg) + "</p>" : "";
+  // a web address typed in the search: that site itself first (any site works, through Google News when it has no feed)
+  var addr = NWD.q && /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/\S*)?$/i.test(NWD.q) ? NWD.q : "";
+  if (NWD.q && (NWD.resq !== NWD.q || !NWD.res)) return msg + head + '<p class="mut sn">Searching…</p>';
+  if (NWD.q && NWD.err && !list.length) return msg + head + '<p class="mut sn">The feed directory did not answer: ' + esc(NWD.err) + "</p>";
+  return msg + head + (list.length ? list.map(nwdRow).join("") : '<p class="mut sn">' + (!NWD.q && nwdTab() === "gn" ? "Google News has no edition for " + esc(c[1]) + ". Its news sites are under News sites." : addr ? "No feed found for this site." : "No feed found. Try the site&rsquo;s name or its web address (like aftonbladet.se).") + "</p>") +
+    (NWD.q ? '<p class="mut sn">Feeds that have not posted for a month are dimmed. Not finding a site? Type its web address: any news site can be followed through Google News.</p>' : nwdTab() === "gn" ? (!list.length ? "" : '<p class="mut sn">Google News gathers these from many sites; the full article opens from the publisher.</p>') : '<p class="mut sn">Not listed? Search for it above, by name or web address.</p>');
+}
+function nwdHtml() {
+  if (PREVIEW || !sb || !USER) return '<div class="twd"><p>Discover finds news sites to add to your News box: the main sites of your country, Google News sections in your language, and a search for any site&rsquo;s feed. A name shows its newest headlines first; + adds it.</p>' + (PREVIEW ? previewNote() : '<p class="mut sn">Sign in to use it.</p>') + "</div>";
+  return '<div class="twd"><div class="twdtop"><input type="search" id="nwdQ" placeholder="Search a news site or topic…" aria-label="Search a news site, a topic or a web address" value="' + esc(NWD.q) + '"><select id="nwdCc" aria-label="Country">' + opts(NWD_CC.map(function (c) { return [c[0], c[1]]; }), nwdCcRow()[0]) + '</select></div><div id="nwdCats" class="twdcats">' + nwdChips() + '</div><div id="nwdList">' + nwdListHtml() + "</div></div>";
+}
+function nwdDraw() {
+  if (!nwdOpen() || !$("nwdList")) return;
+  var sc = document.querySelector("#modal .mbox"), st = sc ? sc.scrollTop : 0;
+  $("nwdCats").innerHTML = nwdChips(); $("nwdList").innerHTML = nwdListHtml();
+  if (sc) sc.scrollTop = st;
+}
+function nwdAsk(b) {
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { nd: b } }).then(function (r) {
+    if (r.error) throw new Error(r.error.message);
+    if (!r.data || !r.data.nd) throw new Error("it needs the updated feeds function (redeploy super-function in Supabase)");
+    return r.data.nd;
+  });
+}
+function nwdSearch() {
+  var q = NWD.q, n = ++NWD.n, c = nwdCcRow();
+  NWD.err = ""; nwdDraw();
+  nwdAsk({ m: "q", q: q, loc: c[3] }).then(function (d) {
+    if (n !== NWD.n) return;
+    var list = (d.list || []).map(function (x) { return { n: String(x.n || "").slice(0, 60), d: String(x.d || ""), f: safeUrl(x.f), sub: +x.sub || 0, lg: NWD_LG[String(x.lg || "").split("-")[0]] || "", last: +x.last || 0 }; }).filter(function (x) { return x.n && x.f; });
+    var addr = /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/\S*)?$/i.test(q) ? q.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase() : "";
+    // the typed site itself, followed through Google News, when the directory has no feed of that site
+    if (addr && !list.some(function (x) { return x.d === addr; })) list.unshift({ n: addr, d: addr, f: "", lg: "" });
+    NWD.res = list; NWD.resq = q; NWD.err = d.err || ""; nwdDraw();
+  }).catch(function (e) { if (n !== NWD.n) return; NWD.res = []; NWD.resq = q; NWD.err = String((e && e.message) || e).slice(0, 120); nwdDraw(); });
+}
+function nwdPreview(x) {
+  var k = nwdKey(x);
+  if (NWD.open === k) { NWD.open = ""; nwdDraw(); return; }
+  NWD.open = k;
+  var p = NWD.pv[k];
+  if (!p || (!p.busy && Date.now() - p.at > 600000)) {
+    NWD.pv[k] = { busy: true, items: [], at: Date.now() };
+    nwdAsk({ m: "try", urls: nwdSrcOf(x).urls }).then(function (d) {
+      NWD.pv[k] = { busy: false, items: unentAll(d.items || [], ["t"]), via: d.via || "", why: d.why || d._err || "", at: Date.now() }; nwdDraw();
+    }).catch(function (e) { NWD.pv[k] = { busy: false, items: [], why: String((e && e.message) || e), at: Date.now() }; nwdDraw(); });
+  }
+  nwdDraw();
+}
+function openNewsDiscover() {
+  NWD.msg = ""; NWD.open = "";
+  openModal(NWD_T, nwdHtml());
+  if (NWD.q && !PREVIEW && sb && USER) nwdSearch();
+}
+function nwdAct(a, k) {
+  if (a === "nwdopen") { openNewsDiscover(); return; }
+  if (a === "nwdtab") { nwdp().tab = k; persist(); NWD.open = ""; nwdDraw(); return; }
+  var x = nwdList()[+k];
+  if (!x) return;
+  if (a === "nwdpv") { nwdPreview(x); return; }
+  if (a === "nwdadd") { var i = nwdHave(x); if (i >= 0) nwdDel(i); else nwdAdd(x); nwdDraw(); }
+}
+document.addEventListener("input", function (e) {
+  if (e.target.id !== "nwdQ") return;
+  debounced("nwdQ", function () {
+    if (!$("nwdQ")) return;
+    var v = $("nwdQ").value.replace(/\s+/g, " ").trim().slice(0, 100); if (v.length < 2) v = "";
+    if (v === NWD.q) return;
+    NWD.q = v; NWD.open = ""; NWD.msg = "";
+    if (v) nwdSearch(); else nwdDraw();
+  });
+});
+document.addEventListener("change", function (e) {
+  if (e.target.id !== "nwdCc") return;
+  nwdp().cc = e.target.value; persist(); NWD.open = ""; NWD.msg = "";
+  if (NWD.q) nwdSearch(); else nwdDraw();
+});
+
 // ---- Reddit (through the feeds function: Reddit does not let a web page read it directly) ----
 var RD_SRC = ["worldnews", "technology"], RD = [], RDERR = "", rBusy = false;
 function rdSrc() { return P.rd || RD_SRC; }
@@ -5810,13 +6000,25 @@ function swHtml(w, side) {
   var pc = !layM(), D = dlP(), ed = pc && typeof edOn === "function" && edOn(), fs = (D.fs && +D.fs[w]) || 1, st = [], slim = pc && slimSide(side);
   if (pc && D.y && +D.y[w]) st.push("margin-top:" + Math.round(+D.y[w]) + "px");
   if (pc && D.h && +D.h[w]) st.push("height:" + Math.round(+D.h[w]) + "px");
-  return '<div class="sw' + (ed ? " swed" : "") + (pc && D.h && +D.h[w] ? " swfixh" : "") + '" data-sw="' + w + '"' + (st.length ? ' style="' + st.join(";") + '"' : "") + ">" +
-    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it: up, down, in next to the boxes or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b><span>" +
+  var mn = swMin(w);
+  if (mn) st = st.filter(function (s) { return s.indexOf("height") !== 0; });   // folded: only its title line, whatever height it was given
+  return '<div class="sw' + (ed ? " swed" : "") + (pc && D.h && +D.h[w] && !mn ? " swfixh" : "") + (mn ? " swmin" : "") + '" data-sw="' + w + '"' + (st.length ? ' style="' + st.join(";") + '"' : "") + ">" +
+    '<div class="swh"><b' + (pc ? ' class="swt" title="Drag to move it: up, down, in next to the boxes or to the other side"' : "") + ">" + (pc ? '<i class="swgrip" aria-hidden="true">⠿</i>' : "") + WIDGETS[w].t + "</b>" +
+    '<button class="swmn" data-a="swmin" data-k="' + w + '" aria-expanded="' + !mn + '" title="' + (mn ? "Unfold it" : "Fold it to its title line (it stays docked)") + '" aria-label="' + (mn ? "Unfold " : "Fold ") + WIDGETS[w].t + '"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button><span>' +
     (ed ? '<button data-a="swfs" data-k="' + w + ':-1" title="Smaller text" aria-label="Smaller text">T&minus;</button><i class="swfsn">' + Math.round(fs * 100) + '%</i><button data-a="swfs" data-k="' + w + ':1" title="Larger text" aria-label="Larger text">T+</button>' : "") +
     (pc ? '<button data-a="sidedock" data-k="' + w + ":" + (side === "left" ? "right" : "left") + '" title="Move to the other side" aria-label="Move to the other side">⇄</button>' : "") +
     '<button data-a="sidedock" data-k="' + w + ':" title="Undock (it opens as a window again)" aria-label="Undock">✕</button></span></div>' +
-    '<div class="swb">' + WIDGETS[w].html() + "</div>" +
-    (ed ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to undo."></i>' + (slim ? ["l", "r"].map(function (s) { return '<i class="swg swgw ' + s + '" data-swg="w" title="Drag to change the width of the panels on this side. Double-click for the standard width."></i>'; }).join("") : "") : "") + "</div>";
+    '<div class="swb"' + (mn ? " hidden" : "") + ">" + WIDGETS[w].html() + "</div>" +
+    (ed && !mn ? '<i class="swg swgh" data-swg="h" title="Drag to change the height. Double-click to undo."></i>' + (slim ? ["l", "r"].map(function (s) { return '<i class="swg swgw ' + s + '" data-swg="w" title="Drag to change the width of the panels on this side. Double-click for the standard width."></i>'; }).join("") : "") : "") + "</div>";
+}
+// Folded panels (the arrow beside the title): only the title line shows, the panel stays docked where it is. P.swmin = { panel: 1 }
+function swMin(w) { return !!(P.swmin && P.swmin[w]); }
+function swMinToggle(w) {
+  if (!WIDGETS[w]) return;
+  P.swmin = Object.assign({}, P.swmin || {});
+  if (P.swmin[w]) delete P.swmin[w]; else P.swmin[w] = 1;
+  persist(); renderSide(); dockPlace();
+  if (!swMin(w) && w === "adm") admLoad(true);   // unfolded: the owner panel shows the newest at once
 }
 function dlApply() {
   var r = document.documentElement;
@@ -6115,9 +6317,12 @@ document.addEventListener("keydown", function (e) {
   calcKey(k);
 }, true);
 
-// ---- Owner panel (Tools menu, only for the site owner): the newest accounts, feedback, sign-ins and visitors at a glance.
+// ---- Owner panel (Tools menu, only for the site owner): the newest accounts, feedback, activity and visitors at a glance.
 // The page shows the entry only when the feeds function has said this account is the owner; every number shown comes from
-// that function, which checks the sign-in against its own private list again on each request. Nothing is kept on the device. ----
+// that function, which checks the sign-in against its own private list again on each request. Nothing is kept on the device.
+// The numbers are worked out exactly as on the full admin page (admin.js), so the two always agree: "today" is your own
+// calendar day, an account's "last seen" is its latest activity (not only its last sign-in), and a visitor is listed by
+// its latest visit. Opening the panel or ↻ loads the newest; while it is open it refreshes every 5 minutes. ----
 var ADM = { d: null, t: 0, busy: false, err: "", tab: "sum" }, ADMSEEN = +load("sp_admseen", 0) || 0;
 function admLoad(force) {
   if (!isAdmin() || ADM.busy || (!force && ADM.d && Date.now() - ADM.t < 300000)) return;
@@ -6125,31 +6330,39 @@ function admLoad(force) {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { admin: { op: "overview" } } }).then(function (r) {
     var j = r && r.data;
     ADM.busy = false;
-    if (!j || j._err || j.ok !== true) { ADM.err = (j && j._err) || "Could not load the overview."; admDraw(); return; }
+    if (!j || j._err || j.ok !== true) { ADM.err = (j && j._err) || (r && r.error && r.error.message) || "Could not load the overview."; admDraw(); return; }
     ADM.d = j; ADM.t = Date.now(); ADM.err = ""; admDraw();
   }).catch(function () { ADM.busy = false; ADM.err = "Could not reach the function."; admDraw(); });
 }
 function admDraw() { Array.prototype.forEach.call(document.querySelectorAll(".adm"), function (el) { el.outerHTML = admHtml(); }); }
-setInterval(function () { if (isAdmin() && !document.hidden && document.querySelector(".adm")) admLoad(); }, 60000);
+// (only while it can be seen: a folded docked panel does not ask)
+setInterval(function () { if (isAdmin() && !document.hidden && Array.prototype.some.call(document.querySelectorAll(".adm"), function (el) { return el.offsetParent; })) admLoad(); }, 60000);
 function admTs(x) { var t = Date.parse(x); return isNaN(t) ? 0 : t; }
-// the numbers and lists, worked out from the overview
+// your own calendar day of a moment, as the admin page counts days
+function admDay(t) { var d = new Date(t); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+// the numbers and lists, worked out from the overview the same way as on the admin page
 function admData() {
-  var d = ADM.d, now = Date.now(), day = 86400000, users = d.users || [], byId = {};
-  users.forEach(function (u) { byId[u.id] = u; });
-  var today = new Date().toISOString().slice(0, 10);
+  var d = ADM.d, now = Date.now(), day = 86400000, today = admDay(now), users = d.users || [], byId = {}, seen = {};
+  users.forEach(function (u) { byId[u.id] = u; seen[u.id] = admTs(u.last); });
+  var active = {};
+  (d.usage || []).forEach(function (r) { var t = admTs(r.last_seen); if (t > (seen[r.user_id] || 0)) seen[r.user_id] = t; if (r.day === today) active[r.user_id] = 1; });
   var visits = (d.visits || []).map(function (v) { return { at: admTs(v.at), ip: String(v.ip || ""), cc: String(v.cc || ""), u: byId[v.user_id], ua: String(v.ua || ""), ref: String(v.ref || ""), lang: String(v.lang || ""), tz: String(v.tz || "") }; });
-  var first = {}, count = {};
-  visits.forEach(function (v) { if (!v.ip) return; count[v.ip] = (count[v.ip] || 0) + 1; if (!first[v.ip] || v.at < first[v.ip].at) first[v.ip] = v; });
-  var ips = Object.keys(first).map(function (ip) { var f = first[ip]; return { ip: ip, at: f.at, cc: f.cc, n: count[ip], u: visits.filter(function (v) { return v.ip === ip && v.u; }).map(function (v) { return v.u.email; })[0] || "" }; }).sort(function (a, b) { return b.at - a.at; });
+  // one entry per address: its latest visit (when it is listed), its first one (is it new?), how often, and who
+  var IP = {};
+  visits.forEach(function (v) {
+    if (!v.ip) return;
+    var o = IP[v.ip] || (IP[v.ip] = { ip: v.ip, at: 0, first: v.at, cc: v.cc, n: 0, u: "" });
+    o.n++; if (v.at > o.at) { o.at = v.at; o.cc = v.cc || o.cc; } if (v.at < o.first) o.first = v.at; if (v.u && !o.u) o.u = v.u.email || "";
+  });
+  var ips = Object.keys(IP).map(function (k) { return IP[k]; }).sort(function (a, b) { return b.at - a.at; });
   var accts = users.slice().sort(function (a, b) { return admTs(b.created) - admTs(a.created); });
-  var logins = users.filter(function (u) { return u.last; }).sort(function (a, b) { return admTs(b.last) - admTs(a.last); });
+  var lastSeen = users.filter(function (u) { return seen[u.id]; }).sort(function (a, b) { return seen[b.id] - seen[a.id]; });
   var fb = (d.feedback || []).slice().sort(function (a, b) { return admTs(b.at) - admTs(a.at); });
-  var active = {}; (d.usage || []).forEach(function (u) { if (u.day === today) active[u.user_id] = 1; });
   return {
-    accts: accts, logins: logins, fb: fb, ips: ips, visits: visits, byId: byId,
-    n: { users: users.length, new1: accts.filter(function (u) { return now - admTs(u.created) < day; }).length, new7: accts.filter(function (u) { return now - admTs(u.created) < 7 * day; }).length,
-      active: Object.keys(active).length, visitors: Object.keys(visits.filter(function (v) { return now - v.at < day; }).reduce(function (o, v) { o[v.ip] = 1; return o; }, {})).length,
-      fbNew: fb.filter(function (f) { return (f.status || "new") === "new"; }).length, ipNew: ips.filter(function (x) { return now - x.at < day; }).length }
+    accts: accts, seenList: lastSeen, seen: seen, fb: fb, ips: ips, visits: visits, byId: byId,
+    n: { users: users.length, new1: accts.filter(function (u) { return admDay(admTs(u.created)) === today; }).length, new7: accts.filter(function (u) { return now - admTs(u.created) < 7 * day; }).length,
+      active: Object.keys(active).length, visitors: ips.filter(function (x) { return admDay(x.at) === today; }).length,
+      fbNew: fb.filter(function (f) { return (f.status || "new") === "new"; }).length, ipNew: ips.filter(function (x) { return admDay(x.first) === today; }).length }
   };
 }
 // one line; click it (key: "u:<account>", "ip:<address>" or "f:<feedback>") and its details open under it
@@ -6174,15 +6387,15 @@ function admDetail(key) {
   if (kind === "u") {
     var u = D.byId[id];
     if (!u) return admKv([["", "Not in the list any more"]]);
-    var use = (ADM.d.usage || []).filter(function (x) { return x.user_id === id; }), secs = use.reduce(function (s, x) { return s + (+x.secs || 0); }, 0), lastSeen = use.reduce(function (m, x) { return Math.max(m, admTs(x.last_seen)); }, 0);
+    var use = (ADM.d.usage || []).filter(function (x) { return x.user_id === id; }), secs = use.reduce(function (s, x) { return s + (+x.secs || 0); }, 0);
     var p = (ADM.d.prefs || {})[id] || null, ipl = {}, myFb = D.fb.filter(function (f) { return f.user_id === id; }).length;
     D.visits.forEach(function (v) { if (v.u && v.u.id === id && v.ip) { var e = ipl[v.ip] || (ipl[v.ip] = { n: 0, at: 0, cc: v.cc }); e.n++; e.at = Math.max(e.at, v.at); } });
     var ipKeys = Object.keys(ipl).sort(function (a, b) { return ipl[b].at - ipl[a].at; }).slice(0, 5);
     var srcs = p ? [p.news >= 0 ? p.news + " news" : "", p.tg >= 0 ? p.tg + " Telegram" : "", p.rd >= 0 ? p.rd + " Reddit" : "", p.stocks ? p.stocks + " stocks" : "", p.yt ? p.yt + " YouTube" : "", p.leagues >= 0 ? p.leagues + " leagues" : "", p.mail ? p.mail + " mail" : "", p.twitch ? "Twitch" : ""].filter(Boolean).join(" · ") : "";
     return admKv([
-      ["Signed up", esc(admWhen(admTs(u.created)))], ["Last sign-in", esc(admWhen(admTs(u.last)))],
+      ["Signed up", esc(admWhen(admTs(u.created)))], ["Last seen", esc(admWhen(D.seen[id] || 0))], ["Last sign-in", esc(admWhen(admTs(u.last)))],
       ["Status", esc([u.confirmed ? "email confirmed" : "email not confirmed", u.banned ? "blocked" : "", u.admin ? "owner" : ""].filter(Boolean).join(" · "))],
-      ["Last 30 days", esc(use.length + (use.length === 1 ? " day active · " : " days active · ") + admMins(secs) + " on the page" + (lastSeen ? " · last seen " + ago(lastSeen) + " ago" : ""))],
+      ["Last 30 days", esc(use.length + (use.length === 1 ? " day active · " : " days active · ") + admMins(secs) + " on the page")],
       p ? ["Setup", esc([p.onboarded ? "guide done" : "guide not done", p.theme, p.off && p.off.length ? p.off.length + " boxes off" : "", p.docked && p.docked.length ? "docked: " + p.docked.join(", ") : "", (ADM.d.wallpapers || []).indexOf(id) >= 0 ? "own wallpaper" : ""].filter(Boolean).join(" · "))] : ["Setup", "nothing saved yet"],
       srcs ? ["Sources", esc(srcs)] : null,
       p ? ["Saved", esc(p.notes + " notes · " + p.todos + " to-dos · " + p.cal + " events" + (p.favs ? " · " + p.favs + " favorites" : ""))] : null,
@@ -6197,51 +6410,54 @@ function admDetail(key) {
     vs.forEach(function (v) { if (v.u) who[v.u.id] = v.u; });
     var host = ""; try { host = last.ref ? new URL(last.ref).hostname : ""; } catch (e) { host = last.ref.slice(0, 40); }
     return admKv([
-      ["Country", esc(last.cc || "unknown")], ["First seen", esc(admWhen(firstV.at))], ["Last seen", esc(admWhen(last.at))], ["Visits", vs.length + " in 30 days"],
+      ["Country", esc(last.cc || "unknown")], ["Latest visit", esc(admWhen(last.at))], ["First seen", esc(admWhen(firstV.at))], ["Visits", vs.length + " in 30 days"],
       ["Accounts", Object.keys(who).length ? Object.keys(who).map(function (k) { return admLink("u:" + k, who[k].email || k); }).join("<br>") : "not signed in"],
       ["Browser", esc(admUa(last.ua))], ["Language", esc([last.lang, last.tz].filter(Boolean).join(" · "))], host ? ["Came from", esc(host)] : null
     ]);
   }
   var f = D.fb.filter(function (x) { return String(x.id) === id; })[0];
   if (!f) return admKv([["", "Not in the list any more"]]);
-  var by = f.user_id && D.byId[f.user_id];
+  var by = f.user_id && D.byId[f.user_id], inf = f.info && typeof f.info === "object" ? f.info : null;
   return admKv([
     ["Kind", esc([f.kind, f.area, f.freq].filter(Boolean).join(" · "))], ["Status", esc(f.status || "new")],
     f.title ? ["Title", esc(f.title)] : null,
     f.a ? ["Text", esc(String(f.a).slice(0, 1200))] : null, f.b ? ["More", esc(String(f.b).slice(0, 800))] : null, f.c ? ["Also", esc(String(f.c).slice(0, 800))] : null,
     ["From", by ? admLink("u:" + f.user_id, by.email || "account") : "not signed in"], f.ip ? ["Address", admLink("ip:" + f.ip, f.ip)] : null,
-    f.contact ? ["Contact", esc(f.contact)] : null, f.info ? ["Device", esc(String(f.info).slice(0, 300))] : null, ["Sent", esc(admWhen(admTs(f.at)))]
+    f.contact ? ["Contact", esc(f.contact)] : null,
+    // the technical details the sender attached (an object: version, browser, window size, theme)
+    inf ? ["Device", esc(["version " + (inf.v || "?"), admUa(String(inf.ua || "")), inf.win ? "window " + inf.win : "", inf.theme ? inf.theme + " theme" : ""].filter(Boolean).join(" · "))] : f.info ? ["Device", esc(String(f.info).slice(0, 300))] : null,
+    ["Sent", esc(admWhen(admTs(f.at)))]
   ]);
 }
 function admHtml() {
-  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["fb", "Feedback"], ["in", "Logins"], ["ip", "Visitors"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div></div>";
+  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["seen", "Last seen"], ["ip", "Visitors"], ["fb", "Feedback"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div></div>";
   // ✓ (everything seen) and ↻ (refresh) sit in the bottom line, so the tabs have the whole width
-  var admBtns = '<span class="admb"><button data-a="admseen" title="Mark everything as seen">✓</button><button data-a="admload" title="Refresh">' + (ADM.busy ? '<span class="spin">↻</span>' : "↻") + "</button></span>";
+  var admBtns = '<span class="admb"><button data-a="admseen" title="Mark everything as seen">✓</button><button data-a="admload" title="Load the newest">' + (ADM.busy ? '<span class="spin">↻</span>' : "↻") + "</button></span>";
   if (!isAdmin()) return '<div class="adm"><p class="mut">Only for the site owner.</p></div>';
-  if (!ADM.d) { if (!ADM.busy && !ADM.err) setTimeout(function () { admLoad(); }, 0); return '<div class="adm">' + top + '<p class="mut sn">' + (ADM.err ? esc(ADM.err) : "Loading…") + '</p><div class="admf mut"><span></span>' + admBtns + "</div></div>"; }
+  if (!ADM.d) { if (!ADM.busy && !ADM.err) setTimeout(function () { admLoad(true); }, 0); return '<div class="adm">' + top + '<p class="mut sn">' + (ADM.err ? esc(ADM.err) : "Loading…") + '</p><div class="admf mut"><span></span>' + admBtns + "</div></div>"; }
   var D = admData(), N = D.n, S = ADMSEEN, body = "", L = 30;
   var fbRow = function (f) { return admRow(admTs(f.at) > S, '<b class="pill' + ((f.status || "new") === "new" ? " ac" : "") + '">' + esc(f.status || "new") + "</b> " + esc(String(f.title || f.a || "(no title)").slice(0, 120)), esc([f.kind, f.area].filter(Boolean).join(" · ")), admTs(f.at), "f:" + f.id); };
   var accRow = function (u) { return admRow(admTs(u.created) > S, esc(u.email || "(no email)"), u.confirmed ? "" : "not confirmed", admTs(u.created), "u:" + u.id); };
-  var inRow = function (u) { return admRow(admTs(u.last) > S, esc(u.email || ""), "", admTs(u.last), "u:" + u.id); };
-  var ipRow = function (x) { return admRow(x.at > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits")), x.at, "ip:" + x.ip); };
+  var seenRow = function (u) { return admRow(D.seen[u.id] > S, esc(u.email || ""), "", D.seen[u.id], "u:" + u.id); };
+  var ipRow = function (x) { return admRow(x.at > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits") + (Date.now() - x.first < 86400000 ? " · new" : "")), x.at, "ip:" + x.ip); };
   if (ADM.tab === "sum") {
     var ev = [];
     D.accts.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.created), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.created) > S, "New account: " + esc(u.email || ""), "", admTs(u.created), k); } }); });
     D.fb.slice(0, 10).forEach(function (f) { ev.push({ t: admTs(f.at), k: "f:" + f.id, h: function (k) { return admRow(admTs(f.at) > S, "Feedback: " + esc(String(f.title || f.a || "").slice(0, 90)), esc(f.kind || ""), admTs(f.at), k); } }); });
-    D.logins.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.last), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.last) > S, "Signed in: " + esc(u.email || ""), "", admTs(u.last), k); } }); });
-    D.ips.slice(0, 10).forEach(function (x) { ev.push({ t: x.at, k: "ip:" + x.ip, h: function (k) { return admRow(x.at > S, "New visitor: " + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at, k); } }); });
-    // the same account can be in the timeline twice (new and signed in): only the line you clicked opens
+    D.seenList.slice(0, 10).forEach(function (u) { ev.push({ t: D.seen[u.id], k: "u:" + u.id, h: function (k) { return admRow(D.seen[u.id] > S, "Active: " + esc(u.email || ""), "", D.seen[u.id], k); } }); });
+    D.ips.slice(0, 10).forEach(function (x) { var nw = Date.now() - x.first < 86400000; ev.push({ t: x.at, k: "ip:" + x.ip, h: function (k) { return admRow(x.at > S, (nw ? "New visitor: " : "Visitor: ") + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at, k); } }); });
+    // the same account can be in the timeline twice (new and active): only the line you clicked opens
     body = ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x, n) { return x.h(x.k + "#" + n); }).join("");
   }
   else if (ADM.tab === "acc") body = D.accts.slice(0, L).map(accRow).join("");
+  else if (ADM.tab === "seen") body = D.seenList.slice(0, L).map(seenRow).join("") || '<p class="mut sn">Nobody yet.</p>';
   else if (ADM.tab === "fb") body = D.fb.slice(0, L).map(fbRow).join("") || '<p class="mut sn">No feedback.</p>';
-  else if (ADM.tab === "in") body = D.logins.slice(0, L).map(inRow).join("");
   else body = D.ips.slice(0, L).map(ipRow).join("") || '<p class="mut sn">' + esc(ADM.d.visitsErr || "No visits.") + "</p>";
   // the numbers stay in view above the list, on every tab; one that is not zero (and is news) stands out
   // a number lights up only while it holds something you have not seen yet (✓ puts them all out); the count itself stays
   var day = 86400000, nowT = Date.now(), unseen = function (t, span) { return t > S && nowT - t < span; };
   var uNew1 = D.accts.some(function (u) { return unseen(admTs(u.created), day); }), uNew7 = D.accts.some(function (u) { return unseen(admTs(u.created), 7 * day); });
-  var uIp = D.ips.some(function (x) { return unseen(x.at, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
+  var uIp = D.ips.some(function (x) { return unseen(x.first, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
   var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses seen for the first time today"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
   var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
   return '<div class="adm">' + top + stats + admCalls() + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
@@ -6263,7 +6479,7 @@ function admAct(a, k) {
   if (a === "admtab") { ADM.tab = k; ADM.open = ""; admDraw(); }
   else if (a === "admload") admLoad(true);
   else if (a === "admseen") { ADMSEEN = Date.now(); save("sp_admseen", ADMSEEN); admDraw(); }
-  else if (a === "admopen") { putWidget("adm"); admLoad(); }
+  else if (a === "admopen") { putWidget("adm"); admLoad(true); }   // opening it always loads the newest
   else if (a === "admx") { ADM.open = ADM.open === k ? "" : k; admDraw(); }
 }
 
@@ -7382,6 +7598,7 @@ document.addEventListener("click", function (e) {
   if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
   if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
+  if (a === "swmin") { swMinToggle(k); return; }
   if (a === "boxtoggle") { setBoxOff(k, !b.checked); return; }
   if (a === "spfav") {
     if (ES_CUR && !$("modal").hidden) { spToggleFav(k); esOpen(ES_CUR); }
@@ -7439,6 +7656,7 @@ document.addEventListener("click", function (e) {
   if (a === "twchat") { twChat(k); return; }
   if (a === "nseen") { markSeen(k); render(); return; }
   if (/^twd/.test(a)) { twdAct(a, k); return; }
+  if (/^nwd/.test(a)) { nwdAct(a, k); return; }
   if (/^ytd/.test(a)) { ytdAct(a, k, b); return; }
   if (/^dk(auto|srch|q|clear|play|add|del|up|down)$/.test(a)) { dkAct(a, k); return; }
   if (/^ml(pick|new|cancel|del|save)$/.test(a)) { mlAct(a, k); return; }
@@ -7923,11 +8141,18 @@ function openHelp() {
     p("In the weather window you can also save more cities and switch between them.");
 
   html += h3("news", "News &amp; Telegram") +
+    h4("Discover news sites") +
+    p("The compass button at the top of the News box finds sources for you:") +
+    ul(["<b>News sites</b>: the main news sites of a country. Pick the country in the list beside the search field; <b>World (English)</b> has the big international ones.",
+      "<b>Google News</b>: Google News&rsquo;s top stories and sections (World, Business, Sport…) in that country&rsquo;s language, each gathered from many sites.",
+      "<b>Search</b>: type a site&rsquo;s name, a topic or a web address. It looks in a public directory of news feeds and shows each one&rsquo;s website, language, followers and when it last published (feeds quiet for a month are dimmed). A typed web address is offered as well: any news site can be followed through Google News.",
+      "Click a name (▸) to see its five newest headlines first, fetched just as the box will fetch them. <b>+</b> adds it, <b>✓</b> means you have it (click to remove).",
+      "What you add is a normal source: the reader, Languages shown and the merging of the same story from several sources work for it as for the others. If its language is one Languages shown leaves out, Discover says so."]) +
     h4("Adding and removing sources (" + S("News, Telegram &amp; Reddit") + ")") +
     ul(["<b>News</b>: give a name and a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website (<code>reuters.com</code>), and press Add. A feed address is the most reliable; with only a website the page finds the news through search services. Up to 15. Start the name with the outlet (&ldquo;BBC World&rdquo;): feeds whose names start the same count as one outlet.",
       "<b>Telegram</b>: type a channel name (<code>ClashReport</code>) or paste a t.me link, and press Add. Only public channels work.",
       "✕ removes a source; <b>Back to default sources</b> starts over. The list shows when each source last delivered, and why one was skipped.",
-      "The <b>Sources</b> button in each box hides a source for a while without deleting it."]) +
+      "The funnel button (<b>Sources</b>) at the top of each box hides a source for a while without deleting it. It is lit while a source is hidden."]) +
     h4("Reading the box") +
     ul(["A story you have not seen has an accent bar, and the count at the top counts them. Click the count to mark everything seen. Stories you opened are dimmed.",
       "The same story from several outlets is one row with a count, also when one report is in Swedish and another in English. Three or more outlets within 3 hours make it <b>hot</b>. A story stays where it was first reported; another source joining does not mark it new again.",
@@ -7958,7 +8183,7 @@ function openHelp() {
 
   html += h3("reddit", "Reddit") +
     ul(["Add or remove subreddits in " + S("News, Telegram &amp; Reddit") + " (up to 12).",
-      "In the box, choose <b>Best</b>, <b>Hot</b>, <b>New</b>, <b>Top</b> or <b>Rising</b>. <b>Sources</b> hides a subreddit for a while.",
+      "In the box, choose <b>Best</b>, <b>Hot</b>, <b>New</b>, <b>Top</b> or <b>Rising</b>. The funnel (<b>Sources</b>) hides a subreddit for a while.",
       "Point at a post for a preview; click it for the text, the links and the top comments. How many comments (3 to 20, or none) is set under <b>Top comments under a Reddit post</b>.",
       "Reddit gives a flat list without votes; the button in the window opens the whole discussion on Reddit."]) +
     p("Search, the reader and catching up work as in News &amp; Telegram.");
@@ -8218,6 +8443,7 @@ function openHelp() {
   html += h3("dock", "Docking") +
     h4("Notes, calendar and calculator") +
     ul(["Open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it stays open beside the boxes. ✕ turns it back into a window.",
+      "The arrow beside a docked panel&rsquo;s title folds it to just its title line when you are not using it; it stays docked in its place. Click the arrow again to unfold it. Folded panels stay folded on your other devices too.",
       "On a computer, drag a docked panel by its title up or down, or across to the other side (⇄ does that in one click). Drag it in toward the boxes and it attaches right next to them; drag it out and it sits at the screen&rsquo;s edge. The page stays centered as long as the panels fit beside it.",
       "In Edit mode each panel gets T&minus; T+ for its text size, its bottom edge sets its height and its inner edge the width of all panels on that side (double-click an edge to undo).",
       "A long list scrolls inside the panel with its buttons always in view.",
@@ -10859,10 +11085,10 @@ function wizPage(id) {
   }
   return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its ⠿ tab, click it for its buttons, or drag its edge to resize it. A phone keeps its own layout.</li>" +
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
-    "<li><b>Notes, to-dos and calendar</b> are icons in the menu box; timers, the stopwatch and a calculator are under <b>Tools</b> (the four squares). All of them can be docked at the side of the page, and on a computer dragged up, down or to the other side.</li>" +
+    "<li><b>Notes, to-dos and calendar</b> are icons in the menu box; timers, the stopwatch and a calculator are under <b>Tools</b> (the four squares). All of them can be docked at the side of the page, and on a computer dragged up, down or to the other side. The arrow beside a docked one&rsquo;s title folds it to one line.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
-    "<li><b>Discover:</b> the compass button at the top of the Twitch, YouTube, TV shows and Podcasts boxes finds new things: live streams, any video, channel or playlist, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
+    "<li><b>Discover:</b> the compass button at the top of the News, Twitch, YouTube, TV shows and Podcasts boxes finds new things: news sites by country and language, live streams, any video, channel or playlist, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
     "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
@@ -11559,6 +11785,7 @@ var KEY_ACTS = [
   ["ytdiscover", "y", "Discover on YouTube", function () { openYtDiscover(); }],
   ["tvdiscover", "v", "Discover TV shows", function () { openTvDiscover(); }],
   ["poddiscover", "p", "Discover podcasts", function () { openPodDiscover(); }],
+  ["newsdiscover", "h", "Discover news sites", function () { openNewsDiscover(); }],
   ["timer", "i", "New timer", function () { audio(); openClock("t"); }],
   ["stopwatch", "o", "Start a stopwatch", function () { audio(); startStopwatch(); }],
   ["undock", "u", "Close the docked players", function () { DOCK.slice().forEach(function (d) { undock(d.uid); }); }],

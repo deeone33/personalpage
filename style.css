@@ -1398,18 +1398,18 @@ body.noshadow #srchAns{box-shadow:none}
 #grid .card:not([data-id^=embed])>.th>h3{flex:none;min-width:0}
 #grid .card:not([data-id^=embed])>.th>.hc{flex:none;flex-wrap:nowrap;margin-left:auto}
 #grid .th .hc .ib.sm{height:22px;box-sizing:border-box;justify-content:center;line-height:1;flex:none}
-#grid .th .hc .ib.sm:not([data-a=filtmenu]){width:24px;padding:2px 0}
+#grid .th .hc .ib.sm{width:24px;padding:2px 0}
 #grid .th .hc select{height:22px;flex:none}
 #grid .th .hc .cut{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;padding-right:4px;min-width:0}
 #grid .th .hc select.cut{padding-left:4px;padding-right:0}
 #grid .th.fitp .hc .pill .nwl{display:none}
 #grid .th.fitp .hc .pill{padding-left:6px;padding-right:6px}
 #grid .th.fit2 .hc{gap:3px}
-#grid .th.fit2 .hc .ib.sm:not([data-a=filtmenu]){width:20px}
+#grid .th.fit2 .hc .ib.sm{width:20px}
 #grid .th>h3.cut{overflow:hidden}
 #grid .th .hc .pill{height:22px;box-sizing:border-box;display:inline-flex;align-items:center;flex:none;white-space:nowrap}
 #grid .th.fit3 .hc{gap:2px}
-#grid .th.fit3 .hc .ib.sm:not([data-a=filtmenu]){width:18px}
+#grid .th.fit3 .hc .ib.sm{width:18px}
 /* The full text of a news article in the reader: it takes the place of the short summary */
 .rdart p{margin:10px 0 0;line-height:1.55}
 .rdart h4{margin:16px 0 0;font-size:15px}
@@ -1636,6 +1636,14 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .swgrip{font-style:normal;color:var(--mut);opacity:.55;font-size:12px}
 .swh:hover .swgrip{opacity:1;color:var(--ac)}
 .swh span{align-items:center}
+/* Fold a docked panel to its title line: the arrow right after the title (down = open, right = folded) */
+.swt{flex:0 1 auto}
+.swh .swmn{flex:none;margin-right:auto;display:flex;align-items:center;padding:3px 5px;border-radius:6px}
+.swh .swmn svg{transition:transform .15s}
+.sw.swmin .swmn svg{transform:rotate(-90deg)}
+.sw.swmin .swh{margin-bottom:0}
+.sw.swmin{padding-bottom:10px}
+.sw .swb[hidden]{display:none}
 .swfsn{font-style:normal;font-size:11px;color:var(--mut);min-width:32px;text-align:center}
 .sw.swed{outline:1px dashed var(--ac);outline-offset:2px}
 .swg{position:absolute;z-index:2}
@@ -1894,6 +1902,17 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .ytdm.pdrm{padding-left:20px}
 .pddt{margin:8px 0 6px;display:flex;flex-wrap:wrap;gap:6px}
 .twd .pdhd{margin-top:6px}
+/* News Discover: ▸ name opens its newest headlines under the row */
+.nwdar{display:inline-block;width:13px;color:var(--mut);font-size:11px}
+.nwdr .lnk+.ytdm{padding-left:13px}
+.nwdpv{margin:0 0 6px 13px;padding:4px 0 4px 10px;border-left:2px solid var(--line);font-size:13px}
+.nwdh{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+.nwdh a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit;text-decoration:none}
+.nwdh a:hover{color:var(--ac);text-decoration:underline}
+.nwdh small{flex:none}
+.nwdpv .sn{margin:4px 0 0}
+.nwdold{opacity:.55}
+.nwdmsg{margin:8px 0 0;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--ac) 12%,transparent)}
 .twd .tvwin{margin-top:6px}
 .twd .pdds:not(.open){-webkit-line-clamp:2}
 .pdmore{font-size:12px;margin-top:2px}
