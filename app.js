@@ -1,4 +1,4 @@
-var VERSION = "0.21.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.22.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4307,53 +4307,74 @@ function fetchYT() {
     render();
   }).catch(function (e) { ytBusy = false; YTERR = String((e && e.message) || e); render(); });
 }
-function openYT(id) {
-  var d = YTDS[id];
-  openModal("YouTube", (d ? '<p class="mut sn">' + esc(d.t) + (d.c ? " · " + esc(d.c) : "") + "</p>" : "") + '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + '">Open on YouTube</a> <button data-a="dock" data-k="v:' + esc(id) + '">' + DOCK_LAB + '</button> <button class="dkr" data-a="dockr" data-k="v:' + esc(id) + '">Dock right</button> ' + laterBtn("v:" + id) + ' <button data-a="ytdopen">Discover</button></p>');
+// list: a playlist this video is played from (the player then goes on through it, and docking takes the rest along)
+function openYT(id, list) {
+  var d = YTDS[id], k = "v:" + id + (list ? "|" + list : "");
+  openModal("YouTube", (d ? '<p class="mut sn">' + esc(d.t) + (d.c ? " · " + esc(d.c) : "") + "</p>" : "") + '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + "?autoplay=1" + (list ? "&list=" + encodeURIComponent(list) : "") + '"></iframe></div><p><a class="btn" target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=' + encodeURIComponent(id) + (list ? "&list=" + encodeURIComponent(list) : "") + '">Open on YouTube</a> <button data-a="dock" data-k="' + esc(k) + '">' + DOCK_LAB + '</button> <button class="dkr" data-a="dockr" data-k="' + esc(k) + '">Dock right</button> ' + laterBtn("v:" + id) + ' <button data-a="ytdopen">Discover</button></p>');
 }
 
-// ---- YouTube Discover: any video or channel, also ones you are not subscribed to (the compass button at the top of the YouTube box) ----
-// Works like Twitch Discover: the most viewed of today and this week, what is live, topics, a search for a video or a
-// channel, and a channel's newest videos. Read through our function from YouTube's own search (no key, kept 10 minutes);
-// nothing is asked before the window is opened. ☆ puts a channel in your YouTube box, next to your subscriptions.
+// ---- YouTube Discover: any video, channel or playlist, also ones you are not subscribed to (the compass button at the top of the YouTube box) ----
+// Works like Twitch Discover: the most viewed of today and this week, what is live, topics, a search (channels, playlists
+// and videos), a channel's newest videos and its playlists, and a playlist's videos. Read through our function from
+// YouTube's own search (no key, kept 10 minutes); nothing is asked before the window is opened. ☆ puts a channel in your
+// YouTube box, next to your subscriptions; ☆ on a playlist keeps it under "★ Saved" (P.ytpl). A pasted link plays.
+// YTD.view is the channel or playlist being looked at; YTD.stack the views before it, for ← Back.
 var YTD_T = "Discover on YouTube", YTDS = {};
-var YTD = { cat: "top", q: "", ch: "", chName: "", list: [], cont: "", busy: false, err: "", n: 0, all: false };
+var YTD = { cat: "top", q: "", view: null, stack: [], list: [], cont: "", busy: false, err: "", n: 0, all: false };
 // [id, label, what is searched for]; the first three are YouTube's own lists, the rest are topics (most viewed this week)
 var YTD_CATS = [["top", "Top today"], ["week", "Top this week"], ["live", "Live now"], ["music", "Music", "music"], ["gaming", "Gaming", "gaming"], ["news", "News", "news"],
   ["sports", "Sports", "sports highlights"], ["pods", "Podcasts", "podcast"], ["comedy", "Comedy", "comedy"], ["tech", "Tech", "tech review"], ["science", "Science", "science"],
   ["trailers", "Trailers", "official trailer"], ["food", "Food", "cooking"], ["travel", "Travel", "travel"], ["fitness", "Fitness", "workout"], ["cars", "Cars", "cars"], ["learn", "Learning", "explained"]];
 function ytdBtn() {
-  return '<button class="ib sm twdb" data-a="ytdopen" title="Discover: any video or channel, also ones you are not subscribed to" aria-label="Discover on YouTube"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
+  return '<button class="ib sm twdb" data-a="ytdopen" title="Discover: any video, channel or playlist, also ones you are not subscribed to" aria-label="Discover on YouTube"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg></button>';
 }
 function ytdOpen() { return !$("modal").hidden && $("mTitle").textContent === YTD_T; }
 function ytdMine(cid) { return !!(cid && P.yt && P.yt.ch && P.yt.ch.some(function (c) { return c.id === cid; })); }
+function ytPls() { return Array.isArray(P.ytpl) ? P.ytpl.filter(function (x) { return x && x.id; }) : []; }
+function ytPlSaved(id) { return ytPls().some(function (x) { return x.id === id; }); }
 function ytdStar(cid, name) {
   if (!cid) return "";
   var on = ytdMine(cid);
   return '<button class="twdf' + (on ? " on" : "") + '" data-a="ytdfav" data-k="' + esc(cid) + '" data-n="' + esc(name || "") + '" title="' + (on ? "In your YouTube box. Click to take it out" : "Put this channel in your YouTube box") + '" aria-label="' + (on ? "Take out of your YouTube box" : "Put in your YouTube box") + '">' + (on ? "★" : "☆") + "</button>";
 }
+function ytdPlStar(x) {
+  var on = ytPlSaved(x.id);
+  return '<button class="twdf' + (on ? " on" : "") + '" data-a="ytdplfav" data-k="' + esc(x.id) + '" data-n="' + esc(x.t || "") + '" data-c="' + esc(x.c || "") + '" data-m="' + esc(x.n || "") + '" title="' + (on ? "Saved. Click to forget it" : "Save this playlist (★ Saved in Discover)") + '" aria-label="' + (on ? "Forget this playlist" : "Save this playlist") + '">' + (on ? "★" : "☆") + "</button>";
+}
 function ytdRow(x) {
+  var v = YTD.view || {};
   if (x.k === "c") return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdch" data-k="' + esc(x.id) + '" data-n="' + esc(x.t) + '">' + esc(x.t) + '</button><small class="ytdm">' + esc([x.h, x.subs].filter(Boolean).join(" · ") || "Channel") + '</small></span><span class="r">' + ytdStar(x.id, x.t) + "</span></div>";
+  if (x.k === "p") {
+    var pc = x.c && !v.ch ? (x.cid ? '<button class="ytdch" data-a="ytdch" data-k="' + esc(x.cid) + '" data-n="' + esc(x.c) + '">' + esc(x.c) + "</button>" : esc(x.c)) : "";
+    return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdpl" data-k="' + esc(x.id) + '" data-n="' + esc(x.t) + '" data-c="' + esc(x.c || "") + '" data-m="' + esc(x.n || "") + '">' + esc(x.t) + '</button><small class="ytdm">' + ["Playlist", pc, esc(x.n || "")].filter(Boolean).join(" · ") + '</small></span><span class="r">' + ytdPlStar(x) + "</span></div>";
+  }
   // the second line: the channel (click it for its videos), then when and how long
-  var ch = x.c && !YTD.ch ? (x.cid ? '<button class="ytdch" data-a="ytdch" data-k="' + esc(x.cid) + '" data-n="' + esc(x.c) + '">' + esc(x.c) + "</button>" : esc(x.c)) : "";
+  var ch = x.c && !v.ch ? (x.cid ? '<button class="ytdch" data-a="ytdch" data-k="' + esc(x.cid) + '" data-n="' + esc(x.c) + '">' + esc(x.c) + "</button>" : esc(x.c)) : "";
   var meta = [ch].concat([x.live ? "live now" : x.ago, x.len].filter(Boolean).map(esc)).filter(Boolean).join(" · ");
   // live: "2,283 watching" comes as a full number; shown short like the Twitch box (2.3k)
   var n = x.live ? parseInt(String(x.v || "").replace(/[^\d]/g, ""), 10) : NaN, vv = !isNaN(n) ? (n >= 1000000 ? (n / 1000000).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n)) : x.v || "";
-  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdwatch" data-k="' + esc(x.id) + '">' + (x.live ? '<span class="dot"></span>' : "") + esc(x.t) + '</button><small class="ytdm">' + meta + '</small></span><span class="r"><span class="mut">' + esc(vv) + "</span>" + (YTD.ch ? "" : ytdStar(x.cid, x.c)) + "</span></div>";
+  return '<div class="row twdr ytdr"><span><button class="lnk" data-a="ytdwatch" data-k="' + esc(x.id + (v.pl ? "|" + v.pl : "")) + '">' + (x.live ? '<span class="dot"></span>' : "") + esc(x.t) + '</button><small class="ytdm">' + meta + '</small></span><span class="r"><span class="mut">' + esc(vv) + "</span>" + (v.ch || v.pl ? "" : ytdStar(x.cid, x.c)) + "</span></div>";
 }
 function ytdCatsHtml() {
-  return YTD_CATS.map(function (c) { return '<button class="twdc' + (!YTD.q && !YTD.ch && YTD.cat === c[0] ? " on" : "") + '" data-a="ytdcat" data-k="' + c[0] + '">' + esc(c[1]) + "</button>"; }).join("");
+  var cats = (ytPls().length ? [["saved", "★ Saved"]] : []).concat(YTD_CATS);
+  return cats.map(function (c) { return '<button class="twdc' + (!YTD.q && !YTD.view && YTD.cat === c[0] ? " on" : "") + '" data-a="ytdcat" data-k="' + c[0] + '">' + esc(c[1]) + "</button>"; }).join("");
 }
 function ytdListHtml() {
-  var cat = YTD_CATS.filter(function (c) { return c[0] === YTD.cat; })[0] || YTD_CATS[0];
-  var head = YTD.ch ? '<button class="lnk2 ytdbk" data-a="ytdback">&larr; Back</button><h3 class="ytdh"><span>' + esc(YTD.chName || "Channel") + "</span>" + ytdStar(YTD.ch, YTD.chName) + "</h3>"
-    : "<h3>" + (YTD.q ? "Results for “" + esc(YTD.q) + "”" : esc(cat[1]) + (cat[2] ? ' <small class="mut">most viewed this week</small>' : "")) + "</h3>";
+  var v = YTD.view, cat = YTD_CATS.filter(function (c) { return c[0] === YTD.cat; })[0] || YTD_CATS[0], head;
+  if (v && v.ch) head = '<button class="lnk2 ytdbk" data-a="ytdback">&larr; Back</button><h3 class="ytdh"><span>' + esc(v.name || "Channel") + "</span>" + ytdStar(v.ch, v.name) + "</h3>" +
+    '<div class="ytdtabs"><button class="twdc' + (v.tab !== "p" ? " on" : "") + '" data-a="ytdtab" data-k="v">Videos</button><button class="twdc' + (v.tab === "p" ? " on" : "") + '" data-a="ytdtab" data-k="p">Playlists</button></div>';
+  else if (v && v.pl) {
+    var first = YTD.list.filter(function (x) { return x.k === "v"; })[0];
+    head = '<button class="lnk2 ytdbk" data-a="ytdback">&larr; Back</button><h3 class="ytdh"><span>' + esc(v.name || "Playlist") + "</span>" + ytdPlStar({ id: v.pl, t: v.name, c: v.c, n: v.n }) + "</h3>" +
+      (first ? '<p class="tools ytdplt"><button class="pri" data-a="ytdwatch" data-k="' + esc(first.id + "|" + v.pl) + '">▶ Play all</button><button data-a="dock" data-k="' + esc("v:" + first.id + "|" + v.pl) + '">' + DOCK_LAB + "</button></p>" : "");
+  } else if (YTD.cat === "saved" && !YTD.q) return "<h3>Saved playlists</h3>" + (ytPls().length ? ytPls().map(function (x) { return ytdRow({ k: "p", id: x.id, t: x.t, c: x.c, n: x.n }); }).join("") : '<p class="mut sn">Nothing saved. ☆ on a playlist keeps it here.</p>');
+  else head = "<h3>" + (YTD.q ? "Results for “" + esc(YTD.q) + "”" : esc(cat[1]) + (cat[2] ? ' <small class="mut">most viewed this week</small>' : "")) + "</h3>";
   return head + YTD.list.map(ytdRow).join("") +
-    (YTD.busy ? '<p class="mut sn">Loading…</p>' : YTD.err ? '<p class="mut sn">YouTube did not answer: ' + esc(YTD.err) + "</p>" : !YTD.list.length ? '<p class="mut sn">' + (YTD.q ? "Nothing found." : YTD.ch ? "No videos found." : "Nothing here right now.") + "</p>" : YTD.cont && YTD.list.length < 200 ? '<button class="sitemore" data-a="ytdmore">Show 20 more</button>' : "");
+    (YTD.busy ? '<p class="mut sn">Loading…</p>' : YTD.err ? '<p class="mut sn">YouTube did not answer: ' + esc(YTD.err) + "</p>" : !YTD.list.length ? '<p class="mut sn">' + (YTD.q ? "Nothing found." : v && v.tab === "p" ? "This channel has no public playlists." : v ? "No videos found." : "Nothing here right now.") + "</p>" : YTD.cont && YTD.list.length < 200 ? '<button class="sitemore" data-a="ytdmore">Show 20 more</button>' : "");
 }
 function ytdHtml() {
-  if (PREVIEW || !sb || !USER) return '<div class="twd"><p>Discover finds any video or channel on YouTube, also ones you are not subscribed to: the most viewed of today and this week, what is live, topics, and a search. Click a video to watch it here; ☆ puts its channel in your YouTube box.</p>' + (PREVIEW ? previewNote() : "<p class=\"mut sn\">Sign in to use it.</p>") + "</div>";
-  return '<div class="twd"><div class="twdtop"><input type="search" id="ytdQ" placeholder="Search YouTube…" aria-label="Search a video or a channel" value="' + esc(YTD.q) + '"></div><div id="ytdCats" class="twdcats' + (YTD.all ? " all" : "") + '">' + ytdCatsHtml() + '</div><button class="lnk2 twdall" id="ytdAll" data-a="ytdall">' + (YTD.all ? "Fewer topics ▴" : "All topics ▾") + '</button><div id="ytdList">' + ytdListHtml() + "</div></div>";
+  if (PREVIEW || !sb || !USER) return '<div class="twd"><p>Discover finds any video, channel or playlist on YouTube, also ones you are not subscribed to: the most viewed of today and this week, what is live, topics, and a search. Click a video to watch it here; ☆ puts its channel in your YouTube box.</p>' + (PREVIEW ? previewNote() : "<p class=\"mut sn\">Sign in to use it.</p>") + "</div>";
+  return '<div class="twd"><div class="twdtop"><input type="search" id="ytdQ" placeholder="Search YouTube or paste a link…" aria-label="Search YouTube or paste a link" value="' + esc(YTD.q) + '"></div><div id="ytdCats" class="twdcats' + (YTD.all ? " all" : "") + '">' + ytdCatsHtml() + '</div><button class="lnk2 twdall" id="ytdAll" data-a="ytdall">' + (YTD.all ? "Fewer topics ▴" : "All topics ▾") + '</button><div id="ytdList">' + ytdListHtml() + "</div></div>";
 }
 function ytdDraw() {
   if (!ytdOpen() || !$("ytdList")) return;
@@ -4361,21 +4382,20 @@ function ytdDraw() {
   $("ytdAll").textContent = YTD.all ? "Fewer topics ▴" : "All topics ▾";
 }
 function ytdLoad(reset) {
-  var n = ++YTD.n, cat = YTD_CATS.filter(function (c) { return c[0] === YTD.cat; })[0] || YTD_CATS[0];
+  var n = ++YTD.n, v = YTD.view, cat = YTD_CATS.filter(function (c) { return c[0] === YTD.cat; })[0] || YTD_CATS[0];
   if (reset) { YTD.list = []; YTD.cont = ""; }
+  if (!v && !YTD.q && YTD.cat === "saved") { YTD.busy = false; ytdDraw(); return; }   // saved playlists: nothing to ask
   YTD.busy = true; YTD.err = ""; ytdDraw();
-  var b = YTD.ch ? { m: "ch", ch: YTD.ch } : YTD.q ? { m: "q", q: YTD.q } : cat[2] ? { m: "topic", q: cat[2] } : { m: cat[0] };
+  var b = v && v.pl ? { m: "pl", id: v.pl } : v && v.ch ? { m: v.tab === "p" ? "chpl" : "ch", ch: v.ch } : YTD.q ? { m: "q", q: YTD.q } : cat[2] ? { m: "topic", q: cat[2] } : { m: cat[0] };
   if (!reset && YTD.cont) b.cont = YTD.cont;
   var fail = function (e) { if (n !== YTD.n) return; YTD.busy = false; YTD.err = String(e || "no answer").slice(0, 120); ytdDraw(); };
-  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { ytd: b } }).then(function (r) {
+  ytdAsk(b).then(function (d) {
     if (n !== YTD.n) return;
-    var d = r.data && r.data.ytd;
-    if (r.error || !d || d._err) { fail((d && d._err) || (r.error && r.error.message) || (r.data && r.data._err)); return; }
     var have = {};
     YTD.list.forEach(function (x) { have[x.k + x.id] = 1; });
     YTD.list = YTD.list.concat((d.items || []).filter(function (x) { return x && x.id && !have[x.k + x.id]; }));
     YTD.list.forEach(function (x) { if (x.k === "v") YTDS[x.id] = x; });
-    if (YTD.ch && d.name) YTD.chName = d.name;
+    if (v && d.name) v.name = d.name;
     YTD.cont = d.cont || ""; YTD.busy = false; ytdDraw();
   }).catch(function (e) { fail(e && e.message); });
 }
@@ -4384,14 +4404,29 @@ function openYtDiscover() {
   if (PREVIEW || !sb || !USER) return;
   ytdLoad(true);
 }
+// a channel or playlist on top of what is shown now (← Back returns to it)
+function ytdGo(view) {
+  YTD.stack.push({ view: YTD.view, q: YTD.q, cat: YTD.cat });
+  if (YTD.stack.length > 20) YTD.stack.shift();
+  YTD.view = view; ytdLoad(true);
+  var m = document.querySelector("#modal .mbox"); if (m) m.scrollTop = 0;
+}
 function ytdAct(a, k, el) {
   if (a === "ytdopen") { openYtDiscover(); return; }
   if (a === "ytdmore") { ytdLoad(false); return; }
   if (a === "ytdall") { YTD.all = !YTD.all; ytdDraw(); return; }
-  if (a === "ytdcat") { YTD.cat = k; YTD.q = ""; YTD.ch = ""; if ($("ytdQ")) $("ytdQ").value = ""; ytdLoad(true); return; }
-  if (a === "ytdch") { if (!k) return; YTD.ch = k; YTD.chName = (el && el.dataset.n) || ""; ytdLoad(true); var m = $("mBody"); if (m) m.scrollTop = 0; return; }
-  if (a === "ytdback") { YTD.ch = ""; YTD.chName = ""; ytdLoad(true); return; }
-  if (a === "ytdwatch") { openYT(k); return; }
+  if (a === "ytdcat") { YTD.cat = k; YTD.q = ""; YTD.view = null; YTD.stack = []; if ($("ytdQ")) $("ytdQ").value = ""; ytdLoad(true); return; }
+  if (a === "ytdch") { if (k) ytdGo({ ch: k, name: (el && el.dataset.n) || "", tab: "v" }); return; }
+  if (a === "ytdpl") { if (k) ytdGo({ pl: k, name: (el && el.dataset.n) || "", c: (el && el.dataset.c) || "", n: (el && el.dataset.m) || "" }); return; }
+  if (a === "ytdtab") { if (YTD.view && YTD.view.ch) { YTD.view.tab = k === "p" ? "p" : "v"; ytdLoad(true); } return; }
+  if (a === "ytdback") { var s = YTD.stack.pop(); YTD.view = s ? s.view : null; if (s) { YTD.q = s.q; YTD.cat = s.cat; if ($("ytdQ")) $("ytdQ").value = s.q; } ytdLoad(true); return; }
+  if (a === "ytdwatch") { var p = String(k).split("|"); openYT(p[0], p[1] || ""); return; }
+  if (a === "ytdplfav") {
+    var L = ytPls();
+    if (ytPlSaved(k)) L = L.filter(function (x) { return x.id !== k; });
+    else L.unshift({ id: k, t: ((el && el.dataset.n) || "Playlist").slice(0, 120), c: ((el && el.dataset.c) || "").slice(0, 80), n: ((el && el.dataset.m) || "").slice(0, 30) });
+    P.ytpl = L.slice(0, 50); persist(); ytdDraw(); return;
+  }
   if (a === "ytdfav") {
     P.yt = P.yt && Array.isArray(P.yt.ch) ? P.yt : { ch: [] };
     if (ytdMine(k)) P.yt.ch = P.yt.ch.filter(function (c) { return c.id !== k; });
@@ -4401,7 +4436,15 @@ function ytdAct(a, k, el) {
 }
 document.addEventListener("input", function (e) {
   if (e.target.id !== "ytdQ") return;
-  debounced("ytdQ", function () { if (!$("ytdQ")) return; var v = $("ytdQ").value.replace(/\s+/g, " ").trim().slice(0, 80); if (v.length < 2) v = ""; if (v === YTD.q) return; YTD.q = v; YTD.ch = ""; ytdLoad(true); });
+  debounced("ytdQ", function () {
+    if (!$("ytdQ")) return;
+    var raw = $("ytdQ").value.trim(), link = ytLink(raw);
+    // a pasted link: a playlist opens here, a video plays
+    if (link) { $("ytdQ").value = ""; if (link.list && !link.v) ytdGo({ pl: link.list, name: "" }); else openYT(link.v, link.list); return; }
+    var v = raw.replace(/\s+/g, " ").slice(0, 80); if (v.length < 2) v = "";
+    if (v === YTD.q && !YTD.view) return;
+    YTD.q = v; YTD.view = null; YTD.stack = []; ytdLoad(true);
+  });
 });
 document.addEventListener("change", function (e) {
   var ds = e.target.dataset && e.target.dataset.s;
@@ -6310,20 +6353,30 @@ function syncDock() {
   setTimeout(packGrid, 0);   // the page just got wider or narrower
 }
 function dockAdd(k, side) {
-  var kind = k.charAt(0), id = k.slice(2);
-  if (DOCK.some(function (d) { return d.kind === kind && d.id === id; })) { closeModal(); return; }
+  // "t:login" a Twitch stream, "v:videoId" a YouTube video, "v:videoId|listId" a video of a playlist (the rest goes in Up next)
+  var kind = k.charAt(0), id = k.slice(2), list = "";
+  if (kind === "v" && id.indexOf("|") > 0) { list = id.split("|")[1]; id = id.split("|")[0]; }
+  if (DOCK.some(function (d) { return d.kind === kind && (d.id === id || d.cur === id); })) { closeModal(); return; }
   if (DOCK.length >= 3) { alert("The dock is full (3 players). Close one first."); return; }
   var d = { kind: kind, id: id, uid: ++dockUid, side: side === "r" ? "r" : "l" };
+  if (kind === "v") { d.cur = id; d.q = []; d.hist = [id]; d.pop = ""; }
   DOCK.push(d);
-  var src = kind === "t" ? twEmbedSrc(id)
-    : "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1";
+  var src = kind === "t" ? twEmbedSrc(id) : ytSrc(id);
   var w = document.createElement("div");
-  w.className = "dk"; w.id = "dk" + d.uid;
-  // Just the player. Chat and close buttons appear in its top-right corner when the mouse is over it.
-  w.innerHTML = '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div><div class="dkc">' +
-    (kind === "t" ? '<button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button>' : "") +
-    '<button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
+  w.className = "dk" + (kind === "v" ? " dkyt" : ""); w.id = "dk" + d.uid;
+  // Twitch: just the player, with Chat and close in its top-right corner when the mouse is over it.
+  // YouTube: a thin bar above it (search, Up next, Autoplay, close) and a list that opens over the video.
+  w.innerHTML = (kind === "v" ? dkBarHtml(d) + '<div class="dkpop" hidden></div>' : "") +
+    '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div>' +
+    (kind === "t" ? '<div class="dkc"><button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button><button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>' : "");
   $(d.side === "r" ? "dockPR" : "dockP").appendChild(w);
+  if (kind === "v") {
+    var f = w.querySelector(".tw iframe");
+    f.addEventListener("load", function () { d.ready = false; ytHello(d); });
+    var nowIt = YTDS[id] || (YTV || []).filter(function (v) { return v.id === id; }).map(function (v) { return { id: v.id, t: v.t, c: v.n }; })[0];
+    if (nowIt) { d.now = { id: id, t: nowIt.t, c: nowIt.c || "" }; dkTitle(d); }
+    if (list) dkLoadList(d, list, false, id);
+  }
   if (kind === "t" && P.dockChat) dockChat(d.uid);
   renderSide(); closeModal();   // (the docked panels on that side now follow the video's width)
 }
@@ -6373,10 +6426,186 @@ document.addEventListener("dblclick", function (e) {
   persist(); Array.prototype.forEach.call(document.querySelectorAll(".dkchat"), chatSize);
 });
 function undock(uid) {
+  var d = dkOf(uid); if (d) clearInterval(d.hello);
   DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
   var n = $("dk" + uid); if (n) n.remove();
   renderSide();
 }
+
+
+// ---- YouTube in the dock: a search, an Up next queue and Autoplay, in one thin bar above the video ----
+// The player is driven through YouTube's own message protocol (the one its IFrame API uses, so no extra script is
+// loaded): the page tells the frame it is listening, hears when a video ends, and tells it which video to play next.
+// When a video ends: the first one in Up next plays; with an empty queue and Autoplay on (P.ytAuto, on unless switched
+// off), the first of YouTube's own "up next" suggestions that has not played in this strip yet. A playlist fills Up next.
+var YTO = "https://www.youtube-nocookie.com";
+function ytAuto() { return P.ytAuto !== false; }
+function ytSrc(id, list) { return YTO + "/embed/" + encodeURIComponent(id) + "?autoplay=1&mute=1&enablejsapi=1&origin=" + encodeURIComponent(location.origin) + (list ? "&list=" + encodeURIComponent(list) : ""); }
+function dkOf(uid) { return DOCK.filter(function (x) { return x.uid === +uid; })[0]; }
+function dkFrame(d) { var w = $("dk" + d.uid); return w && w.querySelector(".tw iframe"); }
+function ytPost(d, msg) { var f = dkFrame(d); try { if (f) f.contentWindow.postMessage(JSON.stringify(msg), YTO); } catch (e) {} }
+// say "listening" until the player answers (it is not ready the moment the frame loads)
+function ytHello(d) {
+  var n = 0;
+  clearInterval(d.hello);
+  d.hello = setInterval(function () { if (d.ready || ++n > 40 || !dkOf(d.uid)) { clearInterval(d.hello); return; } ytPost(d, { event: "listening", id: "dk" + d.uid, channel: "widget" }); }, 250);
+}
+window.addEventListener("message", function (e) {
+  if (e.origin !== YTO) return;
+  var m; try { m = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch (x) { return; }
+  if (!m || typeof m !== "object") return;
+  var d = DOCK.filter(function (x) { var f = x.kind === "v" && dkFrame(x); return f && f.contentWindow === e.source; })[0];
+  if (!d) return;
+  if (m.event === "onReady" || m.event === "initialDelivery" || m.event === "infoDelivery") d.ready = true;
+  var info = m.info && typeof m.info === "object" ? m.info : {}, vd = info.videoData;
+  if (vd && vd.video_id && vd.title) { d.now = { id: vd.video_id, t: String(vd.title).slice(0, 200), c: String(vd.author || "").slice(0, 80) }; d.cur = vd.video_id; dkTitle(d); }
+  var st = m.event === "onStateChange" ? m.info : info.playerState;
+  if (st === 0 && d.endedFor !== d.cur) { d.endedFor = d.cur; ytEnded(d); }
+});
+function dkTitle(d) { var q = $("dk" + d.uid) && $("dk" + d.uid).querySelector(".dkq"); if (q && d.now) q.title = "Playing: " + d.now.t + (d.now.c ? " · " + d.now.c : ""); }
+function ytPlay(d, it) {
+  if (!d || !it || !it.id) return;
+  d.cur = it.id; d.endedFor = ""; d.now = it.t ? { id: it.id, t: it.t, c: it.c || "" } : null;
+  d.hist = (d.hist || []).concat(it.id).slice(-60);
+  if (d.ready) ytPost(d, { event: "command", func: "loadVideoById", args: [it.id] });
+  else { var f = dkFrame(d); if (f) { f.src = ytSrc(it.id); ytHello(d); } }   // the player never answered: load the frame anew
+  dkTitle(d); dkPopDraw(d);
+}
+function ytEnded(d) {
+  if (d.q && d.q.length) { ytPlay(d, d.q.shift()); dkBar(d); return; }
+  if (!ytAuto() || !sb || !USER) return;
+  ytdAsk({ m: "next", id: d.cur }).then(function (x) {
+    var it = (x.items || []).filter(function (v) { return (d.hist || []).indexOf(v.id) < 0; })[0];
+    if (it && dkOf(d.uid) && d.endedFor === d.cur) ytPlay(d, it);
+  }).catch(function () {});
+}
+// one question to the YouTube part of our function (Discover uses the same)
+function ytdAsk(b) {
+  return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { ytd: b } }).then(function (r) {
+    var x = r.data && r.data.ytd;
+    if (r.error || !x || x._err) throw new Error((x && x._err) || (r.error && r.error.message) || "no answer");
+    return x;
+  });
+}
+// a pasted YouTube link: { v: video, list: playlist }
+function ytLink(s) {
+  s = String(s || "").trim();
+  if (!/^(https?:\/\/)?([\w-]+\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(s)) return null;
+  var v = (s.match(/[?&]v=([\w-]{11})/) || s.match(/youtu\.be\/([\w-]{11})/) || s.match(/\/(?:embed|shorts|live)\/([\w-]{11})/) || [])[1] || "";
+  var list = (s.match(/[?&]list=([\w-]{10,64})/) || [])[1] || "";
+  return v || list ? { v: v, list: list } : null;
+}
+// a playlist into Up next (and its first video playing, when asked)
+function dkLoadList(d, list, play, from) {
+  if (!sb || !USER) return;
+  ytdAsk({ m: "pl", id: list }).then(function (x) {
+    var vids = (x.items || []).filter(function (v) { return v.k === "v" && !v.live; });
+    if (from) { var i = vids.map(function (v) { return v.id; }).indexOf(from); if (i >= 0) vids = vids.slice(i + 1); }
+    // played: the playlist takes the place of Up next; added (+): it goes after what is already there
+    if (play && vids.length) { ytPlay(d, vids.shift()); d.q = []; }
+    d.q = (d.q || []).concat(vids).slice(0, 200);
+    dkBar(d); dkPopDraw(d);
+  }).catch(function () {});
+}
+function dkBarHtml(d) {
+  var n = (d.q || []).length, on = ytAuto();
+  return '<div class="dkbar"><button class="ib sm dks" data-a="dksrch" data-k="' + d.uid + '" title="Search YouTube" aria-label="Search YouTube">⌕</button>' +
+    '<input type="search" class="dkq" data-dk="' + d.uid + '" placeholder="' + (sb && USER ? "Search YouTube or paste a link…" : "Sign in to search") + '"' + (sb && USER ? "" : " disabled") + ' aria-label="Search YouTube" autocomplete="off">' +
+    '<button class="ib sm dkqb' + (d.pop === "q" ? " on" : "") + '" data-a="dkq" data-k="' + d.uid + '" title="Up next" aria-label="Up next: ' + n + '">≡' + (n ? "<b>" + n + "</b>" : "") + "</button>" +
+    '<button class="ib sm dka' + (on ? " on" : "") + '" data-a="dkauto" title="Autoplay ' + (on ? "on: the next video starts by itself" : "off") + '" aria-label="Autoplay ' + (on ? "on" : "off") + '">⟳</button>' +
+    '<button class="ib sm" data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
+}
+// only the counter and the two switches change; the search field is left alone, so typing is never disturbed
+function dkBar(d) {
+  var w = $("dk" + d.uid), b = w && w.querySelector(".dkbar");
+  if (!b) return;
+  var n = (d.q || []).length, on = ytAuto(), qb = b.querySelector(".dkqb"), ab = b.querySelector(".dka");
+  qb.innerHTML = "≡" + (n ? "<b>" + n + "</b>" : ""); qb.classList.toggle("on", d.pop === "q"); qb.setAttribute("aria-label", "Up next: " + n);
+  ab.classList.toggle("on", on); ab.title = "Autoplay " + (on ? "on: the next video starts by itself" : "off"); ab.setAttribute("aria-label", "Autoplay " + (on ? "on" : "off"));
+  dkTitle(d);
+}
+// the list over the video: search results, or Up next
+function dkRow(d, it, i) {
+  var meta = [it.k === "p" ? "Playlist" : "", it.c, it.k === "p" ? it.n : it.live ? "live" : it.len].filter(Boolean).map(esc).join(" · ");
+  return '<div class="dkr"><button class="lnk" data-a="dkplay" data-k="' + d.uid + "|" + i + '">' + esc(it.t) + '<small>' + meta + "</small></button>" +
+    (d.pop === "q" ? '<span class="dkrb"><button data-a="dkup" data-k="' + d.uid + "|" + i + '" title="Earlier" aria-label="Earlier"' + (i ? "" : " disabled") + '>▲</button><button data-a="dkdown" data-k="' + d.uid + "|" + i + '" title="Later" aria-label="Later"' + (i < d.q.length - 1 ? "" : " disabled") + '>▼</button><button data-a="dkdel" data-k="' + d.uid + "|" + i + '" title="Remove" aria-label="Remove">✕</button></span>'
+      : '<button class="dkadd" data-a="dkadd" data-k="' + d.uid + "|" + i + '" title="' + (it.k === "p" ? "Add all its videos to Up next" : "Add to Up next") + '" aria-label="Add to Up next">+</button>') + "</div>";
+}
+function dkPopDraw(d) {
+  var w = d && $("dk" + d.uid), p = w && w.querySelector(".dkpop");
+  if (!p) return;
+  p.hidden = !d.pop;
+  if (!d.pop) return;
+  if (d.pop === "q") {
+    p.innerHTML = '<div class="dkph"><b>Up next</b>' + (d.q.length ? '<button class="lnk2" data-a="dkclear" data-k="' + d.uid + '">Clear</button>' : "") + "</div>" +
+      (d.q.length ? d.q.map(function (it, i) { return dkRow(d, it, i); }).join("") : '<p class="mut sn">Nothing queued. ' + (ytAuto() ? "With Autoplay on, YouTube&rsquo;s next suggestion plays after this video." : "Autoplay is off: the player stops after this video.") + " Add videos with + in a search.</p>");
+    return;
+  }
+  var r = d.res;
+  p.innerHTML = !r ? '<p class="mut sn">Searching…</p>' : r.err ? '<p class="mut sn">YouTube did not answer: ' + esc(r.err) + "</p>" : !r.items.length ? '<p class="mut sn">Nothing found.</p>' : r.items.map(function (it, i) { return dkRow(d, it, i); }).join("");
+}
+function dkSearch(d, q) {
+  var link = ytLink(q);
+  if (link) {
+    d.pop = ""; dkPopDraw(d);
+    var inp = $("dk" + d.uid).querySelector(".dkq"); if (inp) inp.value = "";
+    if (link.v) ytPlay(d, { id: link.v });
+    if (link.list) { if (link.v) d.q = []; dkLoadList(d, link.list, !link.v, link.v); }
+    return;
+  }
+  if (q.length < 2) { if (d.pop === "s") { d.pop = ""; dkPopDraw(d); } return; }
+  d.pop = "s"; d.res = null; dkPopDraw(d);
+  var n = d.n = (d.n || 0) + 1;
+  ytdAsk({ m: "q", q: q }).then(function (x) {
+    if (n !== d.n) return;
+    d.res = { items: (x.items || []).filter(function (it) { return it.k === "v" || it.k === "p"; }).slice(0, 25) }; dkPopDraw(d);
+  }).catch(function (e) { if (n === d.n) { d.res = { err: String((e && e.message) || e).slice(0, 100), items: [] }; dkPopDraw(d); } });
+}
+function dkAct(a, k) {
+  if (a === "dkauto") { P.ytAuto = !ytAuto(); persist(); DOCK.forEach(function (d) { if (d.kind === "v") { dkBar(d); dkPopDraw(d); } }); return; }
+  var p = String(k).split("|"), d = dkOf(p[0]), i = +p[1];
+  if (!d) return;
+  var w = $("dk" + d.uid);
+  if (a === "dksrch") { var b = w.querySelector(".dkbar"); b.classList.toggle("srch"); if (b.classList.contains("srch")) b.querySelector(".dkq").focus(); else { d.pop = ""; dkPopDraw(d); } return; }
+  if (a === "dkq") { d.pop = d.pop === "q" ? "" : "q"; dkPopDraw(d); dkBar(d); return; }
+  if (a === "dkclear") { d.q = []; dkPopDraw(d); dkBar(d); return; }
+  var list = d.pop === "q" ? d.q : d.res && d.res.items, it = list && list[i];
+  if (!it) return;
+  if (a === "dkplay") {
+    if (d.pop === "q") d.q.splice(i, 1);
+    d.pop = ""; var inp = w.querySelector(".dkq"); if (inp) inp.value = ""; w.querySelector(".dkbar").classList.remove("srch");
+    if (it.k === "p") dkLoadList(d, it.id, true); else ytPlay(d, it);
+    dkBar(d); return;
+  }
+  if (a === "dkadd") {
+    if (it.k === "p") dkLoadList(d, it.id, false); else if (!d.q.some(function (x) { return x.id === it.id; })) d.q.push(it);
+    var btn = w.querySelector('[data-a="dkadd"][data-k="' + k + '"]'); if (btn) { btn.textContent = "✓"; btn.disabled = true; }
+    dkBar(d); return;
+  }
+  if (a === "dkdel") { d.q.splice(i, 1); }
+  else if (a === "dkup" && i > 0) { d.q.splice(i - 1, 0, d.q.splice(i, 1)[0]); }
+  else if (a === "dkdown" && i < d.q.length - 1) { d.q.splice(i + 1, 0, d.q.splice(i, 1)[0]); }
+  dkPopDraw(d); dkBar(d);
+}
+document.addEventListener("input", function (e) {
+  var t = e.target;
+  if (!t.classList || !t.classList.contains("dkq")) return;
+  var d = dkOf(t.dataset.dk);
+  if (!d) return;
+  debounced("dkq" + d.uid, function () { dkSearch(d, t.value.replace(/\s+/g, " ").trim().slice(0, 300)); });
+});
+document.addEventListener("keydown", function (e) {
+  var t = e.target;
+  if (!t.classList || !t.classList.contains("dkq")) return;
+  var d = dkOf(t.dataset.dk);
+  if (!d) return;
+  if (e.key === "Escape") { e.stopPropagation(); t.value = ""; d.pop = ""; dkPopDraw(d); t.blur(); t.closest(".dkbar").classList.remove("srch"); }
+  else if (e.key === "Enter") dkSearch(d, t.value.replace(/\s+/g, " ").trim().slice(0, 300));
+}, true);
+// a click outside an open list closes it
+document.addEventListener("click", function (e) {
+  DOCK.forEach(function (d) { if (d.kind === "v" && d.pop && !(e.target.closest && e.target.closest("#dk" + d.uid))) { d.pop = ""; dkPopDraw(d); dkBar(d); } });
+});
 
 // ---- Currency and crypto converter (no key: exchangerate.host mirror + CoinGecko, both called straight from the browser) ----
 var CONV_LIST = [
@@ -7194,6 +7423,7 @@ document.addEventListener("click", function (e) {
   if (a === "nseen") { markSeen(k); render(); return; }
   if (/^twd/.test(a)) { twdAct(a, k); return; }
   if (/^ytd/.test(a)) { ytdAct(a, k, b); return; }
+  if (/^dk(auto|srch|q|clear|play|add|del|up|down)$/.test(a)) { dkAct(a, k); return; }
   if (/^ml(pick|new|cancel|del|save)$/.test(a)) { mlAct(a, k); return; }
   if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
   if (a === "rdropen") { openReader(k, "", true); return; }
@@ -7815,11 +8045,15 @@ function openHelp() {
     p("The box shows new videos from the channels you choose: your subscriptions (from a file, once) and channels you add with Discover. Click a video to watch it inside the page; it can be docked like a Twitch stream.") +
     h4("Discover (the compass button)") +
     ul(["Starts with the most viewed videos of today. The chips switch to <b>Top this week</b>, <b>Live now</b> (sorted by viewers) and topics such as Music, Gaming, News, Sports and Podcasts (most viewed this week); <b>All topics</b> shows the rest.",
-      "Type in the field to search for any video or channel; matching channels come first.",
+      "Type in the field to search for any video, channel or playlist; matching channels and playlists come first. Paste a YouTube link to play it (a playlist link opens the playlist).",
       "Each row shows the title, the channel, how long ago and how long, and the views (for live: how many are watching). <b>Show 20 more</b> loads the next ones.",
-      "Click a video to watch it; the player has a <b>Discover</b> button to go back. Click a channel&rsquo;s name for its newest videos; <b>&larr; Back</b> returns.",
+      "Click a video to watch it; the player has a <b>Discover</b> button to go back. Click a channel&rsquo;s name for its newest videos, with a <b>Playlists</b> tab for its playlists; <b>&larr; Back</b> returns step by step.",
       "☆ puts a channel in your YouTube box, next to your subscriptions; ★ takes it out again. This works without the file below.",
       "Discover needs you to be signed in. Each answer is kept for 10 minutes. Shortcut: <code>Y</code>."]) +
+    h4("Playlists") +
+    ul(["Click a playlist for its videos. <b>▶ Play all</b> plays it from the start and goes on through it by itself; clicking one of its videos starts there. <b>Dock</b> keeps it playing beside the page, with the rest of the playlist in Up next (see Docking).",
+      "☆ on a playlist saves it: the <b>★ Saved</b> chip, first in Discover, lists your saved playlists (up to 50). ★ forgets one.",
+      "Only public playlists can be shown; your own private ones (Liked videos, Watch later) are not readable by websites."]) +
     h4("Your subscriptions") +
     p("YouTube does not let a website read your subscriptions or your recommendations, so you hand the page a small file, once. It takes about five minutes and the file only holds channel names.") +
     ol(["Go to <a href=\"https://takeout.google.com\" target=\"_blank\" rel=\"noopener\">takeout.google.com</a>, signed in to your YouTube account.",
@@ -7973,7 +8207,14 @@ function openHelp() {
       "On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page."]) +
     h4("Watching while you browse") +
     ul(["Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone <b>Dock to top</b>). It keeps playing beside the page. Up to 3 at once; drag a strip&rsquo;s edge to resize it.",
-      "Point at a docked player for its <b>Chat</b> and close buttons. Drag the bottom or right edge of the chat to resize it (double-click to reset). To open chat by itself when you dock, tick it in " + S("Twitch") + "."]);
+      "Twitch: point at a docked player for its <b>Chat</b> and close buttons. Drag the bottom or right edge of the chat to resize it (double-click to reset). To open chat by itself when you dock, tick it in " + S("Twitch") + "."]) +
+    h4("YouTube in the dock") +
+    p("A docked YouTube video has one thin bar above it: a search field, <b>≡</b> Up next, <b>⟳</b> Autoplay and <b>✕</b> close. On a phone the field folds into a <b>⌕</b> button.") +
+    ul(["<b>Search</b>: type to find videos and playlists; the list opens over the video. Click one to play it now, or <b>+</b> to put it in Up next (a playlist&rsquo;s + adds all its videos). Paste a YouTube link to play it. Esc closes the list.",
+      "<b>Up next</b> (≡, with how many are waiting): the videos that play after this one, in order. ▲ ▼ move one, ✕ removes it, <b>Clear</b> empties the list; click one to play it now.",
+      "<b>When a video ends</b>, the first one in Up next starts by itself. With an empty Up next and <b>Autoplay</b> on (⟳, on to begin with), YouTube&rsquo;s own next suggestion plays, never one that already played in this strip. Autoplay off: the player stops.",
+      "A playlist played in the dock fills Up next with its videos (playing a playlist replaces what was waiting; + adds to it).",
+      "The search and Autoplay&rsquo;s suggestions need you to be signed in. Up next, docked players and the queue last until the page is closed."]);
 
   // ---- Alerts ----
   html += h3("ntf", "Notifications") +
@@ -10580,7 +10821,7 @@ function wizPage(id) {
       "<li>Press <b>Next step</b>, then <b>Create export</b>. Google emails you a download link a few minutes later.</li>" +
       "<li>Open the downloaded zip. Inside the YouTube folder is <code>subscriptions.csv</code>. Choose that file here:</li></ol>" +
       '<p><label class="filebtn" for="ytFile">Choose subscriptions.csv</label> ' + (nch ? '<span class="pill ac">✓ ' + nch + " channels loaded</span>" : '<span class="mut sn">no file chosen yet</span>') + "</p>" +
-      '<p class="mut sn">No time for this now? Skip it: the compass button at the top of the YouTube box (Discover) finds any video or channel, and ☆ puts a channel in the box.</p>';
+      '<p class="mut sn">No time for this now? Skip it: the compass button at the top of the YouTube box (Discover) finds any video, channel or playlist, and ☆ puts a channel in the box.</p>';
   }
   if (id === "mail") {
     var m0 = (P.mail && P.mail[0]) || {};
@@ -10604,7 +10845,7 @@ function wizPage(id) {
     "<li><b>Notes, to-dos and calendar</b> are icons in the menu box; timers, the stopwatch and a calculator are under <b>Tools</b> (the four squares). All of them can be docked at the side of the page, and on a computer dragged up, down or to the other side.</li>" +
     "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
-    "<li><b>Discover:</b> the compass button at the top of the Twitch, YouTube, TV shows and Podcasts boxes finds new things: live streams, any video or channel, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
+    "<li><b>Discover:</b> the compass button at the top of the Twitch, YouTube, TV shows and Podcasts boxes finds new things: live streams, any video, channel or playlist, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
     "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
     "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
