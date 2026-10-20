@@ -76,10 +76,11 @@
   <p>Each account can only read and change its own data; this is enforced in the database itself. The operator has technical access to the database, as anyone running a service does, but does not read what you have written. The administration page only shows counts (for example "4 notes"), never the contents.</p>
 
   <h2 id="usage">How the site is used</h2>
-  <p>While you are signed in, two things are counted per day:</p>
+  <p>While you are signed in, three things are counted per day:</p>
   <ul>
-    <li>how long the page was open and visible, and</li>
-    <li>how many times each kind of button was pressed, for example "News: opened a headline" or "Sports: starred a team".</li>
+    <li>how long the page was open and visible,</li>
+    <li>how many times each kind of button was pressed, for example "News: opened a headline" or "Sports: starred a team", and</li>
+    <li>how many times each part of the page asked OmniTree's server for data, for example "News headlines" or "YouTube search". This keeps the service within the limits of its hosting. Requests made without an account are counted together, not per person.</li>
   </ul>
   <p>What you read, type, search for or save is never recorded this way. The counts are used to see which parts of the site are worth improving and to keep the service healthy.</p>
   <p>If you send feedback or a privacy request, its text is stored together with your IP address, your account if you are signed in, the email address you give, and the technical details you choose to attach (site version, browser, window size, theme).</p>

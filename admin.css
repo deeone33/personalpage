@@ -96,3 +96,22 @@ tr.frow.isnew .mail{font-weight:700}
 .uacts button{font-size:12px;padding:4px 10px}
 .tablewrap{overflow-x:auto}
 @media(max-width:900px){.apanel,.apanel.w4,.apanel.w6,.apanel.w3{grid-column:span 12}.ud{grid-template-columns:1fr}.vlist>div{grid-template-columns:1fr 1fr}}
+
+/* Server use: the month's calls against Supabase's allowance (green, then amber from 60%, red from 85%) */
+.ameter{--m:var(--up)}
+.ameter.warn{--m:#e0a43a}
+.ameter.bad{--m:var(--down)}
+.amtop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.amtop b{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--m)}
+.amtop span{font-size:13px;color:var(--mut)}
+.ambar{position:relative;height:12px;border-radius:7px;background:var(--line);overflow:visible}
+.ambar u{display:block;height:100%;border-radius:7px;background:var(--m)}
+.ambar i{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--fg);opacity:.55;border-radius:1px}
+.amsub{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 10px;font-size:12.5px;color:var(--mut)}
+.amsub b{color:var(--fg);font-variant-numeric:tabular-nums}
+tr.crow{cursor:pointer}
+tr.crow:hover td{background:var(--acsoft)}/* five tabs: each on one line; on a narrow screen the row scrolls sideways instead of wrapping */
+.atabs{overflow-x:auto;scrollbar-width:none}
+.atabs::-webkit-scrollbar{display:none}
+.atabs button{flex:none;white-space:nowrap}
+@media(max-width:600px){.atabs button{padding:8px 10px;font-size:13px}}

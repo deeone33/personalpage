@@ -1,11 +1,12 @@
 // OmniTree admin overview.
 // This page holds no data of its own. Everything comes from the feeds function, which first asks Supabase who is
 // signed in and only answers when that is the site owner's confirmed email. Anyone else who opens this page gets "Not allowed".
-// Four tabs: Visitors (everyone who opened the front page, by IP address), Accounts, What is used, and Feedback.
+// Five tabs: Visitors (everyone who opened the front page, by IP address), Accounts, What is used, Server use (the calls
+// to the super-function against Supabase's monthly allowance, by account and by purpose), and Feedback.
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, FF = "todo", FK = "all", FOPEN = {};
+  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, FF = "todo", FK = "all", FOPEN = {}, COPEN = {};
   try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
   // use the accent colour chosen on the main page, if there is one
   try {
@@ -56,7 +57,7 @@
   }
   function hbars(rows, unit) {
     var max = Math.max.apply(null, rows.map(function (r) { return r[1]; }).concat([1]));
-    return rows.length ? rows.map(function (r) { return '<div class="hb"><span title="' + esc(r[0]) + '">' + esc(r[0]) + '</span><em><u style="width:' + Math.round(r[1] / max * 100) + '%"></u></em><b>' + (unit === "time" ? dur(r[1]) : r[1]) + "</b></div>"; }).join("") : '<p class="mut sn">Nothing yet.</p>';
+    return rows.length ? rows.map(function (r) { return '<div class="hb"><span title="' + esc(r[0]) + '">' + esc(r[0]) + '</span><em><u style="width:' + Math.round(r[1] / max * 100) + '%"></u></em><b>' + (unit === "time" ? dur(r[1]) : (+r[1]).toLocaleString("en-GB")) + "</b></div>"; }).join("") : '<p class="mut sn">Nothing yet.</p>';
   }
   // "Mozilla/5.0 (Windows NT 10.0 ...) Chrome/141 ..." -> "Chrome on Windows"
   function device(ua) {
@@ -138,6 +139,57 @@
       msg(""); render();
     }).catch(function (e) { msg("That did not work: " + e.message); });
   }
+  // ---- Server use: the calls to the super-function (Supabase's free plan: 500,000 a month) ----
+  var CALL_LIMIT = 500000;
+  var CALLK = { news: "News headlines", tg: "Telegram posts", tgOld: "Older Telegram posts", yt: "YouTube box (your channels)", mail: "Gmail (saved the old way)",
+    "mailx:fetch": "Gmail unread count", "mailx:save": "Gmail setup", "mailx:remove": "Gmail setup", "mailx:send": "Email notifications", mailNotify: "Email notifications",
+    "ytd:top": "YouTube Discover", "ytd:week": "YouTube Discover", "ytd:live": "YouTube Discover", "ytd:topic": "YouTube Discover", "ytd:q": "YouTube search", "ytd:ch": "YouTube channels",
+    "ytd:chpl": "YouTube playlists", "ytd:pl": "YouTube playlists", "ytd:next": "YouTube autoplay (next video)", sportsx: "Sports (SHL and esports)", gamex: "Esports match details",
+    teamx: "Esports team pages", playerx: "Esports player pages", shlteam: "SHL team pages", sptable: "SHL table", np: "Radio: what is playing", reddit: "Reddit",
+    rdc: "Reddit comments", article: "Full news articles (reader)", find: "Searching further back", peek: "Link previews", ics: "Followed calendars",
+    frameok: "Web page box check", admin: "Owner panel", track: "Usage counting", deleteAccount: "Account deletion", precheck: "Browser pre-checks", other: "Other" };
+  function callLabel(k) { return String(k).split("+").map(function (p) { return CALLK[p] || p; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(" + "); }
+  function nf(n) { return Math.round(n).toLocaleString("en-GB"); }
+  function callsHtml(byId) {
+    // days in UTC here, as Supabase counts them
+    var rows = D.calls || [], now = new Date(), d30 = [], today = now.toISOString().slice(0, 10), month = today.slice(0, 8);
+    for (var i = 29; i >= 0; i--) d30.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    var dim = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate(), dayNo = now.getUTCDate();
+    var tot = 0, todayN = 0, perDay = {}, kinds = {}, who = {}, W = {};
+    rows.forEach(function (r) {
+      var n = +r.n || 0, k = callLabel(r.kind), w = r.who === "anon" ? (r.kind === "precheck" ? "Browser pre-checks" : "Not signed in (preview)") : (byId[r.who] ? byId[r.who].email : "a deleted account");
+      perDay[r.day] = (perDay[r.day] || 0) + n;
+      if (String(r.day).slice(0, 8) !== month) return;   // the rest only counts this month (what Supabase bills)
+      tot += n; if (r.day === today) todayN += n;
+      kinds[k] = (kinds[k] || 0) + n; who[w] = (who[w] || 0) + n;
+      var o = W[w] = W[w] || { n: 0, t: 0, k: {}, days: {} }; o.n += n; if (r.day === today) o.t += n; o.k[k] = (o.k[k] || 0) + n; o.days[r.day] = (o.days[r.day] || 0) + n;
+    });
+    var pct = tot / CALL_LIMIT * 100, pace = dayNo ? tot / dayNo * dim : 0, pacePct = pace / CALL_LIMIT * 100;
+    var lvl = function (p) { return p >= 85 ? "bad" : p >= 60 ? "warn" : "ok"; };
+    var sorted = function (o) { return Object.keys(o).sort(function (a, b) { return o[b] - o[a]; }).map(function (k) { return [k, o[k]]; }); };
+    var h = "";
+    if (D.callsErr) h += '<div class="apanel w12 awarn"><b>Calls are not being counted yet.</b> <span class="mut">' + esc(D.callsErr) + "</span></div>";
+    h += '<div class="apanel w12"><h2>Calls to the server this month</h2>' +
+      '<p class="ahint">Supabase&rsquo;s free plan allows ' + nf(CALL_LIMIT) + ' calls to the Edge Functions each calendar month (counted in UTC). Every box that updates, every search and every login check is one call. These counts can be up to a minute behind.</p>' +
+      '<div class="ameter ' + lvl(Math.max(pct, pacePct)) + '"><div class="amtop"><b>' + nf(tot) + "</b><span>of " + nf(CALL_LIMIT) + " · " + pct.toFixed(1) + "% used</span></div>" +
+      '<div class="ambar"><u style="width:' + Math.min(100, pct).toFixed(2) + '%"></u><i style="left:' + Math.min(100, pacePct).toFixed(2) + '%" title="Where this month ends at today&rsquo;s pace"></i></div>' +
+      '<div class="amsub"><span>Today: <b>' + nf(todayN) + "</b></span><span>Average a day: <b>" + nf(dayNo ? tot / dayNo : 0) + "</b></span><span>At this pace: <b>" + nf(pace) + "</b> by the end of the month (" + pacePct.toFixed(0) + "% of the limit)</span></div></div>" +
+      '<p class="ahint">Not in these numbers: the stock-price function (quotes), which Supabase counts separately, and calls made before this counting started. Supabase&rsquo;s own total is in its dashboard under Reports.</p></div>';
+    h += '<div class="agrid">' +
+      panel("Calls per day", "All calls together, last 30 days.", bars(d30.map(function (d) { return perDay[d] || 0; }), d30), "w6") +
+      panel("What the calls are for", "This month, by the part of the site that made them.", hbars(sorted(kinds).slice(0, 12)), "w6") +
+      panel("Who makes them", "This month. &ldquo;Browser pre-checks&rdquo; are the browser asking the server whether the site may call it; it remembers the answer for 2 hours.", hbars(sorted(who).slice(0, 10)), "w12") + "</div>";
+    var accts = sorted(who).map(function (x) { return x[0]; });
+    h += '<div class="apanel w12"><h2>Per account</h2><p class="ahint">This month. Click a line for what that account&rsquo;s calls were for, and its last 14 days.</p>' +
+      '<div class="tablewrap"><table class="atable"><thead><tr><th>Account</th><th>This month</th><th>Today</th><th>Share</th><th>Mostly for</th></tr></thead><tbody>' +
+      (accts.map(function (w) {
+        var o = W[w], top = sorted(o.k).slice(0, 2).map(function (x) { return x[0]; }).join(", ");
+        var out = '<tr class="crow" data-c="' + esc(w) + '"><td class="mail">' + esc(w) + '</td><td class="num">' + nf(o.n) + '</td><td class="num">' + nf(o.t) + '</td><td class="num">' + (tot ? (o.n / tot * 100).toFixed(1) : "0") + "%</td><td>" + esc(top) + "</td></tr>";
+        if (COPEN[w]) { var d14 = d30.slice(-14); out += '<tr class="udetail"><td colspan="5"><div class="ud"><div><h3>Calls per day, last 14 days</h3>' + bars(d14.map(function (d) { return o.days[d] || 0; }), d14) + "</div><div><h3>What they were for, this month</h3>" + hbars(sorted(o.k).slice(0, 12)) + "</div></div></td></tr>"; }
+        return out;
+      }).join("") || '<tr><td colspan="5" class="mut">No calls counted yet.</td></tr>') + "</tbody></table></div></div>";
+    return h;
+  }
   function panel(title, hint, body, cls) { return '<div class="apanel ' + (cls || "") + '"><h2>' + title + "</h2>" + (hint ? '<p class="ahint">' + hint + "</p>" : "") + body + "</div>"; }
 
   // ---- the page ----
@@ -177,7 +229,7 @@
       tile(users.length, "accounts", new7 ? new7 + " new in the last 7 days" : "none new this week") +
       tile(DAY[today].users, "accounts used today", dur(DAY[today].secs) + " on the site in total") + "</div>";
     var fbs = D.feedback || [], fbNew = fbs.filter(function (f) { return f.status === "new"; }).length;
-    var tabs = [["visitors", "Visitors"], ["accounts", "Accounts"], ["usage", "What is used"], ["feedback", "Feedback" + (fbNew ? ' <i class="tabn">' + fbNew + " new</i>" : "")]];
+    var tabs = [["visitors", "Visitors"], ["accounts", "Accounts"], ["usage", "What is used"], ["server", "Server use"], ["feedback", "Feedback" + (fbNew ? ' <i class="tabn">' + fbNew + " new</i>" : "")]];
     h += '<div class="atabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '"' + (TAB === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div>";
 
     if (TAB === "visitors") {
@@ -249,6 +301,7 @@
         panel("What people do most", "Button presses by signed-in accounts, last 30 days: which box, and what was pressed.", hbars(Object.keys(CLK).sort(function (a, b) { return CLK[b] - CLK[a]; }).slice(0, 14).map(function (k) { return [clickLabel(k), CLK[k]]; })), "w6") +
         panel("Boxes people keep switched on", "Out of " + withPrefs.length + " account" + (withPrefs.length === 1 ? "" : "s") + " that have saved settings.", hbars(Object.keys(BOXES).map(function (k) { return [BOXES[k], withPrefs.filter(function (u) { return prefs[u.id].off.indexOf(k) < 0; }).length]; }).sort(function (a, b) { return b[1] - a[1]; })), "w6") + "</div>";
     }
+    if (TAB === "server") h += callsHtml(byId);
     if (TAB === "feedback") {
       if (D.feedbackErr) h += '<div class="apanel w12 awarn"><b>Feedback cannot be received yet.</b> <span class="mut">' + esc(D.feedbackErr) + "</span></div>";
       var cnt = function (fn) { return fbs.filter(fn).length; }, chip = function (attr, cur, k, l, n) { return "<button " + attr + '="' + k + '"' + (cur === k ? ' class="on"' : "") + ">" + l + (n == null ? "" : " " + n) + "</button>"; };
@@ -282,7 +335,7 @@
         }).join("") || '<tr><td colspan="6" class="mut">' + (fbs.length ? "Nothing here. Try another filter." : "No feedback yet.") + "</td></tr>") + "</tbody></table></div></div>";
     }
     $("aQ").placeholder = TAB === "visitors" ? "Find an IP, country or email…" : TAB === "feedback" ? "Find in feedback…" : "Find an account…";
-    $("aQ").style.visibility = TAB === "usage" ? "hidden" : "";
+    $("aQ").style.visibility = TAB === "usage" || TAB === "server" ? "hidden" : "";
     $("aBody").innerHTML = h;
   }
 
@@ -317,6 +370,8 @@
     if (th) { if (SORT === th.dataset.sort) SORTDIR = -SORTDIR; else { SORT = th.dataset.sort; SORTDIR = SORT === "email" ? 1 : -1; } render(); return; }
     var row = e.target.closest("tr.urow");
     if (row) { OPEN[row.dataset.u] = !OPEN[row.dataset.u]; render(); return; }
+    var crow = e.target.closest("tr.crow");
+    if (crow) { COPEN[crow.dataset.c] = !COPEN[crow.dataset.c]; render(); return; }
     var vrow = e.target.closest("tr.vrow");
     if (vrow) { VOPEN[vrow.dataset.ip] = !VOPEN[vrow.dataset.ip]; render(); }
   });

@@ -1,4 +1,4 @@
-var VERSION = "0.22.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.23.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6244,8 +6244,19 @@ function admHtml() {
   var uIp = D.ips.some(function (x) { return unseen(x.at, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
   var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses seen for the first time today"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
   var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
-  return '<div class="adm">' + top + stats + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
+  return '<div class="adm">' + top + stats + admCalls() + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
     '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + admBtns + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
+}
+// one slim line: this month's calls to the server against Supabase's 500,000 (the full admin page has the details)
+function admCalls() {
+  var rows = ADM.d && ADM.d.calls;
+  if (!rows || ADM.d.callsErr) return "";
+  var now = new Date(), month = now.toISOString().slice(0, 8), dim = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getDate(), tot = 0;
+  rows.forEach(function (r) { if (String(r.day).slice(0, 8) === month) tot += +r.n || 0; });
+  var pct = tot / 5000, pace = tot / Math.max(1, now.getUTCDate()) * dim / 5000, lvl = Math.max(pct, pace) >= 85 ? " bad" : Math.max(pct, pace) >= 60 ? " warn" : "";
+  var k = function (n) { return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : String(Math.round(n)); };
+  return '<div class="admcl' + lvl + '" title="Calls to the server this month: ' + tot.toLocaleString("en-GB") + " of 500,000 (" + pct.toFixed(1) + "%). At this pace about " + k(pace * 5000) + " by the end of the month. Details: Full admin page → Server use.\">" +
+    '<span>Server calls</span><i><u style="width:' + Math.min(100, pct).toFixed(1) + '%"></u></i><b>' + k(tot) + " / 500k</b></div>";
 }
 function admAct(a, k) {
   if (!isAdmin()) return;
@@ -8265,7 +8276,7 @@ function openHelp() {
     h4("Privacy") +
     ul(["Everything you set up is private to your account; nobody else using the site can see it. It follows you to every device: settings, sources, bookmarks, notes, calendar, timers, world clocks, and what you have seen and opened. Changes reach your other devices within a minute, and two devices changing different things never overwrite each other.",
       "When another account signs in on the same browser, the previous account&rsquo;s things are cleared from it first.",
-      "To run the site, it counts how long the page is open and how often each kind of button is used; never what you read, type, search or save. Each visit is noted with its IP address, country and browser, kept for 90 days and seen only by the site owner.",
+      "To run the site, it counts how long the page is open, how often each kind of button is used, and how often each part of the page asks the server for data; never what you read, type, search or save. Each visit is noted with its IP address, country and browser, kept for 90 days and seen only by the site owner.",
       "Text you translate goes to the MyMemory translation service; radio plays straight from the stations&rsquo; servers; a bookmark with &ldquo;the site&rsquo;s own icon&rdquo; fetches it from that site.",
       "The full <a href=\"privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a> says what is stored and why."]) +
     h4("Feedback") +

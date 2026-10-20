@@ -1947,3 +1947,11 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 /* Windows with a search field (the Discover windows and Search all boxes) keep one height: a search that empties
    the list for a moment, or finds little, no longer shrinks the window and makes it jump. The list scrolls inside. */
 .mbox:has(.twdtop),.mbox:has(#siteQ){height:90vh;height:90dvh}
+
+/* Owner box: this month's calls to the server, one slim line under the numbers */
+.admcl{--m:var(--up);display:flex;align-items:center;gap:8px;margin:2px 0 6px;font-size:11.5px;color:var(--mut)}
+.admcl.warn{--m:#e0a43a}
+.admcl.bad{--m:var(--down)}
+.admcl i{flex:1;min-width:40px;height:6px;border-radius:4px;background:var(--line);overflow:hidden}
+.admcl u{display:block;height:100%;background:var(--m);border-radius:4px}
+.admcl b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
