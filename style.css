@@ -1638,6 +1638,9 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .swh span{align-items:center}
 /* Fold a docked panel to its title line: the arrow right after the title (down = open, right = folded) */
 .swt{flex:0 1 auto}
+.swh>b{font-size:calc(13px*var(--swfs,1))}
+.swh .swgrip{font-size:calc(12px*var(--swfs,1))}
+.swh .swmn svg{width:calc(13px*var(--swfs,1));height:calc(13px*var(--swfs,1))}
 .swh .swmn{flex:none;margin-right:auto;display:flex;align-items:center;padding:3px 5px;border-radius:6px}
 .swh .swmn svg{transition:transform .15s}
 .sw.swmin .swmn svg{transform:rotate(-90deg)}

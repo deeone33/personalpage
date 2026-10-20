@@ -1,4 +1,4 @@
-var VERSION = "0.24.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.24.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6068,11 +6068,13 @@ function swFit() {
   Array.prototype.forEach.call(document.querySelectorAll("#sideL .sw, #sideR .sw"), function (sw) {
     var b = sw.querySelector(".swb"), w = sw.dataset.sw;
     if (!b) return;
-    if (layM()) { b.style.zoom = ""; b.style.overflowY = ""; return; }
+    if (layM()) { b.style.zoom = ""; b.style.overflowY = ""; sw.style.removeProperty("--swfs"); return; }
     var fs = (dlP().fs && +dlP().fs[w]) || 1, z = fs, min = fs * 0.6, need = 1;
     b.style.zoom = z; b.style.overflowY = "";
     Array.prototype.forEach.call(b.querySelectorAll(".seg, .admh, .cbar, .ckeys, .tadd"), function (el) { if (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1) need = Math.max(need, el.scrollWidth / el.clientWidth); });
     if (need > 1) { z = Math.max(min, fs / need); b.style.zoom = z; }
+    // the title follows the panel's text size as its contents get it (like a box's title follows the box's)
+    if (z !== 1) sw.style.setProperty("--swfs", z); else sw.style.removeProperty("--swfs");
     if (!sw.classList.contains("swfixh")) return;
     if (w !== "calc") { b.style.overflowY = w === "adm" ? "hidden" : "auto"; return; }   // (the owner panel scrolls its own list)
     var cs = getComputedStyle(sw), head = sw.querySelector(".swh"), H = sw.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - head.offsetHeight - parseFloat(getComputedStyle(head).marginBottom), nat = 0;
