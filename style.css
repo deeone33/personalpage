@@ -710,15 +710,21 @@ body.resizing{user-select:none}
 .menurow .ib{padding:4px 5px}
 .menurow .menu.bell{left:auto;right:0;width:290px;max-height:380px;gap:0}
 /* the list scrolls inside; Clear history stays under it, always in view */
-.bell .bellls{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.bell .bellclr{flex:none;border-top:1px solid var(--line);border-radius:0 0 8px 8px}
+.bell .bellls{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0}
+.bell .lnk2.bellclr{flex:none;border-top:1px solid var(--line);border-radius:0 0 8px 8px;padding:4px 8px 2px;font-size:11.5px;line-height:1.3}
 .bell .bi{position:relative}
 .bell .bi+.bi{border-top:1px solid var(--line)}
-.bell .bi button[role=menuitem]{padding-right:26px}
+/* compact: the title, then the details and how long ago on one line */
+.bell .bi button[role=menuitem]{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:5px 24px 5px 8px}
+.bell .bi button[role=menuitem] b{grid-column:1/-1}
+.bell .bi button[role=menuitem] span{grid-column:1}
+.bell .bi button[role=menuitem] small{grid-column:2;align-self:center;white-space:nowrap}
+.bell .bi button[role=menuitem]:not(:has(span)) b{grid-column:1}   /* no details: the time sits beside the title */
+.bell .bi button[role=menuitem]:not(:has(span)) small{grid-row:1}
 .bell .bi .bx{position:absolute;top:5px;right:3px;width:auto;padding:2px 6px;font-size:11px;line-height:1;color:var(--mut);opacity:0;border-radius:6px}
 .bell .bi:hover .bx,.bell .bi:focus-within .bx{opacity:1}
 .bell .bi .bx:hover{color:var(--fg);background:var(--acsoft)}
-@media(hover:none){.bell .bi .bx{opacity:.75;padding:5px 8px;top:2px}}
+@media(hover:none){.bell .bi .bx{opacity:.75;padding:5px 8px;top:2px}.bell .bi button[role=menuitem]{padding-right:32px}}
 .bell button[role=menuitem]{display:flex;flex-direction:column;gap:1px;padding:6px 8px;font-size:12.5px;line-height:1.3;border-radius:7px}
 .bell b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .bell b i{font-style:normal;color:var(--ac);margin-right:5px}
