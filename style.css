@@ -191,8 +191,10 @@ p.tools{align-items:center;gap:6px}
 .radio .ib.bad{border-color:var(--down);color:var(--down)}
 .radio .ib.busy svg{opacity:.45}
 .radio .dd{position:relative;flex:none}
-.radio .menu.volpop{left:auto;right:0;top:calc(100% + 6px);z-index:31;display:flex;align-items:center;gap:8px;padding:8px 10px;min-width:0;width:170px}
-.volpop input[type=range]{flex:1 1 0;min-width:0}
+/* one slim row: the slider and the number beside it */
+.radio .menu.volpop{left:auto;right:0;top:calc(100% + 4px);z-index:31;display:flex;flex-direction:row;align-items:center;gap:6px;padding:4px 8px 4px 10px;min-width:0;width:150px;border-radius:10px}
+.volpop input[type=range]{flex:1 1 0;min-width:0;width:auto;height:18px;margin:0}
+@media(hover:none){.radio .menu.volpop{width:170px;padding:2px 8px 2px 10px}.volpop input[type=range]{height:30px}}   /* a finger needs a taller slider */
 .volpop span{flex:none;width:2.2em;text-align:right;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
 @media(prefers-reduced-motion:no-preference){.radio .ib.busy svg{animation:radbusy 1s ease-in-out infinite alternate}}
 @keyframes radbusy{to{opacity:1}}
@@ -642,6 +644,13 @@ body.resizing{user-select:none}
 .toast span{color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toast .tx{border:0;background:none;padding:0 4px;color:var(--mut);font-size:11px}
 .toast .tx:hover{color:var(--fg)}
+/* remove (also from the bell): shows when you point at the card; always there on a touch screen */
+.toast .trm{border:0;background:none;padding:0 3px;color:var(--mut);display:flex;align-items:center;opacity:0;transition:opacity .12s}
+.toast:hover .trm,.toast:focus-within .trm{opacity:1}
+.toast .trm:hover{color:var(--fg)}
+@media(hover:none){.toast .trm{opacity:.75}.toast .trm,.toast .tx{min-width:32px;min-height:30px;padding:0;margin:-4px 0;display:flex;align-items:center;justify-content:center}}   /* finger-sized */
+.toast.swiping{transition:none;animation:none}
+.toast.swiped{transition:transform .18s ease,opacity .18s ease;opacity:0}
 .toast.k-stock{border-left-color:var(--up)}.toast.k-stock b i{color:var(--up)}
 .toast.k-live{border-left-color:var(--live)}.toast.k-live b i{color:var(--live)}
 .toast.k-cal{border-left-color:#ff9f1a}.toast.k-cal b i{color:#ff9f1a}
@@ -699,9 +708,18 @@ body.resizing{user-select:none}
 /* ---- Notification history (bell) and mail preview ---- */
 .menurow{gap:4px}
 .menurow .ib{padding:4px 5px}
-.menurow .menu.bell{left:auto;right:0;width:290px;max-height:380px;overflow-y:auto;gap:0}
+.menurow .menu.bell{left:auto;right:0;width:290px;max-height:380px;gap:0}
+/* the list scrolls inside; Clear history stays under it, always in view */
+.bell .bellls{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.bell .bellclr{flex:none;border-top:1px solid var(--line);border-radius:0 0 8px 8px}
+.bell .bi{position:relative}
+.bell .bi+.bi{border-top:1px solid var(--line)}
+.bell .bi button[role=menuitem]{padding-right:26px}
+.bell .bi .bx{position:absolute;top:5px;right:3px;width:auto;padding:2px 6px;font-size:11px;line-height:1;color:var(--mut);opacity:0;border-radius:6px}
+.bell .bi:hover .bx,.bell .bi:focus-within .bx{opacity:1}
+.bell .bi .bx:hover{color:var(--fg);background:var(--acsoft)}
+@media(hover:none){.bell .bi .bx{opacity:.75;padding:5px 8px;top:2px}}
 .bell button[role=menuitem]{display:flex;flex-direction:column;gap:1px;padding:6px 8px;font-size:12.5px;line-height:1.3;border-radius:7px}
-.bell button[role=menuitem]+button[role=menuitem]{border-top:1px solid var(--line)}
 .bell b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .bell b i{font-style:normal;color:var(--ac);margin-right:5px}
 .bell .k-stock b i{color:var(--up)}.bell .k-live b i{color:var(--live)}.bell .k-cal b i{color:#ff9f1a}

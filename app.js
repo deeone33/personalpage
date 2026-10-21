@@ -1,4 +1,4 @@
-var VERSION = "0.24.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.25.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4658,8 +4658,27 @@ var SEENREMOTE = {}, LASTSTAMP = load("sp_stamp", {});
 function hs(s) { s = String(s); var a = 5381, b = 52711; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); a = ((a * 33) ^ c) | 0; b = ((b * 33) ^ c) | 0; } return ((a >>> 0) * 4096 + ((b >>> 0) % 4096)).toString(36); }
 function sy() {
   if (!P.sy || typeof P.sy !== "object") P.sy = {};
-  ["seen", "read", "once", "mail"].forEach(function (k) { if (!P.sy[k] || typeof P.sy[k] !== "object") P.sy[k] = {}; });
+  ["seen", "read", "once", "mail", "ndel"].forEach(function (k) { if (!P.sy[k] || typeof P.sy[k] !== "object") P.sy[k] = {}; });
   return P.sy;
+}
+// One notification on every device: each device makes its own card for the same thing, so it is known by its kind and
+// text (not by when this device happened to announce it).
+function nKey(e) { return hs((e.k || "") + "|" + (e.t || "") + "|" + (e.b || "")); }
+// Gone from the bell because of what was done on any device: removed one by one (ndel), or the whole history cleared
+// (nclear). It counts from when the thing happened where that is known; a device that only told you a little after the
+// clear (or whose clock runs a minute ahead) does not keep it. A card made after this device already knew of that clear
+// (e.nc) is newer than it and stays. A new notification with the same text later is not affected.
+function nGone(e) {
+  var s = P.sy || {}, nc = +s.nclear || 0, d = s.ndel && +s.ndel[nKey(e)], t = Math.min(e.ts, e.et || e.ts);
+  if (d && t <= d + 600000) return true;
+  return !!nc && (+e.nc || 0) < nc && (e.et ? e.et <= nc : e.ts <= nc + 60000);
+}
+function nRemove(e) {
+  if (!e) return;
+  var k = nKey(e), s = sy();
+  s.ndel[k] = Date.now(); syCap(s.ndel, 200);
+  NLOG = NLOG.filter(function (x) { return x !== e && !(nKey(x) === k && nGone(x)); });
+  save("sp_nlog", NLOG); persist(); render();
 }
 function syCap(o, n) { var k = Object.keys(o); if (k.length > n) k.sort(function (a, b) { return o[a] - o[b]; }).slice(0, k.length - n).forEach(function (x) { delete o[x]; }); }
 function isRead(u) { return !!(READ[u] || (P.sy && P.sy.read && P.sy.read[hs(u)])); }
@@ -4680,8 +4699,8 @@ function adoptSync() {
   if (fch) save("sp_first", FIRST);
   if ((+s.nalert || 0) > load("sp_nalert", 0)) save("sp_nalert", +s.nalert);
   [0, 1].forEach(function (i) { var t = +(s.mail && s.mail[i]) || 0; if (t > load("sp_mailts" + i, 0)) save("sp_mailts" + i, t); });
-  var nc = +s.nclear || 0, nsn = +s.nseen || 0, n0 = NLOG.length, dirty = false;
-  if (nc) NLOG = NLOG.filter(function (e) { return e.ts > nc; });
+  var nsn = +s.nseen || 0, n0 = NLOG.length, dirty = false;
+  NLOG = NLOG.filter(function (e) { return !nGone(e); });
   NLOG.forEach(function (e) { if (!e.seen && e.ts <= nsn) { e.seen = 1; dirty = true; } });
   if (dirty || NLOG.length !== n0) save("sp_nlog", NLOG);
 }
@@ -6094,6 +6113,17 @@ if (window.MutationObserver) ["sideL", "sideR"].forEach(function (id) { new Muta
 function sideDock(w, side) {
   if (!widgetOk(w)) return;
   P.side = P.side || {};
+  // A panel leaving its column (closed, or moved to the other side): the panel under it keeps its place on screen instead
+  // of sliding up into the space. Each panel's gap is counted from the one above it, so the next one takes on the room the
+  // leaving panel used (its own gap above plus its height).
+  if (!layM() && sideOf(w) && sideOf(w) !== side) {
+    var me = document.querySelector('.sw[data-sw="' + w + '"]'), nx = me && me.nextElementSibling;
+    while (nx && !(nx.classList && nx.classList.contains("sw"))) nx = nx.nextElementSibling;
+    if (me && nx && nx.dataset.sw) {
+      var yMe = (dlP().y && +dlP().y[w]) || 0, gap = Math.round(nx.getBoundingClientRect().top - (me.getBoundingClientRect().top - yMe));
+      if (gap > 0) dlSet("y", nx.dataset.sw, gap);
+    }
+  }
   if (side) P.side[w] = side; else delete P.side[w];
   if (side && !layM()) { var o = (Array.isArray(dlP().o) ? dlP().o : []).filter(function (x) { return x !== w; }); o.push(w); P.dl = Object.assign({}, dlP(), { o: o }); dlSet("y", w, null); }
   persist();
@@ -7596,7 +7626,8 @@ document.addEventListener("click", function (e) {
   if (a === "stchart") { if (k !== stChartKind()) { P.stChart = k; persist(); stChart(STOPEN); } return; }
   if (a === "icsexport") { icsExport(); return; }
   if (a === "openbrief") { MENU_OPEN = ""; render(); openBrief(); return; }
-  if (a === "toastx" || a === "toastgo") { toastAct(a, k); return; }
+  if (a === "toastx" || a === "toastgo" || a === "toastrm") { toastAct(a, k); return; }
+  if (a === "belldel") { e.stopPropagation(); nRemove(NLOG[+k]); MENU_OPEN = "bell"; render(); return; }
   if (a === "nftest") { toast("news", "Test notification", "This is what a notification looks like. Click it or press ✕.", { a: "settings" }, false, true); return; }
   if (a === "sidedock") { var sd = k.split(":"); sideDock(sd[0], sd[1]); return; }
   if (a === "swmin") { swMinToggle(k); return; }
@@ -7807,7 +7838,7 @@ function mergeP(base, mine, theirs) {
   var m = merge3(base, mine, theirs), a = m && m.sy, b = theirs && theirs.sy;
   if (isPlain(a) && isPlain(b)) {
     ["nalert", "nclear", "nseen"].forEach(function (k) { if ((+b[k] || 0) > (+a[k] || 0)) a[k] = b[k]; });
-    ["seen", "mail"].forEach(function (g) { if (isPlain(b[g])) { if (!isPlain(a[g])) a[g] = {}; Object.keys(b[g]).forEach(function (k) { if ((+b[g][k] || 0) > (+a[g][k] || 0)) a[g][k] = b[g][k]; }); } });
+    ["seen", "mail", "ndel"].forEach(function (g) { if (isPlain(b[g])) { if (!isPlain(a[g])) a[g] = {}; Object.keys(b[g]).forEach(function (k) { if ((+b[g][k] || 0) > (+a[g][k] || 0)) a[g][k] = b[g][k]; }); } });
   }
   return m;
 }
@@ -8464,11 +8495,11 @@ function openHelp() {
 
   // ---- Alerts ----
   html += h3("ntf", "Notifications") +
-    p("Small cards appear in the bottom-right corner. Click one to open it, ✕ to dismiss it. Switch each kind on or off in " + S("Notifications") + ".") +
+    p("Small cards appear in the bottom-right corner. Click one to open it. ✕ closes it (it stays in the bell); the bin button next to it, or a right-click on the card, removes it from the bell too. On a phone, swipe a card sideways to remove it. Switch each kind on or off in " + S("Notifications") + ".") +
     h4("What you can be told about") +
     ul(["Big news: the same story from several of your sources within two hours (you choose how many sources).", "A headline with one of your highlight words.", "A stock on your list moving fast or far.", "A ★ streamer going live.", "A ★ team&rsquo;s game starting, every goal (football, ice hockey) and the final score.", "A new episode of a TV show or podcast you follow (for podcasts: only ☆ shows, or every show).", "Calendar reminders.", "New mail."]) +
     h4("The bell") +
-    ul(["The bell in the menu box keeps the last 30. Its number is how many you have not looked at; opening it clears the number.", "A card goes away after 20 seconds, counted only while you look at the page, so one that came while you were in another tab is still there."]) +
+    ul(["The bell in the menu box keeps the last 30. Its number is how many you have not looked at; opening it clears the number. ✕ on a notification removes it (point at it on a computer); Clear history, always at the bottom, empties the list.", "A card goes away after 20 seconds, counted only while you look at the page, so one that came while you were in another tab is still there."]) +
     h4("Sound, desktop and email") +
     ul(["<b>Ping sound</b>: it can only play once you have clicked somewhere on the page (a rule of the browser). <b>Alarm volume</b> is for timers and alarms.",
       "<b>Desktop notifications</b>: also as notifications of your computer or phone. The boxes that notify you then keep their usual pace while the tab is in the background.",
@@ -8479,7 +8510,7 @@ function openHelp() {
     h4("Heard something and saw nothing?") +
     p(S("Notifications") + " ends with the last 5 notifications and alarms on this device, each with its reason and whether it made a sound.") +
     h4("On all your devices") +
-    p("Pressing &ldquo;x new&rdquo;, opening a post, opening the bell and clearing it are saved to your account: the phone shows the same within a minute, and nothing is announced twice.");
+    p("Pressing &ldquo;x new&rdquo;, opening a post, opening the bell, removing a notification and clearing the history are saved to your account: the phone shows the same within a minute, and nothing is announced twice.");
 
   html += h3("away", "While you are away") +
     p("While the page&rsquo;s tab is in the background (another tab is selected, or the window is minimized), everything still updates, more calmly the longer you are away: after 10 minutes, then 15, then 30, then every hour. The boxes, the bell and the count in the tab title stay current.") +
@@ -8560,11 +8591,13 @@ function toast(kind, title, body, act, sticky, force, at) {
   if (!force && n[kind] === false) return;
   var id = ++toastN, box = $("toasts"), el = document.createElement("div"), entry = { k: kind, t: String(title).slice(0, 160), b: String(body || "").slice(0, 200), ts: Date.now(), act: act || null };
   if (+at > 0 && +at < entry.ts) entry.et = +at;
+  if (P.sy && +P.sy.nclear) entry.nc = +P.sy.nclear;   // made after that clear: it stays
+  if (!force && nGone(entry)) return;   // you removed this one on another device already
   TOASTS[id] = entry;
   NLOG.push(entry); if (NLOG.length > 30) NLOG = NLOG.slice(-30);
   save("sp_nlog", NLOG);
   el.className = "toast k-" + kind; el.id = "to" + id;
-  el.innerHTML = '<div class="tb" data-a="toastgo" data-k="' + id + '" role="button" tabindex="0"><b><i>' + (TICON[kind] || "●") + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + '</div><button class="tx" data-a="toastx" data-k="' + id + '" aria-label="Dismiss">✕</button>';
+  el.innerHTML = '<div class="tb" data-a="toastgo" data-k="' + id + '" role="button" tabindex="0"><b><i>' + (TICON[kind] || "●") + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + '</div><button class="trm" data-a="toastrm" data-k="' + id + '" title="Remove it, also from the bell (or right-click the card)" aria-label="Remove"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="tx" data-a="toastx" data-k="' + id + '" title="Close (it stays in the bell)" aria-label="Close">✕</button>';
   box.appendChild(el);
   while (box.children.length > 4) toastAct("toastout", box.firstChild.id.slice(2));
   // The card goes away by itself after 20 seconds, but only counted while you can see the page: one that arrives while
@@ -8606,18 +8639,53 @@ function flushMailQ() {
   sendNtfMail(MAILQ.splice(0, 30));
 }
 setInterval(flushMailQ, 30000);
-// toastgo = clicked, toastx = dismissed (both count as seen), toastout = it timed out unread (stays "missed")
+// toastgo = clicked, toastx = dismissed (both count as seen), toastout = it timed out unread (stays "missed"),
+// toastrm = removed: gone from the bell too, on every device
 function toastAct(a, id) {
   var el = $("to" + id), entry = TOASTS[id];
+  if (a === "toastgo" && el && el.dataset.noclick) return;   // the end of a swipe, not a tap
   delete TOASTS[id];
   if (el) el.remove();
   if (entry && a !== "toastout") { entry.seen = 1; save("sp_nlog", NLOG); render(); }
+  if (a === "toastrm" && entry) { nRemove(entry); return; }
   if (a === "toastgo" && entry) runAct(entry.act);
 }
+// Right-click a card to remove it (as on many sites); on a touch screen, swipe it sideways
+$("toasts").addEventListener("contextmenu", function (e) {
+  var el = e.target.closest && e.target.closest(".toast");
+  if (!el || !/^to\d+$/.test(el.id) || !TOASTS[el.id.slice(2)]) return;
+  e.preventDefault(); toastAct("toastrm", el.id.slice(2));
+});
+(function () {
+  var sw = null;
+  $("toasts").addEventListener("touchstart", function (e) {
+    var el = e.target.closest && e.target.closest(".toast");
+    sw = el && /^to\d+$/.test(el.id) && e.touches.length === 1 ? { el: el, x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, on: false } : null;
+  }, { passive: true });
+  $("toasts").addEventListener("touchmove", function (e) {
+    if (!sw) return;
+    var dx = e.touches[0].clientX - sw.x, dy = e.touches[0].clientY - sw.y;
+    if (!sw.on && Math.abs(dy) > Math.abs(dx)) { sw = null; return; }   // scrolling the page, not swiping
+    if (!sw.on && Math.abs(dx) < 8) return;
+    sw.on = true; sw.dx = dx; sw.el.classList.add("swiping");
+    sw.el.style.transform = "translateX(" + dx + "px)"; sw.el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 220));
+  }, { passive: true });
+  $("toasts").addEventListener("touchend", function () {
+    if (!sw) return;
+    var s = sw; sw = null;
+    s.el.classList.remove("swiping");
+    if (s.on && Math.abs(s.dx) > 80) { s.el.classList.add("swiped"); s.el.style.transform = "translateX(" + (s.dx > 0 ? 340 : -340) + "px)"; setTimeout(function () { toastAct("toastrm", s.el.id.slice(2)); }, 170); }
+    else { s.el.style.transform = ""; s.el.style.opacity = ""; }
+    if (s.on) { s.el.dataset.noclick = "1"; setTimeout(function () { delete s.el.dataset.noclick; }, 350); }
+  });
+})();
 function bellHtml() {
-  return '<div class="menu bell" role="menu">' + (NLOG.length ? NLOG.slice().reverse().map(function (e, i) {
-    return '<button role="menuitem" data-a="bellgo" data-k="' + (NLOG.length - 1 - i) + '" class="k-' + esc(e.k) + '"><b><i>' + (TICON[e.k] || "●") + "</i>" + esc(e.t) + "</b>" + (e.b ? "<span>" + esc(e.b) + "</span>" : "") + '<small title="' + esc(when(e.et || e.ts)) + (e.et && e.ts - e.et > 600000 ? ". You were told " + esc(ago(e.ts)) + " ago" : "") + '">' + ago(e.et || e.ts) + " ago</small></button>";
-  }).join("") + '<button class="lnk2" data-a="bellclear">Clear history</button>' : '<div class="mut sn">No notifications yet.</div>') + "</div>";
+  // the list scrolls; "Clear history" sits under it and is always in view, however many there are
+  return '<div class="menu bell" role="menu">' + (NLOG.length ? '<div class="bellls">' + NLOG.slice().reverse().map(function (e, i) {
+    var n = NLOG.length - 1 - i;
+    return '<div class="bi"><button role="menuitem" data-a="bellgo" data-k="' + n + '" class="k-' + esc(e.k) + '"><b><i>' + (TICON[e.k] || "●") + "</i>" + esc(e.t) + "</b>" + (e.b ? "<span>" + esc(e.b) + "</span>" : "") + '<small title="' + esc(when(e.et || e.ts)) + (e.et && e.ts - e.et > 600000 ? ". You were told " + esc(ago(e.ts)) + " ago" : "") + '">' + ago(e.et || e.ts) + " ago</small></button>" +
+      '<button class="bx" data-a="belldel" data-k="' + n + '" title="Remove (on every device)" aria-label="Remove this notification">✕</button></div>';
+  }).join("") + '</div><button class="lnk2 bellclr" data-a="bellclear">Clear history</button>' : '<div class="mut sn">No notifications yet.</div>') + "</div>";
 }
 // Big news: the same story from several of your sources within two hours
 function bigNews() {
