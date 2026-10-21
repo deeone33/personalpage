@@ -1,4 +1,4 @@
-var VERSION = "0.25.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.25.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6615,7 +6615,38 @@ function syncDock() {
   if (pr) setDockWR();
   dockPlace();
   setTimeout(packGrid, 0);   // the page just got wider or narrower
+  setTimeout(toastPlace, 0);
 }
+// Where the notification cards go on a computer: the bottom-right corner of the screen, like most sites and the system's
+// own notifications. Only when that would cover a box, a docked panel or a docked player do they move: just left of
+// the docked column, or (when everything is covered somewhere) to wherever they cover the least. A phone keeps its own.
+function toastPlace() {
+  var box = $("toasts");
+  if (!box) return;
+  box.style.right = "";
+  if (layM() || innerWidth <= 820) return;
+  var W = document.documentElement.clientWidth, H = innerHeight, tw = box.getBoundingClientRect().width || 290;
+  var th = Math.max(box.getBoundingClientRect().height, 140);   // room for a couple of cards even before they come
+  // what is under them counts: a playing video most, the boxes, and least the bottom of a docked panel (your own, beside the page)
+  var block = [];
+  [["#grid .card", 1], ["#sideR .sw, #sideL .sw", 0.4], ["#dockR .dk, #dock .dk", 3]].forEach(function (g) {
+    Array.prototype.forEach.call(document.querySelectorAll(g[0]), function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width && r.height && el.offsetParent !== null) block.push({ r: r, k: g[1] });
+    });
+  });
+  var cover = function (right) {
+    var L = W - right - tw, R = W - right, T = H - 14 - th, B = H - 14, a = 0;
+    block.forEach(function (o) { var r = o.r, w = Math.min(R, r.right) - Math.max(L, r.left), h = Math.min(B, r.bottom) - Math.max(T, r.top); if (w > 0 && h > 0) a += w * h * o.k; });
+    return a;
+  };
+  var opts = [14], col = $("dockR");
+  if (col && !col.hidden) { var cr = col.getBoundingClientRect(); if (cr.width) opts.push(Math.round(W - cr.left + 14)); }
+  var best = opts[0], bestA = cover(best);
+  for (var i = 1; i < opts.length && bestA > 0; i++) { var a = cover(opts[i]); if (a < bestA) { best = opts[i]; bestA = a; } }
+  box.style.right = best + "px";
+}
+window.addEventListener("resize", function () { clearTimeout(toastPlace.t); toastPlace.t = setTimeout(toastPlace, 150); });
 function dockAdd(k, side) {
   // "t:login" a Twitch stream, "v:videoId" a YouTube video, "v:videoId|listId" a video of a playlist (the rest goes in Up next)
   var kind = k.charAt(0), id = k.slice(2), list = "";
@@ -8600,6 +8631,7 @@ function toast(kind, title, body, act, sticky, force, at) {
   el.innerHTML = '<div class="tb" data-a="toastgo" data-k="' + id + '" role="button" tabindex="0"><b><i>' + (TICON[kind] || "●") + "</i>" + esc(title) + "</b>" + (body ? "<span>" + esc(body) + "</span>" : "") + '</div><button class="trm" data-a="toastrm" data-k="' + id + '" title="Remove it, also from the bell (or right-click the card)" aria-label="Remove"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="tx" data-a="toastx" data-k="' + id + '" title="Close (it stays in the bell)" aria-label="Close">✕</button>';
   box.appendChild(el);
   while (box.children.length > 4) toastAct("toastout", box.firstChild.id.slice(2));
+  toastPlace();
   // The card goes away by itself after 20 seconds, but only counted while you can see the page: one that arrives while
   // the tab is in the background (you hear it) is still there when you come back.
   if (!sticky) {
