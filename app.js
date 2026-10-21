@@ -1,4 +1,4 @@
-var VERSION = "0.24.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.24.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -688,7 +688,7 @@ function errPlain(why) {
   why = String(why || "").trim();
   var hint = /\b40[136]\b/.test(why) ? "The site refused the request." : /\b429\b|rate limit/i.test(why) ? "The site says it is being asked too often." : /\b50\d\b/.test(why) ? "The site itself is having trouble." :
     /timed out|timeout/i.test(why) ? "The site took too long to answer." : /unreachable|failed to fetch|network/i.test(why) ? "The site could not be reached." : /0 items/.test(why) ? "The site answered, but with no headlines in it." :
-    /non-2xx|edge function|functions?\b.*(error|fail)/i.test(why) ? "Your Supabase function did not answer properly." : "";
+    /non-2xx|edge function|functions?\b.*(error|fail)/i.test(why) ? (isAdmin() ? "The super-function did not answer properly." : "OmniTree's server did not answer properly.") : "";
   return (hint ? hint + " " : "") + "(Technical: " + why.slice(0, 400) + ")";
 }
 function openBoxErr(id) {
@@ -3108,7 +3108,7 @@ function findOlder(box) {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { find: ask } }).then(function (r) {
     var v = r.data && r.data.find;
     if (r.error) end([], r.error.message);
-    else if (!v) end([], "it needs the updated feeds function (redeploy super-function in Supabase)");
+    else if (!v) end([], fnOld());
     else end(cleanLinks(unentAll((v.items || []).filter(function (x) { return x && x.u && x.t && x.ts; }), ["t", "tx", "d"])), v.err);
   }).catch(function (e) { end([], String((e && e.message) || e)); });
 }
@@ -3483,7 +3483,7 @@ function artLoad(key, urls) {
     sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { article: list[i++] } }).then(function (r) {
       var v = r.data && r.data.article;
       if (r.error) next(r.error.message);
-      else if (!v) done("it needs the updated feeds function (redeploy super-function in Supabase)");
+      else if (!v) done(fnOld());
       else if (Array.isArray(v.ps) && v.ps.length) { a.ps = v.ps.filter(function (p) { return p && typeof p.t === "string" && p.t; }).slice(0, 150); a.ps.forEach(function (p) { p.t = unent(p.t); }); a.paid = !!v.paid; done(""); }
       else next(err && !v.err ? err : v.err || "the site gave no text");
     }).catch(function (e) { next(String((e && e.message) || e)); });
@@ -5194,7 +5194,7 @@ function nwdDraw() {
 function nwdAsk(b) {
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { nd: b } }).then(function (r) {
     if (r.error) throw new Error(r.error.message);
-    if (!r.data || !r.data.nd) throw new Error("it needs the updated feeds function (redeploy super-function in Supabase)");
+    if (!r.data || !r.data.nd) throw new Error(fnOld());
     return r.data.nd;
   });
 }
@@ -5287,7 +5287,7 @@ function fetchReddit() {
     rBusy = false;
     var v = r.data && r.data.reddit;
     if (r.error) RDERR = r.error.message;
-    else if (!v) RDERR = "it needs the updated feeds function (redeploy super-function in Supabase)";
+    else if (!v) RDERR = fnOld();
     else { RDERR = v.err || ""; if (v.items && (v.items.length || !v.err)) { var fresh = cleanLinks(unentAll(v.items, ["t", "d"])); stampFirst(fresh, "rd"); RD = rdMerge(fresh, subs); } }
     render();
   }).catch(function (e) { rBusy = false; RDERR = String((e && e.message) || e); render(); });
@@ -5325,7 +5325,7 @@ function loadRdComments(u) {
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { rdc: u } }).then(function (r) {
     var v = r.data && r.data.rdc;
     if (r.error) v = { items: [], err: r.error.message };
-    else if (!v) v = { items: [], err: "it needs the updated feeds function (redeploy super-function in Supabase)" };
+    else if (!v) v = { items: [], err: fnOld() };
     if (v.items && v.items.length) RDC[u] = { at: Date.now(), items: v.items, err: "" };
     show({ items: v.items || [], err: v.err || "" });
   }).catch(function (e) { show({ items: [], err: String((e && e.message) || e) }); });
@@ -5338,7 +5338,7 @@ function lastAge(name) {
 function renderSources() {
   $("srcNews").innerHTML = newsSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small>' + (NWHY[x.name] ? '<div class="mut sn">Skipped: ' + esc(NWHY[x.name].slice(0, 300)) + "</div>" : "") + '</span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
-  }).join("") + (NEWS.length ? '<div class="mut sn">Feeds function: ' + (FNVER ? "version " + FNVER : "old version, redeploy it") + "</div>" : "") || '<div class="mut">No news sources.</div>';
+  }).join("") + (NEWS.length && isAdmin() ? '<div class="mut sn">Feeds function: ' + (FNVER ? "version " + FNVER : "old version, redeploy it") + "</div>" : "") || '<div class="mut">No news sources.</div>';
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
   }).join("") || '<div class="mut">No Telegram channels.</div>';
@@ -7054,7 +7054,7 @@ function radioNow(force) {
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { np: st[3] } }).then(function (r) {
     if (RNP.id !== st[0]) return;
     var v = r.data && r.data.np;
-    if (!v) { RNP.raw = ""; RNP.err = "This needs the updated feeds function (redeploy super-function)."; }
+    if (!v) { RNP.raw = ""; RNP.err = fnOld(1) + "."; }
     else {
       RNP.raw = unent(String(v.t || "")); RNP.err = "";
       var x = radParse(st, RNP.raw), h = radHist(st[0]);
@@ -7537,7 +7537,7 @@ document.addEventListener("click", function (e) {
   if (a === "signin") { auth("signInWithPassword"); return; }
   if (a === "signup") { auth("signUp"); return; }
   if (a === "forgotpw") {
-    if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
+    if (!sb) { setMsg("The sign-in service did not load. Check your connection (or a blocker for this site) and reload the page."); return; }
     var email = $("acctEmail").value.trim();
     if (!email) { setMsg("Enter your email above, then press Forgot password again."); return; }
     setMsg("Sending reset email...");
@@ -7687,6 +7687,8 @@ var SETSEC = 0;
 // the admin page asks the function again for everything it shows.) The answer is remembered for 12 hours.
 var IS_ADMIN = false;
 function isAdmin() { return !!USER && IS_ADMIN; }
+// When the server function is older than the page: the owner is told what to do, everyone else only that it is being updated
+function fnOld(cap) { return isAdmin() ? (cap ? "This needs" : "it needs") + " the updated feeds function (redeploy super-function in Supabase)" : (cap ? "This" : "this") + " part of OmniTree is being updated. Try again in a little while"; }
 function checkAdmin() {
   IS_ADMIN = false;
   if (!sb || !USER) return;
@@ -7916,7 +7918,7 @@ function onUser(u) {
   });
 }
 function auth(fn) {
-  if (!sb) { setMsg("Supabase did not load. Check config.js and your connection."); return; }
+  if (!sb) { setMsg("The sign-in service did not load. Check your connection (or a blocker for this site) and reload the page."); return; }
   var c = { email: $("acctEmail").value.trim(), password: $("acctPass").value };
   if (!c.email || !c.password) { setMsg("Enter your email and password."); return; }
   if (fn === "signUp" && c.password.length < 8) { setMsg("Use a password of at least 8 characters."); return; }
@@ -7953,7 +7955,7 @@ function deleteAccount() {
   msg.textContent = "Deleting…";
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { deleteAccount: true } }).then(function (r) {
     if (r.error || !r.data || !r.data.deleted) {
-      msg.textContent = "Could not delete the account: " + ((r.data && r.data._err) || (r.error && r.error.message) || "the feeds function needs updating (redeploy super-function).");
+      msg.textContent = "Could not delete the account: " + ((r.data && r.data._err) || (r.error && r.error.message) || fnOld() + ".");
       return;
     }
     msg.textContent = "";
@@ -8050,7 +8052,7 @@ function initAuth() {
   });
 }
 // The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
-var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Gmail accounts). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
+var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Mail). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
 // Help: one window with every part of the page, grouped, each with short headings, steps and lists. The same text is
 // on the help page (help.html), made from this; keep the two the same.
 function openHelp() {
@@ -8148,9 +8150,9 @@ function openHelp() {
       "<b>Google News</b>: Google News&rsquo;s top stories and sections (World, Business, Sport…) in that country&rsquo;s language, each gathered from many sites.",
       "<b>Search</b>: type a site&rsquo;s name, a topic or a web address. It looks in a public directory of news feeds and shows each one&rsquo;s website, language, followers and when it last published (feeds quiet for a month are dimmed). A typed web address is offered as well: any news site can be followed through Google News.",
       "Click a name (▸) to see its five newest headlines first, fetched just as the box will fetch them. <b>+</b> adds it, <b>✓</b> means you have it (click to remove).",
-      "What you add is a normal source: the reader, Languages shown and the merging of the same story from several sources work for it as for the others. If its language is one Languages shown leaves out, Discover says so."]) +
+      "What you add is a normal source: the reader, Languages shown and the merging of the same story from several sources work for it as for the others. If its language is one Languages shown leaves out, Discover says so. Shortcut: H."]) +
     h4("Adding and removing sources (" + S("News, Telegram &amp; Reddit") + ")") +
-    ul(["<b>News</b>: give a name and a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website (<code>reuters.com</code>), and press Add. A feed address is the most reliable; with only a website the page finds the news through search services. Up to 15. Start the name with the outlet (&ldquo;BBC World&rdquo;): feeds whose names start the same count as one outlet.",
+    ul(["<b>News</b>: give a name and a feed address (for example <code>https://feeds.bbci.co.uk/news/world/rss.xml</code>) or just a website (<code>reuters.com</code>), and press Add. A feed address is the most reliable; with only a website the page finds the news through search services. Up to 15. Start the name with the outlet&rsquo;s name: sources whose names start with the same word (&ldquo;BBC World&rdquo; and &ldquo;BBC Sport&rdquo;) are treated as one outlet when the same story is grouped.",
       "<b>Telegram</b>: type a channel name (<code>ClashReport</code>) or paste a t.me link, and press Add. Only public channels work.",
       "✕ removes a source; <b>Back to default sources</b> starts over. The list shows when each source last delivered, and why one was skipped.",
       "The funnel button (<b>Sources</b>) at the top of each box hides a source for a while without deleting it."]) +
@@ -8273,7 +8275,7 @@ function openHelp() {
       "Type in the field to search for a channel or a game, and choose a language to see only streams in it.",
       "Click a stream to watch it; the player has a <b>Discover</b> button to go back.",
       "☆ puts a channel on your own list without following it on Twitch: it then shows in the box when live, among your ★ streamers when not, and you are told when it goes live.",
-      "Discover needs your Twitch account connected. Each answer is kept for a minute."]) +
+      "Discover needs your Twitch account connected. Each answer is kept for a minute. Shortcut: D."]) +
     h4("Chat asks you to log in, or ads despite Turbo or a sub?") +
     p("The player inside the page is a Twitch &ldquo;embed&rdquo;. Your browser treats it as a third-party site and hides your twitch.tv login from it, so Twitch thinks you are logged out. This is a browser setting; <b>Connect</b> does not change it. Two fixes:") +
     ol(["<b>Pop out</b> (works everywhere): press <b>Pop out</b> on a stream, or turn on " + S("Twitch") + " " + A + " <b>Open streams in a pop-out window</b>. The pop-out is twitch.tv itself, so your login, Turbo and subs work. Allow pop-ups for this site if the browser asks.",
@@ -8382,7 +8384,7 @@ function openHelp() {
     h4("Quick ways to add") +
     ul(["In the search bar: <code>note buy milk</code> or <code>todo call the bank</code>, then Enter.", "Press Ctrl+V on the page (not in a text box) and choose <i>As a note</i> or <i>As a to-do</i> on the card that appears. Switch that off in " + S("Layout &amp; boxes") + "."]) +
     h4("Read later") +
-    ul(["Put a headline, Telegram post, Reddit post or video aside: point at its row and press the small bookmark button where the time is, or press <b>Read later</b> in its window (<b>Watch later</b> for a video; the way on a phone).",
+    ul(["Put a headline, Telegram post, Reddit post or video aside: point at its row and press the small bookmark button where the time is, or press <b>Read later</b> in its window (<b>Watch later</b> for a video). On a phone, where there is no pointing, use the button in the window.",
       "Saved rows keep a small bookmark mark. In the Read later tab, click an item to open it and press ✓ when you are done.",
       "Up to 100 items, the same on all your devices."]) +
     p("Notes can stay open beside the boxes: see Docking.");
@@ -8595,7 +8597,7 @@ function sendNtfMail(items) {
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: body }).then(function (r) {
     if (r.error) return r.error.message || "The function did not answer.";
     if (r.data && r.data.sent) return "";
-    return (r.data && r.data._err) || "The feeds function needs updating (redeploy super-function).";
+    return (r.data && r.data._err) || fnOld(1) + ".";
   }).catch(function (e) { return String((e && e.message) || e); });
 }
 function flushMailQ() {
@@ -9103,7 +9105,7 @@ function loadStockNews(id) {
   sb.functions.invoke("quotes", { body: { news: s } }).then(function (r) {
     if ($("stInfo") !== box) return;
     var v = r.data;
-    if (r.error || !v || v._err || !v.news) { box.innerHTML = '<p class="mut sn">' + (v && !v._err && !v.news ? "Stock news needs the updated <b>quotes</b> function. Redeploy it in Supabase." : "Could not load news right now.") + "</p>"; return; }
+    if (r.error || !v || v._err || !v.news) { box.innerHTML = '<p class="mut sn">' + (v && !v._err && !v.news ? (isAdmin() ? "Stock news needs the updated <b>quotes</b> function. Redeploy it in Supabase." : "Stock news is being updated. Try again in a little while.") : "Could not load news right now.") + "</p>"; return; }
     var item = function (x, sub) { var u = safeUrl(x.u); return '<div class="si">' + (u ? '<a target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + esc(x.t) + "</a>" : "<span>" + esc(x.t) + "</span>") + " <small>" + sub + "</small></div>"; };
     box.innerHTML = "<h3>Why is it moving? Latest news" + (v.via ? " · " + esc(v.via) : "") + "</h3>" +
       (v.news.map(function (x) { return item(x, esc(x.s) + " · " + ago(x.ts)); }).join("") || '<p class="mut sn">No recent news found for ' + esc(s) + ".</p>") +
@@ -10091,7 +10093,7 @@ function esGet(what) {
   var body = {}; body[p[0] === "team" ? "teamx" : "playerx"] = { src: p[1], slug: p[2] };
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: body }).then(function (r) {
     var d = r.data && r.data[p[0] === "team" ? "teamx" : "playerx"];
-    if (!d || typeof d !== "object") throw new Error(r.data && !("teamx" in r.data) && !("playerx" in r.data) ? "This needs the newest feeds function (redeploy super-function)." : "No details for this one right now.");
+    if (!d || typeof d !== "object") throw new Error(r.data && !("teamx" in r.data) && !("playerx" in r.data) ? fnOld(1) + "." : "No details for this one right now.");
     if (Object.keys(ES_C).length > 60) ES_C = {};
     ES_C[what] = { t: Date.now(), d: d };
     return d;
@@ -10435,7 +10437,7 @@ function shlTeamGet(uuid) {
   if (!sb || !USER) return Promise.reject(new Error("Sign in to see SHL teams and players (they come through your account)."));
   return sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { shlteam: uuid } }).then(function (r) {
     var d = r.data && r.data.shlteam;
-    if (!d || typeof d !== "object") throw new Error(r.data && !("shlteam" in r.data) ? "This needs the newest feeds function (redeploy super-function)." : "shl.se did not answer for this team right now.");
+    if (!d || typeof d !== "object") throw new Error(r.data && !("shlteam" in r.data) ? fnOld(1) + "." : "shl.se did not answer for this team right now.");
     if (Object.keys(SHLT).length > 20) SHLT = {};
     SHLT[uuid] = { t: Date.now(), d: d };
     return d;
@@ -11421,7 +11423,11 @@ function dateAnswer(q) {
   if ((m = /^(?:how many )?days? (?:since|after) (.+)$/.exec(q)) && (d = parseDay(m[1], true))) { n = diff(d, today); return { show: span(n) + " since " + dayText(d), raw: String(n) }; }
   // two dates without a year are both taken in this year
   if ((m = /^(?:days? )?between (.+?) and (.+)$/.exec(q)) && (d = parseDay(m[1], "same")) && parseDay(m[2], "same")) { n = diff(d, parseDay(m[2], "same")); return { show: span(n) + " between them", raw: String(Math.abs(n)) }; }
-  if ((m = /^(?:in )?(\d{1,5}) (day|week|month|year)s?(?: (from|after|before|ago))?(?: (.+))?$/.exec(q)) && (/^in /.test(q) || m[3])) {
+  // "today + 30 days", "1 may - 2 weeks", "+3 months": the same as "30 days from today"
+  var pm = /^(.*?) ?([+\-−]) ?(\d{1,5}) ?(day|week|month|year)s?$/.exec(q);
+  if (pm && (!pm[1] || parseDay(pm[1]))) m = [q, pm[3], pm[4], pm[2] === "+" ? "after" : "before", pm[1] || "today"];
+  else m = /^(?:in )?(\d{1,5}) (day|week|month|year)s?(?: (from|after|before|ago))?(?: (.+))?$/.exec(q);
+  if (m && (/^in /.test(q) || m[3])) {
     var base = m[4] && m[3] !== "ago" ? parseDay(m[4]) : today, sign = m[3] === "before" || m[3] === "ago" ? -1 : 1, k = +m[1] * sign;
     if (!base) return null;
     d = m[2] === "day" ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + k) : m[2] === "week" ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * k) : m[2] === "month" ? new Date(base.getFullYear(), base.getMonth() + k, base.getDate()) : new Date(base.getFullYear() + k, base.getMonth(), base.getDate());
@@ -11487,7 +11493,7 @@ function searchHelpHtml() {
     row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
     row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
     row("10 km in miles", "Units: length, weight, volume, speed, time, data and temperature (<code>72 f in c</code>).") +
-    row("days until 24 dec", "Dates: <code>days since 1 jan 2020</code>, <code>90 days from today</code>, <code>in 3 weeks</code>, <code>2 months before 1 may</code>, <code>between 1 mar and 24 dec</code>, <code>week number</code>, <code>what day is 1 may 2027</code>, <code>today</code>.") +
+    row("days until 24 dec", "Dates: <code>days since 1 jan 2020</code>, <code>90 days from today</code>, <code>today + 30 days</code>, <code>in 3 weeks</code>, <code>2 months before 1 may</code>, <code>between 1 mar and 24 dec</code>, <code>week number</code>, <code>what day is 1 may 2027</code>, <code>today</code>.") +
     row(cmdW("tr") + " hello to swedish", "Translate. The language it is written in is worked out for you; without <code>to …</code> it goes to English: <code>" + cmdW("tr") + " tere hommikust</code>. Sent to the free MyMemory service.") +
     "<tr><th colspan=\"2\">Save</th></tr>" +
     row(cmdW("note") + " buy milk", "Saves a note without opening Notes.") +
@@ -11634,7 +11640,7 @@ function loadActivity() {
     var a = r[0], sid = "";
     try { var p = r[1].data.session.access_token.split(".")[1]; sid = JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/"))).session_id || ""; } catch (e) {}
     if (a.error || !a.data) {
-      box.innerHTML = '<p class="mut sn">' + (a.error && !/my_activity|schema cache|PGRST202|404/i.test((a.error.message || "") + (a.error.code || "")) ? "Could not load it: " + esc(a.error.message) : "This needs a one-time setup: open the Supabase dashboard, SQL Editor, New query, paste the contents of <code>activity-setup.sql</code> and press Run.") + "</p>";
+      box.innerHTML = '<p class="mut sn">' + (a.error && !/my_activity|schema cache|PGRST202|404/i.test((a.error.message || "") + (a.error.code || "")) ? "Could not load it: " + esc(a.error.message) : (isAdmin() ? "This needs a one-time setup: open the Supabase dashboard, SQL Editor, New query, paste the contents of <code>activity-setup.sql</code> and press Run." : "Sign-in history is not available right now.")) + "</p>";
       return;
     }
     var ses = a.data.sessions || [], log = a.data.logins || [];
@@ -11643,7 +11649,7 @@ function loadActivity() {
     }).join("") || '<p class="mut sn">Nothing found.</p>') + "</div>" +
       '<div class="sub"><b>Recent activity</b>' + (log.map(function (l) {
         return '<div class="row"><span>' + esc(ACT_WHAT[l.what] || l.what) + (l.ip ? " <small>" + esc(l.ip) + "</small>" : "") + '</span><span class="r mut">' + esc(when(Date.parse(l.at))) + "</span></div>";
-      }).join("") || '<p class="mut sn">No history available (Supabase may not be keeping its sign-in log).</p>') + "</div>";
+      }).join("") || '<p class="mut sn">No sign-ins recorded in the last 90 days.</p>') + "</div>";
   }).catch(function (e) { box.innerHTML = '<p class="mut sn">Could not load it: ' + esc(String((e && e.message) || e)) + "</p>"; });
 }
 
