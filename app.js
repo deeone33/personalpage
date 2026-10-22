@@ -1,4 +1,4 @@
-var VERSION = "0.27.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.28.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -3632,7 +3632,7 @@ function edAdopt() {
 }
 // what Cancel and Undo put back: the layout, and which boxes are on
 // (P.layout.m, the phone's own layout, is part of it; so are the docked panels: where they are, their size and text size)
-function edState() { return JSON.stringify({ layout: P.layout || null, tv: P.tv ? !!P.tv.on : null, emb: P.emb || null, side: P.side || null, dl: P.dl || null }); }
+function edState() { return JSON.stringify({ layout: P.layout || null, tv: P.tv ? !!P.tv.on : null, emb: P.emb || null, side: P.side || null, dl: P.dl || null, bm: P.bm || null }); }
 function edRestore(s) {
   s = JSON.parse(s);
   if (s.layout) P.layout = s.layout; else delete P.layout;
@@ -3640,7 +3640,9 @@ function edRestore(s) {
   if (s.emb) P.emb = s.emb; else delete P.emb;
   if (s.side) P.side = s.side; else delete P.side;
   if (s.dl) P.dl = s.dl; else delete P.dl;
+  if (s.bm) P.bm = s.bm; else delete P.bm;   // the bookmarks bar's order and position
   renderSide();
+  if (typeof renderBm === "function") { renderBm(); renderBmSet(); positionClocks(); }
 }
 function edPush() { ED.hist.push(edState()); if (ED.hist.length > 60) ED.hist.shift(); }
 // Redraw with a slide: every box goes from where it was to its new place
@@ -3685,6 +3687,9 @@ function edStart() {
     $("gridw").appendChild(cols);
   }
   $("edBar").hidden = false;
+  var hint = $("edBar").querySelector(".edhint");
+  if (hint) hint.textContent = "Drag ⠿ to move a box. Click a box for its buttons, and drag its edge or corner to resize it." + (bm().on && bm().items.length ? " Drag a bookmark to reorder the bar, and the bar's ⠿ to put it left, center or right." : "");
+  renderBm();
 }
 function edEnd(keep) {
   if (!ED.on) return;
@@ -3696,6 +3701,7 @@ function edEnd(keep) {
   EDIT = false; document.body.classList.remove("editing");
   if (keep || edState() !== ED.base) persist();
   render(); renderHidden(); renderSide();
+  renderBmSet(); positionClocks();   // Settings → Bookmarks shows the order and position you left the bar in
   if (typeof renderTvSet === "function") renderTvSet();
   if (typeof renderPodSet === "function") renderPodSet();
   if (typeof renderEmbSet === "function") renderEmbSet();
@@ -5716,8 +5722,14 @@ function renderBm() {
   if (!el) return;
   el.hidden = !B.on;
   el.setAttribute("data-al", B.al === "c" || B.al === "r" ? B.al : "l");
+  var ed = typeof edOn === "function" && edOn();
+  el.classList.toggle("bmed", !!(ed && B.on && B.items.length));
   if (!B.on) { el.innerHTML = ""; return; }
-  el.innerHTML = B.items.map(function (x) {
+  if (ed) BM_OPEN = "";   // in Edit the bar is rearranged, not used: no folder opens
+  // in Edit: a ⠿ handle moves the whole bar (left, middle, right) and every bookmark can be dragged to a new place
+  el.innerHTML = (ed && B.items.length ? '<span class="bmgrip" title="Drag sideways to put the bar left, center or right" aria-hidden="true">⠿</span>' : "") + B.items.map(function (x) {
+    if (ed) return x.kids ? '<span class="bmf" data-bmx="' + esc(x.id) + '"><span class="bmi' + (bmCol(x.c) || bmCol(B.col) ? " col" : "") + (BMD && BMD.id === x.id && BMD.on ? " bmph" : "") + '"' + bmStyle(x) + ">" + bmIcon(x) + "<span>" + esc(x.t || "Folder") + '</span><i class="bmcar">▾</i></span></span>'
+      : bmLink(x, "bmi" + (BMD && BMD.id === x.id && BMD.on ? " bmph" : "")).replace("<a ", '<a data-bmx="' + esc(x.id) + '" draggable="false" ');
     if (!x.kids) return bmLink(x, "bmi");
     var open = BM_OPEN === x.id;
     return '<div class="bmf">' + '<button class="bmi' + (bmCol(x.c) || bmCol(B.col) ? " col" : "") + (open ? " on" : "") + '"' + bmStyle(x) + ' data-a="bmfolder" data-k="' + esc(x.id) + '" aria-expanded="' + open + '">' + bmIcon(x) + "<span>" + esc(x.t || "Folder") + '</span><i class="bmcar">▾</i></button>' +
@@ -5727,6 +5739,68 @@ function renderBm() {
   var m = el.querySelector(".bmmenu");
   if (m && m.getBoundingClientRect().right > document.documentElement.clientWidth - 6) { m.style.left = "auto"; m.style.right = "0"; }
 }
+// ---- The bookmarks bar in Edit: drag a bookmark to a new place in the bar, or the bar's ⠿ to put the whole bar on the
+// left, in the middle or on the right. It is the same order and the same "Bar position" as in Settings → Bookmarks, so
+// both always agree; Undo, Cancel and Done of Edit cover it like the boxes. ----
+var BMD = null;   // the drag going on: { bar } or { id, x0, y0, on (moved far enough to count as a drag), ghost }
+(function () {
+  var el = $("bm");
+  // links do not open and folders do not unfold while you rearrange
+  el.addEventListener("click", function (e) { if (typeof edOn === "function" && edOn()) { e.preventDefault(); e.stopPropagation(); } }, true);
+  el.addEventListener("pointerdown", function (e) {
+    if (!(typeof edOn === "function" && edOn()) || e.button > 0) return;
+    var g = e.target.closest(".bmgrip"), it = e.target.closest("[data-bmx]");
+    if (!g && !it) return;
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    if (g) { edPush(); BMD = { bar: true }; ED.hold = true; el.classList.add("bmdrag"); edSay("Moving the bookmarks bar. Let go on the left, in the center or on the right."); return; }
+    BMD = { id: it.dataset.bmx, x0: e.clientX, y0: e.clientY, on: false };
+  });
+  el.addEventListener("pointermove", function (e) {
+    if (!BMD) return;
+    var B = bm();
+    if (BMD.bar) {
+      // where the pointer is on the screen decides: the left third, the center or the right third
+      var W = document.documentElement.clientWidth, al = e.clientX < W / 3 ? "l" : e.clientX > W * 2 / 3 ? "r" : "c";
+      if ((B.al || "l") !== al) { B.al = al; renderBm(); positionClocks(); }
+      return;
+    }
+    if (!BMD.on) {
+      if (Math.abs(e.clientX - BMD.x0) + Math.abs(e.clientY - BMD.y0) < 6) return;   // a small wobble is not a drag
+      edPush(); BMD.on = true; ED.hold = true;
+      var src = el.querySelector('[data-bmx="' + BMD.id + '"]'), r = src.getBoundingClientRect(), gh = src.cloneNode(true);
+      gh.classList.add("bmghost"); gh.style.left = r.left + "px"; gh.style.top = r.top + "px"; gh.style.width = r.width + "px";
+      document.body.appendChild(gh);
+      BMD.ghost = gh; BMD.dx = e.clientX - r.left; BMD.dy = e.clientY - r.top;
+      renderBm();
+    }
+    BMD.ghost.style.left = e.clientX - BMD.dx + "px"; BMD.ghost.style.top = e.clientY - BMD.dy + "px";
+    // the new place: before the first bookmark (on the pointer's line) whose middle is right of the pointer
+    var others = [].filter.call(el.querySelectorAll("[data-bmx]"), function (n) { return n.dataset.bmx !== BMD.id; }), to = others.length;
+    for (var i = 0; i < others.length; i++) {
+      var rr = others[i].getBoundingClientRect();
+      if (e.clientY < rr.top - 4) { to = i; break; }
+      if (e.clientY <= rr.bottom + 4 && e.clientX < rr.left + rr.width / 2) { to = i; break; }
+    }
+    var cur = B.items.findIndex(function (x) { return x.id === BMD.id; });
+    if (cur < 0) return;
+    var item = B.items[cur], rest = B.items.filter(function (x) { return x.id !== BMD.id; });
+    var at = to < others.length ? rest.findIndex(function (x) { return x.id === others[to].dataset.bmx; }) : rest.length;
+    if (at === cur) return;
+    rest.splice(at, 0, item); B.items = rest; renderBm();
+  });
+  function end() {
+    if (!BMD) return;
+    var d = BMD; BMD = null; ED.hold = false;
+    el.classList.remove("bmdrag");
+    if (d.ghost) d.ghost.remove();
+    if (d.bar) edSay("Bookmarks bar " + ({ l: "on the left", c: "in the center", r: "on the right" })[bm().al || "l"] + ".");
+    else if (d.on) edSay("Bookmark moved.");
+    renderBm(); positionClocks();
+    if (ED.pending) { ED.pending = false; render(); }
+  }
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+})();
 // a click anywhere else closes an open folder; a click on a link inside it closes it too
 document.addEventListener("click", function (e) {
   if (!BM_OPEN) return;
@@ -8291,7 +8365,8 @@ function openHelp() {
     h4("Dragging") +
     ul(["<b>Resize</b>: drag the edge or corner of the selected box. The 12 columns appear, the width snaps to them and the height to whole rows, and the other boxes make room.",
       "<b>Move</b>: drag the ⠿ tab. Its place stays open as an outlined gap so you see where it lands. Esc puts it back.",
-      "<b>Keyboard</b>: the arrows move the selected box, Shift + arrows resize it."]) +
+      "<b>Keyboard</b>: the arrows move the selected box, Shift + arrows resize it.",
+      "<b>Bookmarks bar</b>: drag a bookmark or folder to another place in the bar, and the bar&rsquo;s ⠿ tab sideways to put the whole bar left, center or right. Settings " + A + " Bookmarks shows the same order and position."]) +
     h4("Finishing") +
     ul(["<b>Done</b> keeps the changes, <b>Cancel</b> puts everything back, <b>Undo</b> steps back one change.",
       "Hidden boxes come back from the chips in the bar, or in " + S("Layout &amp; boxes") + ". A hidden box is not loaded.",
@@ -8618,7 +8693,7 @@ function openHelp() {
     ol(["Open " + S("Bookmarks") + " and tick <b>Show the bookmarks bar</b>.", "Add a link: an address and, if you like, a name; choose whether it goes on the bar or into a folder; press Add."]) +
     ul(["<b>+ New folder</b> makes a folder: one button on the bar that opens a small list.",
       "On each link: click the icon to change it, the small square to color it, ◀ ▶ to move it.",
-      "The bar can be aligned left, centered or right, links can open in a new tab, and one color can be set for all.",
+      "The bar can be aligned left, center or right, links can open in a new tab, and one color can be set for all. In Edit you can also drag bookmarks into a new order and drag the bar left, center or right.",
       "&ldquo;The site&rsquo;s own icon&rdquo; is fetched from that site; pick a built-in icon if you would rather not contact it."]) +
     h4("Bringing your browser&rsquo;s bookmarks") +
     ol(["Save them to a file in your browser. Chrome, Edge, Brave, Opera: Bookmark manager " + A + " ⋮ " + A + " Export bookmarks. Firefox: Bookmarks " + A + " Manage bookmarks " + A + " Import and Backup " + A + " Export Bookmarks to HTML. Safari: File " + A + " Export " + A + " Bookmarks.",
