@@ -1,4 +1,4 @@
-var VERSION = "0.25.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.26.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -312,33 +312,119 @@ function applyWall() {
   w = w && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(w) ? w : null;
   $("wall").style.backgroundImage = w ? 'url("' + w + '")' : "none";
   document.body.classList.toggle("haswall", !!w);
-  var pos = wallPos(), fit = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
-  $("wall").style.backgroundSize = fit;
-  $("wall").style.backgroundPosition = pos.x + "% " + pos.y + "%";
+  var fit = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
   var sel = $("wallFit"); if (sel) sel.value = fit;
+  if (!w) return;
+  // the picture's own size is needed to place it freely; read once per picture
+  if (!WALLIMG || WALLIMG.src !== w) {
+    var im = new Image();
+    WALLIMG = { src: w, w: 0, h: 0 };
+    im.onload = function () { if (WALLIMG && WALLIMG.src === w) { WALLIMG.w = im.naturalWidth; WALLIMG.h = im.naturalHeight; wallDraw(); } };
+    im.src = w;
+  }
+  wallDraw();
 }
-function wallPos() { return (P.wallPos && typeof P.wallPos.x === "number") ? P.wallPos : { x: 50, y: 50 }; }
+// ---- Where the wallpaper sits: anywhere, at any size ----
+// P.wallPos = { cx, cy, z }: the middle of the picture as a share of the screen's width and height (0.5 = the middle of
+// the screen; below 0 or above 1 = past an edge), and the zoom on top of the chosen fit (1 = as the fit draws it). So the
+// picture can be dragged partly out of view in any direction, and grown or shrunk, the same way on every screen size.
+// An old position ({ x, y } in percent, which could only slide until an edge met the screen) is read the way it looked.
+var WALLIMG = null, WZ_MIN = 0.2, WZ_MAX = 5;
+function wallFitScale(W, H) {
+  var f = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
+  return f === "auto" ? 1 : f === "contain" ? Math.min(W / WALLIMG.w, H / WALLIMG.h) : Math.max(W / WALLIMG.w, H / WALLIMG.h);
+}
+function wallPos() {
+  var p = P.wallPos;
+  if (p && typeof p.cx === "number" && typeof p.cy === "number") return { cx: p.cx, cy: p.cy, z: +p.z > 0 ? Math.max(WZ_MIN, Math.min(WZ_MAX, +p.z)) : 1 };
+  var x = p && typeof p.x === "number" ? p.x : 50, y = p && typeof p.y === "number" ? p.y : 50;
+  if (!WALLIMG || !WALLIMG.w) return { cx: 0.5, cy: 0.5, z: 1, old: { x: x, y: y } };
+  // the same spot as the old percentage put it
+  var W = innerWidth, H = innerHeight, s = wallFitScale(W, H), sw = WALLIMG.w * s, sh = WALLIMG.h * s;
+  return { cx: ((W - sw) * x / 100 + sw / 2) / W, cy: ((H - sh) * y / 100 + sh / 2) / H, z: 1 };
+}
+function wallDraw() {
+  var el = $("wall"), pos = wallPos();
+  if (!WALLIMG || !WALLIMG.w) {   // its size not known yet: the plain way for a moment
+    el.style.backgroundSize = P.wallFit === "contain" ? "contain" : P.wallFit === "auto" ? "auto" : "cover";
+    el.style.backgroundPosition = pos.old ? pos.old.x + "% " + pos.old.y + "%" : "center";
+    return;
+  }
+  var W = innerWidth, H = innerHeight, s = wallFitScale(W, H) * pos.z, sw = WALLIMG.w * s, sh = WALLIMG.h * s;
+  el.style.backgroundSize = Math.round(sw) + "px " + Math.round(sh) + "px";
+  el.style.backgroundPosition = Math.round(pos.cx * W - sw / 2) + "px " + Math.round(pos.cy * H - sh / 2) + "px";
+  var zs = $("wallZoom"); if (zs && document.activeElement !== zs) zs.value = Math.round(pos.z * 100);
+  var zn = $("wallZoomN"); if (zn) zn.textContent = Math.round(pos.z * 100) + "%";
+}
+window.addEventListener("resize", function () { if (WALLIMG && WALLIMG.w) wallDraw(); });
+// keeps at least a strip of the picture on screen, so it can always be found and dragged back
+function wallSet(cx, cy, z) {
+  z = Math.max(WZ_MIN, Math.min(WZ_MAX, z));
+  if (WALLIMG && WALLIMG.w) {
+    var W = innerWidth, H = innerHeight, s = wallFitScale(W, H) * z, hx = WALLIMG.w * s / 2 / W, hy = WALLIMG.h * s / 2 / H, m = 0.05;
+    cx = Math.max(m - hx, Math.min(1 - m + hx, cx)); cy = Math.max(m - hy, Math.min(1 - m + hy, cy));
+  }
+  P.wallPos = { cx: Math.round(cx * 10000) / 10000, cy: Math.round(cy * 10000) / 10000, z: Math.round(z * 1000) / 1000 };
+  wallDraw();
+}
+var wallSaveT = 0;
+function wallSaveSoon() { clearTimeout(wallSaveT); wallSaveT = setTimeout(function () { persist(); syncWall(false); }, 400); }
+// zoom around a point of the screen (the mouse, or the middle of two fingers), so that point stays where it is
+function wallZoomAt(z, px, py) {
+  var p = wallPos(), W = innerWidth, H = innerHeight;
+  z = Math.max(WZ_MIN, Math.min(WZ_MAX, z));
+  if (px == null) { px = W / 2; py = H / 2; }
+  var k = z / p.z, cx = (px + (p.cx * W - px) * k) / W, cy = (py + (p.cy * H - py) * k) / H;
+  wallSet(cx, cy, z);
+}
 var REPOS = false, reposStart = null;
 function toggleRepos() {
   REPOS = !REPOS;
   $("wallDragOverlay").hidden = !REPOS;
   $("wallReposBtn").textContent = REPOS ? "Done" : "Reposition";
+  if (REPOS) wallDraw();
 }
 (function () {
-  var ov = $("wallDragOverlay");
+  var ov = $("wallDragOverlay"), pts = {}, pinch = null;
+  var onBar = function (e) { return e.target.closest && e.target.closest(".wdrow"); };
   ov.addEventListener("pointerdown", function (e) {
-    if (e.target.closest && e.target.closest("#wallDoneBtn")) return;
-    reposStart = { x: e.clientX, y: e.clientY, pos: wallPos() };
+    if (onBar(e)) return;
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
     try { ov.setPointerCapture(e.pointerId); } catch (ex) {}
+    var ids = Object.keys(pts);
+    if (ids.length === 2) {   // two fingers: pinch to zoom
+      var a = pts[ids[0]], b = pts[ids[1]];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: wallPos().z }; reposStart = null;
+    } else if (ids.length === 1) { var p = wallPos(); reposStart = { x: e.clientX, y: e.clientY, cx: p.cx, cy: p.cy, z: p.z }; }
   });
   ov.addEventListener("pointermove", function (e) {
+    if (!pts[e.pointerId]) return;
+    pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+    var ids = Object.keys(pts);
+    if (pinch && ids.length >= 2) {
+      var a = pts[ids[0]], b = pts[ids[1]];
+      wallZoomAt(pinch.z * (Math.hypot(a.x - b.x, a.y - b.y) || 1) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      return;
+    }
     if (!reposStart) return;
-    var dx = ((e.clientX - reposStart.x) / window.innerWidth) * 100, dy = ((e.clientY - reposStart.y) / window.innerHeight) * 100;
-    P.wallPos = { x: Math.max(0, Math.min(100, reposStart.pos.x + dx)), y: Math.max(0, Math.min(100, reposStart.pos.y + dy)) };
-    $("wall").style.backgroundPosition = P.wallPos.x + "% " + P.wallPos.y + "%";
+    wallSet(reposStart.cx + (e.clientX - reposStart.x) / innerWidth, reposStart.cy + (e.clientY - reposStart.y) / innerHeight, reposStart.z);
   });
-  function endDrag() { if (!reposStart) return; reposStart = null; persist(); syncWall(false); }
+  function endDrag(e) {
+    delete pts[e.pointerId];
+    if (Object.keys(pts).length < 2) pinch = null;
+    if (!Object.keys(pts).length) { reposStart = null; wallSaveSoon(); }
+  }
   ov.addEventListener("pointerup", endDrag); ov.addEventListener("pointercancel", endDrag);
+  // the mouse wheel zooms, around the pointer
+  ov.addEventListener("wheel", function (e) {
+    if (onBar(e)) return;
+    e.preventDefault();
+    wallZoomAt(wallPos().z * Math.pow(1.0015, -e.deltaY), e.clientX, e.clientY);
+    wallSaveSoon();
+  }, { passive: false });
+  $("wallZoom").addEventListener("input", function () { wallZoomAt(+this.value / 100); wallSaveSoon(); });
+  $("wallZoomIn").onclick = function (e) { e.stopPropagation(); wallZoomAt(wallPos().z * 1.15); wallSaveSoon(); };
+  $("wallZoomOut").onclick = function (e) { e.stopPropagation(); wallZoomAt(wallPos().z / 1.15); wallSaveSoon(); };
 })();
 $("wallReposBtn").onclick = toggleRepos;
 $("wallDoneBtn").onclick = function (e) { e.stopPropagation(); if (REPOS) toggleRepos(); };
@@ -354,7 +440,7 @@ $("pwSave").onclick = function () {
   });
 };
 $("wallFit").onchange = function (e) { P.wallFit = e.target.value; persist(); applyWall(); };
-$("wallReset").onclick = function () { P.wallPos = { x: 50, y: 50 }; persist(); applyWall(); };
+$("wallReset").onclick = function () { P.wallPos = { cx: 0.5, cy: 0.5, z: 1 }; persist(); applyWall(); };
 $("volSlider").oninput = function (e) { P.vol = +e.target.value; persist(); };
 function setWall(file) {
   var fr = new FileReader();
@@ -380,7 +466,7 @@ function setWall(file) {
         if (hasAlpha) { try { localStorage.setItem("sp_wall", c.toDataURL("image/jpeg", 0.75)); alert("That image was too large to keep its transparency, so it was saved as a solid background instead."); } catch (e2) { alert("That image is too large to save. Try a smaller one."); return; } }
         else { alert("That image is too large to save. Try a smaller one."); return; }
       }
-      P.wallPos = { x: 50, y: 50 };
+      P.wallPos = { cx: 0.5, cy: 0.5, z: 1 };
       applyWall(); syncWall(false);
     };
     im.src = fr.result;
@@ -6421,16 +6507,18 @@ function admDetail(key) {
     var use = (ADM.d.usage || []).filter(function (x) { return x.user_id === id; }), secs = use.reduce(function (s, x) { return s + (+x.secs || 0); }, 0);
     var p = (ADM.d.prefs || {})[id] || null, ipl = {}, myFb = D.fb.filter(function (f) { return f.user_id === id; }).length;
     D.visits.forEach(function (v) { if (v.u && v.u.id === id && v.ip) { var e = ipl[v.ip] || (ipl[v.ip] = { n: 0, at: 0, cc: v.cc }); e.n++; e.at = Math.max(e.at, v.at); } });
-    var ipKeys = Object.keys(ipl).sort(function (a, b) { return ipl[b].at - ipl[a].at; }).slice(0, 5);
+    var ipKeys = Object.keys(ipl).sort(function (a, b) { return ipl[b].at - ipl[a].at; }).slice(0, 5), lastOpen = ipKeys.length ? ipl[ipKeys[0]].at : 0;
     var srcs = p ? [p.news >= 0 ? p.news + " news" : "", p.tg >= 0 ? p.tg + " Telegram" : "", p.rd >= 0 ? p.rd + " Reddit" : "", p.stocks ? p.stocks + " stocks" : "", p.yt ? p.yt + " YouTube" : "", p.leagues >= 0 ? p.leagues + " leagues" : "", p.mail ? p.mail + " mail" : "", p.twitch ? "Twitch" : ""].filter(Boolean).join(" · ") : "";
     return admKv([
-      ["Signed up", esc(admWhen(admTs(u.created)))], ["Last seen", esc(admWhen(D.seen[id] || 0))], ["Last sign-in", esc(admWhen(admTs(u.last)))],
+      // three different moments: in use (open and in view, updated every 2 minutes), the page last opened or reloaded,
+      // and the password last typed (staying signed in does not change it)
+      ["Signed up", esc(admWhen(admTs(u.created)))], ["Last active", esc(admWhen(D.seen[id] || 0))], lastOpen ? ["Last opened", esc(admWhen(lastOpen))] : null, ["Password sign-in", esc(admWhen(admTs(u.last)))],
       ["Status", esc([u.confirmed ? "email confirmed" : "email not confirmed", u.banned ? "blocked" : "", u.admin ? "owner" : ""].filter(Boolean).join(" · "))],
       ["Last 30 days", esc(use.length + (use.length === 1 ? " day active · " : " days active · ") + admMins(secs) + " on the page")],
       p ? ["Setup", esc([p.onboarded ? "guide done" : "guide not done", p.theme, p.off && p.off.length ? p.off.length + " boxes off" : "", p.docked && p.docked.length ? "docked: " + p.docked.join(", ") : "", (ADM.d.wallpapers || []).indexOf(id) >= 0 ? "own wallpaper" : ""].filter(Boolean).join(" · "))] : ["Setup", "nothing saved yet"],
       srcs ? ["Sources", esc(srcs)] : null,
       p ? ["Saved", esc(p.notes + " notes · " + p.todos + " to-dos · " + p.cal + " events" + (p.favs ? " · " + p.favs + " favorites" : ""))] : null,
-      ipKeys.length ? ["Addresses", ipKeys.map(function (ip) { return admLink("ip:" + ip, ip) + ' <small class="mut">' + esc((ipl[ip].cc ? ipl[ip].cc + " · " : "") + ipl[ip].n + "×") + "</small>"; }).join("<br>")] : null,
+      ipKeys.length ? ["Addresses", ipKeys.map(function (ip) { return admLink("ip:" + ip, ip) + ' <small class="mut">' + esc((ipl[ip].cc ? ipl[ip].cc + " · " : "") + ipl[ip].n + (ipl[ip].n === 1 ? " visit" : " visits") + " by this account") + "</small>"; }).join("<br>")] : null,
       myFb ? ["Feedback", myFb + " sent"] : null
     ]);
   }
@@ -6441,7 +6529,7 @@ function admDetail(key) {
     vs.forEach(function (v) { if (v.u) who[v.u.id] = v.u; });
     var host = ""; try { host = last.ref ? new URL(last.ref).hostname : ""; } catch (e) { host = last.ref.slice(0, 40); }
     return admKv([
-      ["Country", esc(last.cc || "unknown")], ["Latest visit", esc(admWhen(last.at))], ["First seen", esc(admWhen(firstV.at))], ["Visits", vs.length + " in 30 days"],
+      ["Country", esc(last.cc || "unknown")], ["Last opened", esc(admWhen(last.at))], ["First opened", esc(admWhen(firstV.at))], ["Visits", vs.length + " in 30 days, signed in or not"],
       ["Accounts", Object.keys(who).length ? Object.keys(who).map(function (k) { return admLink("u:" + k, who[k].email || k); }).join("<br>") : "not signed in"],
       ["Browser", esc(admUa(last.ua))], ["Language", esc([last.lang, last.tz].filter(Boolean).join(" · "))], host ? ["Came from", esc(host)] : null
     ]);
@@ -6461,7 +6549,7 @@ function admDetail(key) {
   ]);
 }
 function admHtml() {
-  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["seen", "Last seen"], ["ip", "Visitors"], ["fb", "Feedback"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div></div>";
+  var top = '<div class="admh"><div class="seg">' + [["sum", "Latest"], ["acc", "Accounts"], ["seen", "Last active"], ["ip", "Visitors"], ["fb", "Feedback"]].map(function (t) { return '<button data-a="admtab" data-k="' + t[0] + '"' + (ADM.tab === t[0] ? ' class="on"' : "") + ">" + t[1] + "</button>"; }).join("") + "</div></div>";
   // ✓ (everything seen) and ↻ (refresh) sit in the bottom line, so the tabs have the whole width
   var admBtns = '<span class="admb"><button data-a="admseen" title="Mark everything as seen">✓</button><button data-a="admload" title="Load the newest">' + (ADM.busy ? '<span class="spin">↻</span>' : "↻") + "</button></span>";
   if (!isAdmin()) return '<div class="adm"><p class="mut">Only for the site owner.</p></div>';
@@ -6489,7 +6577,7 @@ function admHtml() {
   var day = 86400000, nowT = Date.now(), unseen = function (t, span) { return t > S && nowT - t < span; };
   var uNew1 = D.accts.some(function (u) { return unseen(admTs(u.created), day); }), uNew7 = D.accts.some(function (u) { return unseen(admTs(u.created), 7 * day); });
   var uIp = D.ips.some(function (x) { return unseen(x.first, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
-  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses seen for the first time today"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
+  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses that opened the page today and not in the 30 days before"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
   var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
   return '<div class="adm">' + top + stats + admCalls() + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
     '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + admBtns + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
@@ -8185,7 +8273,8 @@ function openHelp() {
       "The glow behind the page, the shadows, and rounded or square corners everywhere (boxes, menus, windows and buttons).",
       "<b>Signal colors per box</b>: the green and red in Stocks, the live dot in Twitch, the live red and icons in Sports, each with a strength slider to tone it down."]) +
     h4("Wallpaper (" + S("Wallpaper") + ")") +
-    ol(["Press <b>Choose image</b>.", "Choose how it fits: Fill screen (may crop), Fit whole image, or Original size.", "Press <b>Reposition</b>, drag the screen to move the image, then press <b>Done</b>. <b>Reset position</b> puts it back."]) +
+    ol(["Press <b>Choose image</b>.", "Choose how it fits: Fill screen (may crop), Fit whole image, or Original size.", "Press <b>Reposition</b> and drag the screen to move the image anywhere, also partly off the screen (handy for a picture with a frame around it). Zoom with the mouse wheel, two fingers, the slider or − +. Press <b>Done</b>. <b>Reset position</b> puts it back in the middle at its normal size."]) +
+    p("Where the image does not reach, the page&rsquo;s own background color shows.") +
     p("Your wallpaper follows your account to your other devices.");
 
   html += h3("clock", "Date, time &amp; world clocks") +

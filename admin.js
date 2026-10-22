@@ -246,8 +246,8 @@
         panel("Where they are", "By the country of the IP address, last 30 days.", hbars(top(function (o) { return country(o.cc); }, 6)), "w3") +
         panel("How they got here", "The site they clicked from. “Direct” means they typed the address or used a bookmark.", hbars(top(function (o) { return o.ref || "Direct"; }, 6)), "w3") + "</div>";
       h += '<div class="apanel w12"><h2>Visitors by IP address <span class="achips">' + [["all", "Everyone"], ["anon", "Not signed in"], ["user", "Signed in"]].map(function (f) { return '<button data-vf="' + f[0] + '"' + (VF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
-        '<p class="ahint">One line per IP address, most recent first. Click a line to see each of its visits. Reloading within 30 minutes counts as the same visit. Kept for 90 days. <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
-        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th>Last visit</th><th>Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
+        '<p class="ahint">One line per IP address, most recent first, for the last 30 days (visits are kept for 90). Click a line to see each of its visits. A visit is the page being opened or reloaded; reloading within 30 minutes counts once, and a tab that stays open is not a new visit, so an account can be in use long after its last visit (see <b>Last active</b> under Accounts). <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
+        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th title="When the page was last opened or reloaded from this address">Last opened</th><th title="Visits from this address in the last 30 days, signed in or not">Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
         (list.slice(0, 300).map(function (o) {
           var who = Object.keys(o.who).map(function (id) { var u = byId[id]; return u ? esc(u.email) + (u.admin ? ' <span class="tag y">you</span>' : "") : "a deleted account"; });
           var kd = kindOf(o, who.length > 0);
@@ -269,7 +269,7 @@
       h += '<div class="agrid">' + panel("New accounts per day", "Last 30 days.", bars(d30.map(function (d) { return users.filter(function (u) { return u.created && dayKey(Date.parse(u.created)) === d; }).length; }), d30), "w6") +
         panel("Accounts used per day", "How many accounts had the page open each day, last 30 days.", bars(d30.map(function (d) { return DAY[d].users; }), d30), "w6") + "</div>";
       h += '<div class="apanel w12"><h2>Accounts</h2><p class="ahint">' + rows.length + " shown. Click a line for details and for the actions: send a password reset, block or delete. Click a column name to sort.</p>" +
-        '<div class="tablewrap"><table class="atable"><thead><tr>' + th("email", "Email") + th("created", "Joined") + th("seen", "Last seen") + th("s7", "Time, 7 days") + th("s30", "Time, 30 days") + "<th>Status</th></tr></thead><tbody>" +
+        '<div class="tablewrap"><table class="atable"><thead><tr>' + th("email", "Email") + th("created", "Joined") + th("seen", "Last active") + th("s7", "Time, 7 days") + th("s30", "Time, 30 days") + "<th>Status</th></tr></thead><tbody>" +
         rows.map(function (r) {
           var u = r.u, p = r.p, tags = [];
           if (u.admin) tags.push('<span class="tag y">you (owner)</span>');

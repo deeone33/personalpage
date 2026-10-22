@@ -28,7 +28,7 @@
 </head><body>
 <div id="wall"></div>
 <div id="aurora" aria-hidden="true"></div>
-<div id="wallDragOverlay" hidden><div class="wdrow"><span>Drag to move the wallpaper.</span><button id="wallDoneBtn">Done</button></div></div>
+<div id="wallDragOverlay" hidden><div class="wdrow"><span class="wdtip">Drag to move it anywhere; scroll or pinch to zoom.</span><span class="wdzoom"><button id="wallZoomOut" aria-label="Zoom out" title="Smaller">−</button><input type="range" id="wallZoom" min="20" max="500" step="1" value="100" aria-label="Zoom"><button id="wallZoomIn" aria-label="Zoom in" title="Larger">+</button><span id="wallZoomN" class="wdzn">100%</span></span><button id="wallDoneBtn">Done</button></div></div>
 <aside id="dock" hidden aria-label="Docked players and panels"><div id="dockP"></div><div id="sideL"></div></aside>
 <aside id="dockR" hidden aria-label="Docked players and panels"><div id="dockPR"></div><div id="sideR"></div></aside>
 <div id="dockGrip" title="Drag to resize the players"></div>
@@ -124,7 +124,7 @@
     <div class="mut sn">Your own picture behind the page. It follows your account to your other devices.</div>
     <label>Image <span><label class="filebtn" for="wallFile">Choose image</label><input type="file" id="wallFile" accept="image/*" class="vis-hidden"> <button id="wallClear">Remove</button></span></label>
     <label data-kw="fit fill crop size">How the image fits <select id="wallFit"><option value="cover">Fill screen (may crop)</option><option value="contain">Fit whole image</option><option value="auto">Original size</option></select></label>
-    <div class="mut sn">Press Reposition, then drag the screen to move the image. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
+    <div class="mut sn" data-kw="move zoom position scale size drag">Press Reposition, then drag the image anywhere (also partly off the screen) and zoom it with the wheel, two fingers or the slider. <button id="wallReposBtn">Reposition</button> <button id="wallReset">Reset position</button></div>
   </section>
 
   <section class="setgrp" data-cat="Page" data-sec="Date &amp; time">

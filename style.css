@@ -591,6 +591,13 @@ body.resizing{user-select:none}
 .wdrow{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.6);color:#fff;padding:8px 8px 8px 14px;border-radius:99px;font-size:13px;pointer-events:auto}
 .wdrow span{pointer-events:none}
 .wdrow button{background:#fff;color:#111;border:0;border-radius:99px;padding:5px 12px;font-weight:600;cursor:pointer}
+/* zoom: − slider + and the size, in the same bar */
+.wdrow .wdzoom{display:flex;align-items:center;gap:6px;pointer-events:auto}
+.wdrow .wdzoom button{width:26px;height:26px;padding:0;font-size:16px;line-height:1;background:rgba(255,255,255,.18);color:#fff}
+.wdrow .wdzoom button:hover{background:rgba(255,255,255,.3)}
+.wdrow .wdzoom input{width:110px;accent-color:#fff}
+.wdrow .wdzn{min-width:3.2em;font-variant-numeric:tabular-nums;opacity:.85}
+@media(max-width:520px){.wdrow{flex-wrap:wrap;justify-content:center;border-radius:16px;max-width:calc(100vw - 24px);padding:8px 10px;gap:8px}.wdrow .wdtip{flex-basis:100%;text-align:center}.wdrow .wdzoom input{width:120px}.wdrow .wdzoom button{width:34px;height:34px}.wdrow #wallDoneBtn{padding:9px 16px}}
 
 /* ---- Small windows for notes, calendar and the summary ---- */
 .mbox:has(.brief){width:min(460px,100%)}
