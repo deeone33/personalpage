@@ -1751,6 +1751,8 @@ img.pdc{display:block;flex:none;object-fit:cover;background:var(--bg);border:1px
 .admd{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px;padding:6px 8px 8px;margin:0 0 6px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
 .admd>span{color:var(--mut);white-space:nowrap}
 .admd>b{font-weight:500;min-width:0;overflow-wrap:anywhere}
+.admd .admrec{font-weight:400;line-height:1.5}
+.admd .admrec .admau{color:var(--ac)}
 .admd .lnk2{font-size:12px;padding:0;text-align:left}/* (round 3) docked panels: the handles and the outline stay inside the panel, so the column never cuts them off */
 .swgh{bottom:0}
 .swgw.r{right:0}

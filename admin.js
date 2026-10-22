@@ -6,7 +6,7 @@
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, FF = "todo", FK = "all", FOPEN = {}, COPEN = {};
+  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, LATESTN = 25, FF = "todo", FK = "all", FOPEN = {}, COPEN = {};
   try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
   // use the accent colour chosen on the main page, if there is one
   try {
@@ -49,6 +49,18 @@
   function date(t) { return t ? new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "–"; }
   function stamp(t) { return t ? new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "–"; }
   function dayKey(t) { var d = new Date(t); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }   // your own (local) day
+  function isUuid(x) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(x || "")); }
+  // the timeline: what happened, in words
+  var EVW = { first: "Opened the page, first time", open: "Opened the page", login: "Signed in", logout: "Signed out", user_signedup: "Created an account", user_recovery_requested: "Asked for a password reset", user_modified: "Changed password or email", user_deleted: "Account deleted" };
+  // one line: when (and until when it was in use), what, who or from where, the device, where they came from
+  function evRow(e, byId, side) {
+    var hm = function (t) { return new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); };
+    var when = stamp(e.t);
+    var u = e.u && byId[e.u], who = u ? u.email : e.u ? "a deleted account" : "not signed in";
+    var what = (EVW[e.kind] || e.kind) + (e.until ? ", in use until " + (dayKey(e.until) === dayKey(e.t) ? hm(e.until) : stamp(e.until)) : "");
+    var auth = e.kind !== "first" && e.kind !== "open";
+    return '<div class="' + (auth ? "evauth" : e.kind === "first" ? "evfirst" : "") + '"><b>' + esc(when) + "</b><span>" + esc(what) + "</span><span>" + esc(side === "ip" ? e.ip || "–" : side === "both" ? who + " · " + (e.ip || "–") : who) + "</span><span>" + esc(auth ? "" : device(e.ua)) + '</span><span class="mut">' + esc(auth ? "" : [e.ref || "Direct", e.lang].filter(Boolean).join(" · ")) + "</span></div>";
+  }
   function lastDays(n) { var out = []; for (var i = n - 1; i >= 0; i--) out.push(dayKey(Date.now() - i * 86400000)); return out; }
   function bars(vals, days, unit) {
     var max = Math.max.apply(null, vals.concat([1]));
@@ -209,14 +221,35 @@
     });
     // visitors: one entry per IP address, with all its visits (the list from the function is newest first)
     var IP = {}, ipList = [];
+    // "active": the last moment the page was in use there (it says "still here" every 5 minutes while open and in view);
+    // a visit that was only opened counts from when it was opened
+    var lastIp = {};   // the address each account was last on
     visits.forEach(function (v) {
-      var t = Date.parse(v.at), d = dayKey(t), k = v.ip || "unknown";
-      var o = IP[k]; if (!o) { o = IP[k] = { ip: k, n: 0, last: t, first: t, cc: v.cc, ua: v.ua, ref: "", tz: v.tz, lang: v.lang, who: {}, rows: [] }; ipList.push(o); }
-      o.n++; o.first = Math.min(o.first, t); o.rows.push(v);
+      var t = Date.parse(v.at), la = Date.parse(v.last_at) || 0, act = Math.max(t, la), k = v.ip || "unknown";
+      var o = IP[k]; if (!o) { o = IP[k] = { ip: k, n: 0, last: t, act: act, first: t, cc: v.cc, ua: v.ua, ref: "", tz: v.tz, lang: v.lang, who: {}, rows: [] }; ipList.push(o); }
+      o.n++; o.first = Math.min(o.first, t); o.act = Math.max(o.act, act); o.rows.push(v);
       if (v.ref && !o.ref) o.ref = v.ref;
-      if (v.user_id) o.who[v.user_id] = 1;
-      if (DAY[d]) { DAY[d].ips[k] = 1; if (!v.user_id) DAY[d].anon[k] = 1; }
+      if (v.user_id) { o.who[v.user_id] = 1; if (!lastIp[v.user_id] || t > lastIp[v.user_id].t) lastIp[v.user_id] = { ip: k, t: t }; }
+      // a day counts every address that opened or used the page that day
+      [dayKey(t), la ? dayKey(la) : ""].forEach(function (d) { if (DAY[d]) { DAY[d].ips[k] = 1; if (!v.user_id) DAY[d].anon[k] = 1; } });
     });
+    // signed-in use from before "still here" existed: an account's own last activity, on the address it was last on
+    Object.keys(lastIp).forEach(function (id) { var s = U[id] && U[id].seen, o = IP[lastIp[id].ip]; if (o && s > o.act) o.act = s; });
+    // ---- one timeline of everything: page opened (the first time from an address, or again), in use until, and the
+    // account events from Supabase's sign-in log (signed up, signed in, signed out, password reset, account changed) ----
+    var EV = [], firstAt = {};
+    visits.forEach(function (v) { var t = Date.parse(v.at), k = v.ip || "unknown"; if (!firstAt[k] || t < firstAt[k]) firstAt[k] = t; });
+    visits.forEach(function (v) {
+      var t = Date.parse(v.at), la = Date.parse(v.last_at) || 0, k = v.ip || "unknown";
+      EV.push({ t: t, until: la - t >= 60000 ? la : 0, kind: firstAt[k] === t ? "first" : "open", ip: k, u: v.user_id || "", ua: v.ua, ref: v.ref, lang: v.lang, tz: v.tz });
+    });
+    (D.auth || []).forEach(function (a) {
+      var t = Date.parse(a.at); if (!t) return;
+      EV.push({ t: t, kind: a.what, ip: a.ip || "", u: a.who || "" });
+      if (a.ip && IP[a.ip]) { IP[a.ip].act = Math.max(IP[a.ip].act, t); if (isUuid(a.who)) IP[a.ip].who[a.who] = 1; }
+    });
+    EV.sort(function (a, b) { return b.t - a.t; });   // by when it started, so the times read in order
+    ipList.sort(function (a, b) { return b.act - a.act; });
     var count = function (o) { return Object.keys(o).length; };
     var ips7 = {}; d7.forEach(function (d) { Object.keys(DAY[d].ips).forEach(function (k) { ips7[k] = 1; }); });
     var new7 = users.filter(function (u) { return u.created && now - Date.parse(u.created) < 7 * 86400000; }).length;
@@ -242,20 +275,25 @@
         return !Q || o.ip.toLowerCase().indexOf(Q) >= 0 || names.indexOf(Q) >= 0 || country(o.cc).toLowerCase().indexOf(Q) >= 0;
       });
       h += '<div class="agrid">' +
-        panel("Visitors per day", "How many different IP addresses opened the front page each day, last 30 days. A visitor does not need an account.", bars(d30.map(function (d) { return count(DAY[d].ips); }), d30), "w6") +
+        panel("Visitors per day", "How many different IP addresses opened or used the front page each day, last 30 days. A visitor does not need an account.", bars(d30.map(function (d) { return count(DAY[d].ips); }), d30), "w6") +
         panel("Where they are", "By the country of the IP address, last 30 days.", hbars(top(function (o) { return country(o.cc); }, 6)), "w3") +
         panel("How they got here", "The site they clicked from. “Direct” means they typed the address or used a bookmark.", hbars(top(function (o) { return o.ref || "Direct"; }, 6)), "w3") + "</div>";
+      // everyone's latest activity in one list
+      if (D.authErr) h += '<div class="apanel w12 awarn"><b>Sign-ins are not in the timeline yet.</b> <span class="mut">' + esc(D.authErr) + "</span></div>";
+      h += '<div class="apanel w12"><h2>Latest activity</h2><p class="ahint">Everything on the front page, newest first: the page opened (the first time from an address, or again) and until when it was in use, and sign-ups, sign-ins, sign-outs and password resets. Click an address below for all of its activity, or an account under Accounts for its own.</p><div class="vlist evall">' +
+        (EV.slice(0, LATESTN).map(function (e) { return evRow(e, byId, "both"); }).join("") || '<div class="mut">Nothing yet.</div>') +
+        (EV.length > LATESTN ? '<button class="amore" data-more="1">Show 50 more</button>' : "") + "</div></div>";
       h += '<div class="apanel w12"><h2>Visitors by IP address <span class="achips">' + [["all", "Everyone"], ["anon", "Not signed in"], ["user", "Signed in"]].map(function (f) { return '<button data-vf="' + f[0] + '"' + (VF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
-        '<p class="ahint">One line per IP address, most recent first, for the last 30 days (visits are kept for 90). Click a line to see each of its visits. A visit is the page being opened or reloaded; reloading within 30 minutes counts once, and a tab that stays open is not a new visit, so an account can be in use long after its last visit (see <b>Last active</b> under Accounts). <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
-        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th title="When the page was last opened or reloaded from this address">Last opened</th><th title="Visits from this address in the last 30 days, signed in or not">Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
+        '<p class="ahint">One line per IP address, last used first, for the last 30 days (visits are kept for 90). <b>Last active</b> is when the page was last open and in view there (it checks in every 5 minutes); point at it for when it was last opened. A visit is the page being opened or reloaded (within 30 minutes counts once); click a line to see each visit and how long it was in use. <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
+        '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th title="When the page was last open and in view from this address">Last active</th><th title="Visits from this address in the last 30 days, signed in or not">Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
         (list.slice(0, 300).map(function (o) {
           var who = Object.keys(o.who).map(function (id) { var u = byId[id]; return u ? esc(u.email) + (u.admin ? ' <span class="tag y">you</span>' : "") : "a deleted account"; });
           var kd = kindOf(o, who.length > 0);
-          var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc(stamp(o.last)) + '">' + ago(o.last) + '</td><td class="num">' + o.n + '</td><td><span class="tag kd-' + kd.k + '" title="' + esc(kd.why.join("; ")) + '">' + kd.l + "</span></td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
-          if (VOPEN[o.ip]) out += '<tr class="udetail"><td colspan="8"><p class="ahint kdwhy"><b>' + kd.l + ":</b> " + esc(kd.why.join("; ")) + '</p><div class="vlist">' +o.rows.slice(0, 40).map(function (v) {
-            var u = v.user_id && byId[v.user_id];
-            return "<div><b>" + esc(stamp(Date.parse(v.at))) + "</b><span>" + (u ? esc(u.email) : v.user_id ? "a deleted account" : "not signed in") + "</span><span>" + esc(device(v.ua)) + "</span><span>" + esc(v.ref || "Direct") + "</span><span class=\"mut\">" + esc([v.lang, v.tz].filter(Boolean).join(" · ")) + "</span></div>";
-          }).join("") + (o.rows.length > 40 ? '<div class="mut">… and ' + (o.rows.length - 40) + " earlier visits</div>" : "") + "</div></td></tr>";
+          var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc("Active " + stamp(o.act) + " · last opened " + stamp(o.last)) + '">' + ago(o.act) + '</td><td class="num">' + o.n + '</td><td><span class="tag kd-' + kd.k + '" title="' + esc(kd.why.join("; ")) + '">' + kd.l + "</span></td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
+          // everything from this address, newest first: opened (first time / again, and until when it was in use), and sign-ins
+          if (VOPEN[o.ip]) { var evs = EV.filter(function (e) { return e.ip === o.ip; });
+            out += '<tr class="udetail"><td colspan="8"><p class="ahint kdwhy"><b>' + kd.l + ":</b> " + esc(kd.why.join("; ")) + '</p><div class="vlist">' + evs.slice(0, 60).map(function (e) { return evRow(e, byId, "who"); }).join("") +
+              (evs.length > 60 ? '<div class="mut">… and ' + (evs.length - 60) + " earlier</div>" : "") + "</div></td></tr>"; }
           return out;
         }).join("") || '<tr><td colspan="8" class="mut">' + (visits.length ? "Nobody matches." : "No visits recorded yet.") + "</td></tr>") +
         "</tbody></table></div>" + (list.length > 300 ? '<p class="ahint">Showing the 300 most recent of ' + list.length + ".</p>" : "") + "</div>";
@@ -286,7 +324,12 @@
               '<div class="uacts"><button data-act="reset" data-id="' + esc(u.id) + '">Send password reset email</button>' +
               (u.confirmed ? "" : '<button data-act="confirm" data-id="' + esc(u.id) + '">Mark email as confirmed</button>') +
               (u.admin ? "" : '<button data-act="' + (u.banned ? "unblock" : "block") + '" data-id="' + esc(u.id) + '">' + (u.banned ? "Unblock" : "Block sign-in") + '</button><button class="danger" data-act="delete" data-id="' + esc(u.id) + '">Delete account…</button>') +
-              "</div></div></div></td></tr>";
+              "</div></div></div>" + (function () {
+                // this account's whole story, newest first: every visit (from which address, and until when it was in use) and its sign-ins
+                var mine = EV.filter(function (e) { return e.u === u.id; });
+                return '<h3 style="margin-top:12px">Activity, last 30 days</h3><div class="vlist">' + (mine.slice(0, 60).map(function (e) { return evRow(e, byId, "ip"); }).join("") || '<div class="mut">Nothing in the last 30 days.</div>') +
+                  (mine.length > 60 ? '<div class="mut">… and ' + (mine.length - 60) + " earlier</div>" : "") + "</div>";
+              })() + "</td></tr>";
           }
           return out;
         }).join("") + "</tbody></table></div></div>";
@@ -366,6 +409,7 @@
     if (tab) { TAB = tab.dataset.tab; render(); return; }
     var vf = e.target.closest("[data-vf]");
     if (vf) { VF = vf.dataset.vf; render(); return; }
+    if (e.target.closest("[data-more]")) { LATESTN += 50; render(); return; }
     var th = e.target.closest("th[data-sort]");
     if (th) { if (SORT === th.dataset.sort) SORTDIR = -SORTDIR; else { SORT = th.dataset.sort; SORTDIR = SORT === "email" ? 1 : -1; } render(); return; }
     var row = e.target.closest("tr.urow");

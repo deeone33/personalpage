@@ -53,7 +53,11 @@ tr.frow.isnew .mail{font-weight:700}
 .uacts a.btn{font-size:12px;padding:4px 10px}
 @media(max-width:900px){.fd{grid-template-columns:1fr}.achips{flex-wrap:wrap}}
 .vlist{display:grid;gap:2px;font-size:12.5px}
-.vlist>div{display:grid;grid-template-columns:10em minmax(8em,1.2fr) 1fr 1fr 1.2fr;gap:10px;padding:2px 0}
+.vlist>div{display:grid;grid-template-columns:9.5em minmax(12em,1.5fr) minmax(9em,1.3fr) 1fr 1fr;gap:10px;padding:2px 0}
+/* the timeline: account events (sign-ins…) in the accent color, a first visit in green */
+.vlist .evauth>span:nth-child(2){color:var(--ac,#7c83ff);font-weight:600}
+.vlist .evfirst>span:nth-child(2){color:#3ecf8e;font-weight:600}
+.vlist>.amore{display:block;margin:6px 0 0;padding:4px 10px;font-size:12px;border-radius:8px}
 .vlist b{font-weight:600;font-variant-numeric:tabular-nums}
 .atable tr.vrow{cursor:pointer}
 .atable tr.vrow:hover td{background:var(--acsoft)}

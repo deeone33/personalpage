@@ -1,4 +1,4 @@
-var VERSION = "0.26.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.27.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -6458,27 +6458,50 @@ function admTs(x) { var t = Date.parse(x); return isNaN(t) ? 0 : t; }
 // your own calendar day of a moment, as the admin page counts days
 function admDay(t) { var d = new Date(t); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
 // the numbers and lists, worked out from the overview the same way as on the admin page
+// The owner panel's timeline words (the same as the admin page's)
+var ADM_EVW = { first: "Opened the page, first time", open: "Opened the page", login: "Signed in", logout: "Signed out", user_signedup: "Created an account", user_recovery_requested: "Asked for a password reset", user_modified: "Changed password or email", user_deleted: "Account deleted" };
+// the latest few things of one account or one address: visits (and until when in use) and sign-ins, newest first
+function admRecent(D, pick, side) {
+  var first = {};
+  D.visits.forEach(function (v) { if (v.ip && (!first[v.ip] || v.at < first[v.ip])) first[v.ip] = v.at; });
+  var hm = function (t) { return new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); };
+  var dt = function (t) { return new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); };
+  var ev = D.visits.filter(function (v) { return pick(v.ip, v.u); }).map(function (v) { return { t: v.at, w: (first[v.ip] === v.at ? ADM_EVW.first : ADM_EVW.open) + (v.la - v.at >= 60000 ? ", in use until " + hm(v.la) : ""), ip: v.ip, u: v.u }; })
+    .concat(D.auth.filter(function (a) { return pick(a.ip, a.u); }).map(function (a) { return { t: a.t, w: ADM_EVW[a.what] || a.what, ip: a.ip, u: a.u, au: 1 }; }))
+    .sort(function (a, b) { return b.t - a.t; }).slice(0, 5);
+  return ev.length ? '<span class="admrec">' + ev.map(function (e) { return '<span class="' + (e.au ? "admau" : "") + '">' + esc(dt(e.t) + " · " + e.w) + ' <small class="mut">' + esc(side === "ip" ? e.ip : e.u ? e.u.email || "" : "not signed in") + "</small></span>"; }).join("<br>") + "</span>" : "";
+}
 function admData() {
   var d = ADM.d, now = Date.now(), day = 86400000, today = admDay(now), users = d.users || [], byId = {}, seen = {};
   users.forEach(function (u) { byId[u.id] = u; seen[u.id] = admTs(u.last); });
   var active = {};
   (d.usage || []).forEach(function (r) { var t = admTs(r.last_seen); if (t > (seen[r.user_id] || 0)) seen[r.user_id] = t; if (r.day === today) active[r.user_id] = 1; });
-  var visits = (d.visits || []).map(function (v) { return { at: admTs(v.at), ip: String(v.ip || ""), cc: String(v.cc || ""), u: byId[v.user_id], ua: String(v.ua || ""), ref: String(v.ref || ""), lang: String(v.lang || ""), tz: String(v.tz || "") }; });
-  // one entry per address: its latest visit (when it is listed), its first one (is it new?), how often, and who
-  var IP = {};
+  // la: the last moment that visit was in use (the page says "still here" every 5 minutes while open and in view)
+  var visits = (d.visits || []).map(function (v) { return { at: admTs(v.at), la: admTs(v.last_at), ip: String(v.ip || ""), cc: String(v.cc || ""), u: byId[v.user_id], ua: String(v.ua || ""), ref: String(v.ref || ""), lang: String(v.lang || ""), tz: String(v.tz || "") }; });
+  // one entry per address: its latest visit, when it was last in use there (act: what it is listed by), its first visit
+  // (is it new?), how often, and who. The same rules as the admin page.
+  var IP = {}, lastIp = {};
   visits.forEach(function (v) {
     if (!v.ip) return;
-    var o = IP[v.ip] || (IP[v.ip] = { ip: v.ip, at: 0, first: v.at, cc: v.cc, n: 0, u: "" });
+    var o = IP[v.ip] || (IP[v.ip] = { ip: v.ip, at: 0, act: 0, first: v.at, cc: v.cc, n: 0, u: "" });
     o.n++; if (v.at > o.at) { o.at = v.at; o.cc = v.cc || o.cc; } if (v.at < o.first) o.first = v.at; if (v.u && !o.u) o.u = v.u.email || "";
+    o.act = Math.max(o.act, v.at, v.la || 0);
+    if (v.u && (!lastIp[v.u.id] || v.at > lastIp[v.u.id].at)) lastIp[v.u.id] = { ip: v.ip, at: v.at };
   });
-  var ips = Object.keys(IP).map(function (k) { return IP[k]; }).sort(function (a, b) { return b.at - a.at; });
+  // an account's own activity counts on the address it was last on (also for visits from before "still here" existed)
+  Object.keys(lastIp).forEach(function (id) { var o = IP[lastIp[id].ip]; if (o && (seen[id] || 0) > o.act) o.act = seen[id]; });
+  var ips = Object.keys(IP).map(function (k) { return IP[k]; }).sort(function (a, b) { return b.act - a.act; });
   var accts = users.slice().sort(function (a, b) { return admTs(b.created) - admTs(a.created); });
   var lastSeen = users.filter(function (u) { return seen[u.id]; }).sort(function (a, b) { return seen[b.id] - seen[a.id]; });
   var fb = (d.feedback || []).slice().sort(function (a, b) { return admTs(b.at) - admTs(a.at); });
+  // sign-ups, sign-ins, sign-outs, password resets (from Supabase's sign-in log), newest first; they count as activity too
+  var auth = (d.auth || []).map(function (a) { return { t: admTs(a.at), ip: String(a.ip || ""), u: byId[a.who], what: String(a.what || "") }; }).filter(function (a) { return a.t; }).sort(function (a, b) { return b.t - a.t; });
+  auth.forEach(function (a) { var o = IP[a.ip]; if (o && a.t > o.act) o.act = a.t; });
+  ips.sort(function (a, b) { return b.act - a.act; });
   return {
-    accts: accts, seenList: lastSeen, seen: seen, fb: fb, ips: ips, visits: visits, byId: byId,
+    accts: accts, seenList: lastSeen, seen: seen, fb: fb, ips: ips, visits: visits, byId: byId, auth: auth,
     n: { users: users.length, new1: accts.filter(function (u) { return admDay(admTs(u.created)) === today; }).length, new7: accts.filter(function (u) { return now - admTs(u.created) < 7 * day; }).length,
-      active: Object.keys(active).length, visitors: ips.filter(function (x) { return admDay(x.at) === today; }).length,
+      active: Object.keys(active).length, visitors: ips.filter(function (x) { return admDay(x.act) === today; }).length,
       fbNew: fb.filter(function (f) { return (f.status || "new") === "new"; }).length, ipNew: ips.filter(function (x) { return admDay(x.first) === today; }).length }
   };
 }
@@ -6518,6 +6541,7 @@ function admDetail(key) {
       p ? ["Setup", esc([p.onboarded ? "guide done" : "guide not done", p.theme, p.off && p.off.length ? p.off.length + " boxes off" : "", p.docked && p.docked.length ? "docked: " + p.docked.join(", ") : "", (ADM.d.wallpapers || []).indexOf(id) >= 0 ? "own wallpaper" : ""].filter(Boolean).join(" · "))] : ["Setup", "nothing saved yet"],
       srcs ? ["Sources", esc(srcs)] : null,
       p ? ["Saved", esc(p.notes + " notes · " + p.todos + " to-dos · " + p.cal + " events" + (p.favs ? " · " + p.favs + " favorites" : ""))] : null,
+      (function () { var r = admRecent(D, function (ip, au) { return au && au.id === id; }, "ip"); return r ? ["Recent", r] : null; })(),
       ipKeys.length ? ["Addresses", ipKeys.map(function (ip) { return admLink("ip:" + ip, ip) + ' <small class="mut">' + esc((ipl[ip].cc ? ipl[ip].cc + " · " : "") + ipl[ip].n + (ipl[ip].n === 1 ? " visit" : " visits") + " by this account") + "</small>"; }).join("<br>")] : null,
       myFb ? ["Feedback", myFb + " sent"] : null
     ]);
@@ -6529,8 +6553,9 @@ function admDetail(key) {
     vs.forEach(function (v) { if (v.u) who[v.u.id] = v.u; });
     var host = ""; try { host = last.ref ? new URL(last.ref).hostname : ""; } catch (e) { host = last.ref.slice(0, 40); }
     return admKv([
-      ["Country", esc(last.cc || "unknown")], ["Last opened", esc(admWhen(last.at))], ["First opened", esc(admWhen(firstV.at))], ["Visits", vs.length + " in 30 days, signed in or not"],
+      ["Country", esc(last.cc || "unknown")], ["Last active", esc(admWhen((D.ips.filter(function (x) { return x.ip === id; })[0] || {}).act || last.at))], ["Last opened", esc(admWhen(last.at))], ["First opened", esc(admWhen(firstV.at))], ["Visits", vs.length + " in 30 days, signed in or not"],
       ["Accounts", Object.keys(who).length ? Object.keys(who).map(function (k) { return admLink("u:" + k, who[k].email || k); }).join("<br>") : "not signed in"],
+      (function () { var r = admRecent(D, function (ip) { return ip === id; }, "who"); return r ? ["Recent", r] : null; })(),
       ["Browser", esc(admUa(last.ua))], ["Language", esc([last.lang, last.tz].filter(Boolean).join(" · "))], host ? ["Came from", esc(host)] : null
     ]);
   }
@@ -6558,13 +6583,14 @@ function admHtml() {
   var fbRow = function (f) { return admRow(admTs(f.at) > S, '<b class="pill' + ((f.status || "new") === "new" ? " ac" : "") + '">' + esc(f.status || "new") + "</b> " + esc(String(f.title || f.a || "(no title)").slice(0, 120)), esc([f.kind, f.area].filter(Boolean).join(" · ")), admTs(f.at), "f:" + f.id); };
   var accRow = function (u) { return admRow(admTs(u.created) > S, esc(u.email || "(no email)"), u.confirmed ? "" : "not confirmed", admTs(u.created), "u:" + u.id); };
   var seenRow = function (u) { return admRow(D.seen[u.id] > S, esc(u.email || ""), "", D.seen[u.id], "u:" + u.id); };
-  var ipRow = function (x) { return admRow(x.at > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits") + (Date.now() - x.first < 86400000 ? " · new" : "")), x.at, "ip:" + x.ip); };
+  var ipRow = function (x) { return admRow(x.act > S, esc(x.ip) + (x.cc ? ' <small class="mut">' + esc(x.cc) + "</small>" : ""), esc((x.u ? x.u + " · " : "") + x.n + (x.n === 1 ? " visit" : " visits") + (Date.now() - x.first < 86400000 ? " · new" : "")), x.act, "ip:" + x.ip); };
   if (ADM.tab === "sum") {
     var ev = [];
     D.accts.slice(0, 10).forEach(function (u) { ev.push({ t: admTs(u.created), k: "u:" + u.id, h: function (k) { return admRow(admTs(u.created) > S, "New account: " + esc(u.email || ""), "", admTs(u.created), k); } }); });
     D.fb.slice(0, 10).forEach(function (f) { ev.push({ t: admTs(f.at), k: "f:" + f.id, h: function (k) { return admRow(admTs(f.at) > S, "Feedback: " + esc(String(f.title || f.a || "").slice(0, 90)), esc(f.kind || ""), admTs(f.at), k); } }); });
     D.seenList.slice(0, 10).forEach(function (u) { ev.push({ t: D.seen[u.id], k: "u:" + u.id, h: function (k) { return admRow(D.seen[u.id] > S, "Active: " + esc(u.email || ""), "", D.seen[u.id], k); } }); });
-    D.ips.slice(0, 10).forEach(function (x) { var nw = Date.now() - x.first < 86400000; ev.push({ t: x.at, k: "ip:" + x.ip, h: function (k) { return admRow(x.at > S, (nw ? "New visitor: " : "Visitor: ") + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.at, k); } }); });
+    D.auth.filter(function (a) { return a.what !== "user_signedup"; }).slice(0, 10).forEach(function (a) { ev.push({ t: a.t, k: a.u ? "u:" + a.u.id : "ip:" + a.ip, h: function (k) { return admRow(a.t > S, esc(ADM_EVW[a.what] || a.what) + ": " + esc(a.u ? a.u.email || "" : "a deleted account"), esc(a.ip), a.t, k); } }); });
+    D.ips.slice(0, 10).forEach(function (x) { var nw = Date.now() - x.first < 86400000; ev.push({ t: x.act, k: "ip:" + x.ip, h: function (k) { return admRow(x.act > S, (nw ? "New visitor: " : "Visitor: ") + esc(x.ip), esc([x.cc, x.u].filter(Boolean).join(" · ")), x.act, k); } }); });
     // the same account can be in the timeline twice (new and active): only the line you clicked opens
     body = ev.sort(function (a, b) { return b.t - a.t; }).slice(0, 14).map(function (x, n) { return x.h(x.k + "#" + n); }).join("");
   }
@@ -6577,7 +6603,7 @@ function admHtml() {
   var day = 86400000, nowT = Date.now(), unseen = function (t, span) { return t > S && nowT - t < span; };
   var uNew1 = D.accts.some(function (u) { return unseen(admTs(u.created), day); }), uNew7 = D.accts.some(function (u) { return unseen(admTs(u.created), 7 * day); });
   var uIp = D.ips.some(function (x) { return unseen(x.first, day); }), uFb = D.fb.some(function (f) { return (f.status || "new") === "new" && admTs(f.at) > S; });
-  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened the page today"], [N.ipNew, "new IPs", uIp, "Addresses that opened the page today and not in the 30 days before"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
+  var st = [[N.users, "accounts", 0, "Accounts in all"], [N.new1, "new", uNew1, "New accounts today"], [N.new7, "new 7d", uNew7, "New accounts in the last 7 days"], [N.active, "active", 0, "Accounts that used the page today"], [N.visitors, "visitors", 0, "Different addresses that opened or used the page today"], [N.ipNew, "new IPs", uIp, "Addresses that opened the page today and not in the 30 days before"], [N.fbNew, "feedback", uFb, "Feedback not handled yet"]];
   var stats = '<div class="admst">' + st.map(function (x) { return '<span class="' + (x[2] && x[0] ? "hot" : x[0] ? "" : "zero") + '" title="' + x[3] + '"><b>' + x[0] + "</b>" + x[1] + "</span>"; }).join("") + "</div>";
   return '<div class="adm">' + top + stats + admCalls() + (ADM.err ? '<p class="mut sn">' + esc(ADM.err) + "</p>" : "") + '<div class="admbody">' + body + "</div>" +
     '<div class="admf mut"><span>Updated ' + ago(ADM.t) + " ago</span>" + admBtns + linkBtn(location.origin + location.pathname.replace(/[^\/]*$/, "") + "admin", "Full admin page", true) + "</div></div>";
@@ -8190,6 +8216,19 @@ function logVisit() {
   var tz = ""; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
   try { sb.rpc("log_visit", { p_ref: ref, p_lang: navigator.language || "", p_tz: tz }).then(function () {}, function () {}); } catch (e) {}
 }
+// "Still here": while the page is open and in view, every 5 minutes it moves the "last in use" time of this visit, so the
+// owner sees when people actually use the page, not only when they opened it. Straight to the database (no server
+// function, so it costs none of those calls). It stops if the database does not have it yet.
+var pingOff = false, pingLast = Date.now();
+function pingVisit() {
+  if (!sb || pingOff || document.hidden || Date.now() - pingLast < 270000) return;
+  pingLast = Date.now();
+  try {
+    sb.rpc("ping_visit").then(function (r) { if (r && r.error && /ping_visit|schema cache|PGRST202|404/i.test((r.error.message || "") + (r.error.code || ""))) pingOff = true; }, function () {});
+  } catch (e) {}
+}
+setInterval(pingVisit, 60000);
+document.addEventListener("visibilitychange", function () { if (!document.hidden) pingVisit(); });
 function initAuth() {
   setTimeout(logVisit, 3000);   // after the sign-in state is known, so a signed-in visit carries its account
   renderAccount();
@@ -8656,7 +8695,7 @@ function openHelp() {
     h4("Privacy") +
     ul(["Everything you set up is private to your account; nobody else using the site can see it. It follows you to every device: settings, sources, bookmarks, notes, calendar, timers, world clocks, and what you have seen and opened. Changes reach your other devices within a minute, and two devices changing different things never overwrite each other.",
       "When another account signs in on the same browser, the previous account&rsquo;s things are cleared from it first.",
-      "To run the site, it counts how long the page is open, how often each kind of button is used, and how often each part of the page asks the server for data; never what you read, type, search or save. Each visit is noted with its IP address, country and browser, kept for 90 days and seen only by the site owner.",
+      "To run the site, it counts how long the page is open, how often each kind of button is used, and how often each part of the page asks the server for data; never what you read, type, search or save. Each visit is noted with its IP address, country and browser, and while the page is open and in view, when it was last in use; kept for 90 days and seen only by the site owner.",
       "Text you translate goes to the MyMemory translation service; radio plays straight from the stations&rsquo; servers; a bookmark with &ldquo;the site&rsquo;s own icon&rdquo; fetches it from that site.",
       "The full <a href=\"privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a> says what is stored and why."]) +
     h4("Feedback") +
