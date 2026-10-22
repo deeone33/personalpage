@@ -1,4 +1,4 @@
-var VERSION = "0.28.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.28.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4765,6 +4765,16 @@ function nGone(e) {
   if (d && t <= d + 600000) return true;
   return !!nc && (+e.nc || 0) < nc && (e.et ? e.et <= nc : e.ts <= nc + 60000);
 }
+// remove every notification that matches (in the bell and any card still on screen), the same way as one by one
+function nRemoveWhere(fn) {
+  var s = sy(), now = Date.now(), hit = NLOG.filter(fn);
+  Object.keys(TOASTS).forEach(function (id) { if (TOASTS[id] && fn(TOASTS[id])) { var el = $("to" + id); if (el) el.remove(); delete TOASTS[id]; } });
+  if (!hit.length) return;
+  hit.forEach(function (e) { s.ndel[nKey(e)] = now; });
+  syCap(s.ndel, 200);
+  NLOG = NLOG.filter(function (e) { return hit.indexOf(e) < 0; });
+  save("sp_nlog", NLOG); persist();
+}
 function nRemove(e) {
   if (!e) return;
   var k = nKey(e), s = sy();
@@ -5572,6 +5582,8 @@ function markRead(i) {
   if (!c) return;
   c.seen = Math.floor(Date.now() / 1000);
   if (MAIL[i]) MAIL[i].fresh = 0;
+  // the new-mail notifications of this inbox go too: off the screen, out of the bell, and on your other devices
+  nRemoveWhere(function (e) { return e.k === "mail" && e.act && +e.act.k === i; });
   persist(); closeModal(); render(); fetchMail();
 }
 function showAllMail(i) { var c = P.mail && P.mail[i]; if (!c) return; delete c.seen; persist(); closeModal(); MAIL[i] = null; render(); fetchMail(); }
@@ -6517,7 +6529,10 @@ document.addEventListener("keydown", function (e) {
 var ADM = { d: null, t: 0, busy: false, err: "", tab: "sum" }, ADMSEEN = +load("sp_admseen", 0) || 0;
 function admLoad(force) {
   if (!isAdmin() || ADM.busy || (!force && ADM.d && Date.now() - ADM.t < 300000)) return;
-  ADM.busy = true; admDraw();
+  // only the ↻ spins while it loads; the list stays as it is until the new numbers are there
+  ADM.busy = true;
+  if (ADM.d) Array.prototype.forEach.call(document.querySelectorAll('.adm [data-a="admload"]'), function (b) { b.innerHTML = '<span class="spin">↻</span>'; });
+  else admDraw();
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { admin: { op: "overview" } } }).then(function (r) {
     var j = r && r.data;
     ADM.busy = false;
@@ -6525,7 +6540,18 @@ function admLoad(force) {
     ADM.d = j; ADM.t = Date.now(); ADM.err = ""; admDraw();
   }).catch(function () { ADM.busy = false; ADM.err = "Could not reach the function."; admDraw(); });
 }
-function admDraw() { Array.prototype.forEach.call(document.querySelectorAll(".adm"), function (el) { el.outerHTML = admHtml(); }); }
+// redraw in place: the list keeps where you had scrolled to (an open line stays open)
+function admDraw() {
+  Array.prototype.forEach.call(document.querySelectorAll(".adm"), function (el) {
+    // (the list scrolls by itself, or, in a window on a phone, the whole window does)
+    var b = el.querySelector(".admbody"), top = b ? b.scrollTop : 0, holder = el.parentNode, i = Array.prototype.indexOf.call(holder.children, el);
+    var box = el.closest(".mbox, .swb"), boxTop = box ? box.scrollTop : 0;
+    el.outerHTML = admHtml();
+    var nb = holder.children[i] && holder.children[i].querySelector(".admbody");
+    if (nb && top) nb.scrollTop = top;
+    if (box && boxTop) box.scrollTop = boxTop;
+  });
+}
 // (only while it can be seen: a folded docked panel does not ask)
 setInterval(function () { if (isAdmin() && !document.hidden && Array.prototype.some.call(document.querySelectorAll(".adm"), function (el) { return el.offsetParent; })) admLoad(); }, 60000);
 function admTs(x) { var t = Date.parse(x); return isNaN(t) ? 0 : t; }
@@ -8635,7 +8661,7 @@ function openHelp() {
       "Within a minute your unread count appears."], 5) +
     p("For a second Gmail inbox, repeat the steps while signed in to that Gmail account.") +
     h4("Using it") +
-    ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only).",
+    ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only), and clears that inbox's new-mail notifications from the bell, on all your devices.",
       "In " + S("Mail") + " each inbox shows its name (change it right there), what it is, and <b>Replace</b> and <b>Remove</b>. The address and token cannot be shown again once saved, like a password: to change them, press Replace.",
       "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same."]);
 
