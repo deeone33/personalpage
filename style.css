@@ -1382,6 +1382,26 @@ body.noshadow #srchAns{box-shadow:none}
 .rdredge:empty{display:none}
 .rdredge .pvnote{margin:8px 0 0}
 #rdrSw{margin-left:auto;margin-right:8px;white-space:nowrap}
+/* the reader's Aa: its own font, size and line spacing (only the posts change; the buttons under them keep the page font) */
+#rdrAaW{margin-left:auto;margin-right:6px}
+#rdrAaW + #rdrSw{margin-left:0}
+#rdrAa{font-weight:700;padding:6px 10px}
+.rfmenu{min-width:210px;z-index:30}
+.rfmenu .rfh{padding:6px 10px 2px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.rfmenu > button{display:flex;align-items:center;gap:6px;font-size:15px}
+.rfmenu .rfck{width:12px;color:var(--ac);font-size:13px}
+.rfmenu .rfrow{display:flex;align-items:center;gap:6px;padding:2px 6px 6px}
+.rfmenu .rfrow span{flex:1;text-align:center;font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+.rfmenu .rfrow button{flex:1;width:auto;text-align:center;border:1px solid var(--line);padding:5px 8px}
+.rfmenu .rfrow button:disabled{opacity:.4;cursor:default}
+.rfmenu .rfrow button.on{background:var(--acsoft);border-color:var(--ac)}
+.rdr .rdp{font-size:calc(15px * var(--rz,1))}
+.rdr .rdp .mh{font-size:calc(18px * var(--rz,1))}
+.rdr .rdart h4{font-size:calc(15px * var(--rz,1))}
+.rdr.rff .rdp{font-family:var(--rff)}
+.rdr.rff .rdp :is(.tools,button,.rdcw button){font-family:"Bricolage Grotesque",system-ui,sans-serif}
+.rdr.rlh .rdp{line-height:1.7}
+.rdr.rlh .rdart p{line-height:1.8}
 .rdrb svg{display:block}
 @media(max-width:600px){
   #modal:has(.rdr){padding:0}

@@ -1,4 +1,4 @@
-var VERSION = "0.29.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.30.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2870,17 +2870,75 @@ function rdrEl(key) {
 }
 // the button beside Close that says which way the list runs, and turns it around
 function rdrSwitch() {
-  var b = $("rdrSw");
-  if (!RDR) { if (b) b.remove(); return; }
+  var b = $("rdrSw"), aa = $("rdrAaW");
+  if (!RDR) { if (b) b.remove(); if (aa) aa.remove(); return; }
   if (!b) { b = document.createElement("button"); b.id = "rdrSw"; b.setAttribute("data-a", "rdrflip"); $("mClose").parentNode.insertBefore(b, $("mClose")); }
+  if (!aa) {
+    aa = document.createElement("span"); aa.className = "dd"; aa.id = "rdrAaW";
+    aa.innerHTML = '<button id="rdrAa" data-a="rdraa" title="Font, text size and line spacing of the reader" aria-label="Reading font and size" aria-haspopup="menu" aria-expanded="false">Aa</button>';
+    b.parentNode.insertBefore(aa, b);
+  }
   var nw = RDR.dir === "new", say = "Scrolling down goes to " + (nw ? "newer" : "older") + " posts. Press to turn the list around.";
   b.textContent = nw ? "↓ Newer" : "↓ Older"; b.title = say; b.setAttribute("aria-label", say);
 }
+// ---- The reader's own font, text size and line spacing (Aa beside ↓ Older), kept per device ----
+// Only the posts change: the boxes and the rest of the page keep their font. A font is fetched the first time it is needed.
+var RF_FONTS = { "": ["Default", ""], atk: ["Atkinson Hyperlegible", "Atkinson+Hyperlegible:wght@400;700"], inter: ["Inter", "Inter:wght@400;600;700"],
+  lex: ["Lexend", "Lexend:wght@400;600;700"], src: ["Source Sans 3", "Source+Sans+3:wght@400;600;700"] };
+var RF_Z = [0.9, 1, 1.1, 1.2, 1.35, 1.5], RF = load("sp_rdrf", {}), RF_LOADED = {};
+function rfOk() { return { f: RF_FONTS[RF.f] ? RF.f : "", z: RF_Z.indexOf(+RF.z) >= 0 ? +RF.z : 1, lh: RF.lh ? 1 : 0 }; }
+function rfFont(k) {
+  var F = RF_FONTS[k];
+  if (!F || !F[1] || RF_LOADED[k]) return;
+  RF_LOADED[k] = 1;
+  var l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=" + F[1] + "&display=swap";
+  l.onload = function () { if (rfOk().f === k) rfApply(); };   // the lines change height once the font is there: keep your place
+  document.head.appendChild(l);
+}
+// the post at the top of the list, and how far into it you are, so a change keeps you where you were reading
+function rfApply() {
+  var L = $("rdrL"), s = rfOk();
+  if (!L) return;
+  var ps = L.querySelectorAll(".rdp"), at = null, i;
+  for (i = 0; i < ps.length; i++) { if (ps[i].offsetTop <= L.scrollTop + 1) at = ps[i]; else break; }
+  var into = at ? (L.scrollTop - at.offsetTop) / (at.offsetHeight || 1) : 0;
+  rfFont(s.f);
+  L.classList.toggle("rff", !!s.f); L.classList.toggle("rlh", !!s.lh);
+  if (s.f) L.style.setProperty("--rff", '"' + RF_FONTS[s.f][0] + '",system-ui,sans-serif'); else L.style.removeProperty("--rff");
+  L.style.setProperty("--rz", s.z);
+  if (at) L.scrollTop = at.offsetTop + into * at.offsetHeight;
+}
+function rfMenu() {
+  var s = rfOk(), pct = Math.round(s.z * 100);
+  return '<div class="menu rfmenu" role="menu"><div class="rfh">Font</div>' + Object.keys(RF_FONTS).map(function (k) {
+    return '<button role="menuitemradio" aria-checked="' + (s.f === k) + '" data-a="rdrf" data-k="' + k + '"' + (k ? ' style="font-family:&quot;' + RF_FONTS[k][0] + '&quot;,system-ui,sans-serif"' : "") + ">" +
+      '<span class="rfck">' + (s.f === k ? "✓" : "") + "</span>" + RF_FONTS[k][0] + "</button>";
+  }).join("") +
+    '<div class="rfh">Size</div><div class="rfrow"><button data-a="rdrz" data-k="-1" aria-label="Smaller text"' + (s.z <= RF_Z[0] ? " disabled" : "") + '>A−</button><span>' + pct + '%</span><button data-a="rdrz" data-k="1" aria-label="Bigger text"' + (s.z >= RF_Z[RF_Z.length - 1] ? " disabled" : "") + ">A+</button></div>" +
+    '<div class="rfh">Line spacing</div><div class="seg rfrow"><button data-a="rdrlh" data-k="0"' + (s.lh ? "" : ' class="on"') + '>Normal</button><button data-a="rdrlh" data-k="1"' + (s.lh ? ' class="on"' : "") + ">Roomy</button></div></div>";
+}
+function rfMenuOpen(open) {
+  var w = $("rdrAaW"), m = w && w.querySelector(".rfmenu");
+  if (!w) return;
+  if (m) m.remove();
+  if (open) { w.insertAdjacentHTML("beforeend", rfMenu()); Object.keys(RF_FONTS).forEach(rfFont); }   // the names show in their own font
+  $("rdrAa").setAttribute("aria-expanded", !!open);
+}
+function rfAct(a, k) {
+  if (a === "rdraa") { rfMenuOpen(!($("rdrAaW") && $("rdrAaW").querySelector(".rfmenu"))); return; }
+  var s = rfOk();
+  if (a === "rdrf") s.f = k;
+  if (a === "rdrz") s.z = RF_Z[Math.max(0, Math.min(RF_Z.length - 1, RF_Z.indexOf(s.z) + (+k)))];
+  if (a === "rdrlh") s.lh = +k;
+  RF = s; save("sp_rdrf", RF); rfApply(); rfMenuOpen(true);
+}
+// a click anywhere else closes the menu
+document.addEventListener("click", function (e) { var w = $("rdrAaW"); if (w && w.querySelector(".rfmenu") && !w.contains(e.target)) rfMenuOpen(false); }, true);
 function rdrDraw(key, exact) {
   var R = RDR, L0;
   if (R.ro) { R.ro.disconnect(); R.ro = null; }
   $("mBody").innerHTML = '<div class="rdr' + (RDS().snap === "one" ? " snap" : "") + '" id="rdrL" tabindex="-1">' + rdrHtml() + "</div>";
-  rdrSwitch();
+  rdrSwitch(); rfApply();
   L0 = $("rdrL").closest(".mbox"); if (L0) L0.style.setProperty("--rdrh", RDS().h + "vh");   // how tall the window is (Settings); a phone uses the whole screen
   rdrFit();
   var L = $("rdrL"), el = rdrEl(key);
@@ -7980,6 +8038,7 @@ document.addEventListener("click", function (e) {
   if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
   if (a === "rdropen") { openReader(k, "", true); return; }
   if (a === "rdrflip") { rdrFlip(); return; }
+  if (/^rdr(aa|f|z|lh)$/.test(a)) { rfAct(a, k); return; }
   if (a === "rdrolder") { loadOlderTG(); return; }
   if (a === "rdrcom") { rdrCom(k); return; }
   if (a === "refresh") { refreshBox(k); return; }
@@ -8508,7 +8567,7 @@ function openHelp() {
     ul(["One post at a time: a long post scrolls inside the window and stops at its end; a couple more wheel clicks move on to the next.",
       "News: the full article is fetched from the site and shown under the picture. Where a site does not allow it (a paywall, some Google News links) the summary stays with a note, and <b>Read the full article</b> opens the site.",
       "<b>Catching up</b>: the small list button at the top of the box (before ⌕) opens the reader at the oldest post you have not seen, under a <b>New</b> line, and you scroll down to the newest. A post counts as read once you reach it.",
-      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around.",
+      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around. <b>Aa</b> beside it changes the reader&rsquo;s font (easy-to-read ones such as Atkinson Hyperlegible), text size and line spacing; only the posts change, and this device remembers it.",
       "Videos do not start by themselves, and stop when you scroll away.",
       "Telegram: <b>Load older posts</b> at the old end. Reddit: <b>Top comments</b> under a post.",
       "On a phone the reader fills the screen and you scroll with your thumb."]) +
