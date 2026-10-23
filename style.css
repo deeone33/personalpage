@@ -351,6 +351,13 @@ button.pill{cursor:pointer;line-height:1.5}
 .icsrow input{flex:1 1 140px;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:5px 10px}
 .icsrow button{flex:none;padding:3px 9px}
 .icsrow select{flex:0 1 150px;min-width:0}
+/* Settings > Stocks: the list, as small chips with ✕ */
+.stlist{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.stchip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:1px 2px 1px 8px;font-size:12.5px;background:var(--card)}
+.stchip.off b{opacity:.5}
+.stchip button{border:0;background:none;padding:2px 6px;min-height:0;font-size:11px;color:var(--mut)}
+.stchip button:hover{color:var(--down,#e5534b)}
+@media (pointer:coarse){.stchip button{padding:7px 9px}}
 .icsst{flex-basis:100%}
 .icsl{grid-template-columns:1fr}
 .calcn{border:1px solid var(--line);border-radius:99px;padding:0 6px;font-size:.8em;color:var(--mut)}

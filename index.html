@@ -286,7 +286,11 @@
   </section>
 
   <section class="setgrp" data-cat="Content" data-sec="Stocks">
-    <div class="mut sn">The stocks, funds, indexes and crypto in the Stocks box. To take one off the list, hide it in Edit mode.</div>
+    <div class="mut sn">The stocks, funds, indexes and crypto in the Stocks box.</div>
+    <div class="sub" data-kw="remove delete stock symbol ticker list"><b>Your stocks</b>
+      <div class="mut sn">✕ takes one off the list. To only hide one for a while, use Edit mode.</div>
+      <div id="stList" class="stlist"></div>
+    </div>
     <div class="sub"><b>Add one</b>
       <form id="addStock" class="add"><input id="stockIn" placeholder="Company name or symbol, e.g. Tesla or NVDA" aria-label="Company name or stock symbol" autocomplete="off"><button>Add</button></form>
       <div id="stockRes"></div>

@@ -1,4 +1,4 @@
-var VERSION = "0.29.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.29.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -789,7 +789,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet();
+  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -944,7 +944,7 @@ function render() {
   T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
   var SL = P.stocks || D.stocks;
-  var st = SL.map(function (x) { var q = QUOTES[tk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
+  var st = SL.map(function (x) { var q = QUOTES[qk(x.id)]; return { id: x.id, name: x.name, c: q ? q.c : (QLOADED ? null : x.c), p: q ? q.p : null, logo: q ? q.logo : "", key: "s:" + x.id }; }).filter(function (x) { return shown(x.key); })
     .sort(function (x, y) {
       var SS = (P.sort && P.sort.stocks) || "move", a = x.c, b = y.c;
       if (favFirst(x, y)) return favFirst(x, y);
@@ -969,7 +969,7 @@ function render() {
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
   T.stocks = tile("stocks", "Stocks", (st.length ? lst("stocks", st.map(function (x) {
-    var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[tk(x.id)];
+    var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[qk(x.id)];
     // the day chart takes its color from today's change (the number next to it); a week or month chart from its own direction
     var rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
     var spk = sparkOn() ? sparkSvg(pts, SPARKR === "d" && c != null && !PREVIEW ? up : rise) : "";
@@ -2613,7 +2613,7 @@ function mkHtml() {
     return '<button class="mkline mkhead' + (open ? " sel" : "") + '" data-a="mkrow" data-k="' + m.key + '" aria-expanded="' + open + '" title="Show the stocks on this market">' + mkCells(m, true) + "</button>" +
       (open ? '<div class="mkmore"><div class="mut sn">' + esc(M.x) + (M.s ? " · " + M.s.map(function (s) { return pad2(Math.floor(s[0] / 60)) + ":" + pad2(s[0] % 60) + "–" + pad2(Math.floor(s[1] / 60)) + ":" + pad2(s[1] % 60); }).join(" and ") + " " + esc(M.tz.split("/").pop().replace(/_/g, " ")) + " time, Monday to Friday" : "") + '</div><div class="mkchips">' +
         // the stocks of this market in equal cells: the symbol on the left, today's change on the right
-        m.ids.map(function (id) { var q = QUOTES[tk(id)], c = q && q.c != null ? q.c : null; return '<button data-a="open" data-k="' + esc("s:" + id) + '" title="' + esc(tk(id)) + '"><b>' + esc(tk(id)) + '</b><span class="' + (c == null ? "mut" : c >= 0 ? "up" : "down") + '">' + (c == null ? "–" : (c >= 0 ? "+" : "") + c.toFixed(1) + "%") + "</span></button>"; }).join("") + "</div></div>" : "");
+        m.ids.map(function (id) { var q = QUOTES[qk(id)], c = q && q.c != null ? q.c : null; return '<button data-a="open" data-k="' + esc("s:" + id) + '" title="' + esc(tk(id)) + '"><b>' + esc(tk(id)) + '</b><span class="' + (c == null ? "mut" : c >= 0 ? "up" : "down") + '">' + (c == null ? "–" : (c >= 0 ? "+" : "") + c.toFixed(1) + "%") + "</span></button>"; }).join("") + "</div></div>" : "");
   }).join("") + '</div><p class="mut sn mkfoot">Times are on your own clock (' + esc(LOCNAME) + "). Click a market for its stocks." + (hidden.length ? " " + hidden.map(function (m) { return MK[m.key].n; }).join(", ") + " (" + hidden.reduce(function (n, m) { return n + m.ids.length; }, 0) + " on your list) is not shown: it never closes." : "") +
     " The main public holidays are counted; shortened trading days and some local holidays are not. A symbol without an exchange in its name is taken as a US stock.</p></div>";
 }
@@ -2668,7 +2668,7 @@ setInterval(tvAlerts, 60000);
 // An alert tells you once and switches itself off; ticking it (or changing it) sets it again.
 var PA_OPS = [[">", "more than"], ["<", "less than"], ["=", "reaches"]], PA_LAST = {}, PA_T = "Price alerts", PA_PICK = "";
 function PA() { return (Array.isArray(P.pa) ? P.pa : []).filter(function (a) { return a && a.id && a.s && isFinite(a.v) && a.v > 0; }).slice(0, 30); }
-function paPrice(s) { var q = QUOTES[tk(s)]; return q && q.p ? +q.p : null; }
+function paPrice(s) { var q = QUOTES[qk(s)]; return q && q.p ? +q.p : null; }
 function paNum(v) { v = +v; return v.toLocaleString("en-GB", { minimumFractionDigits: v < 10 ? 2 : 0, maximumFractionDigits: v < 1 ? 6 : 2 }); }
 function priceAlerts() {
   var list = PA(), changed = false, now = Date.now();
@@ -3260,7 +3260,7 @@ function siteGroups(q) {
     return sRow("open", "p:" + e.id, cut(t, 120), e.lg, spWhen(e, true).replace(/<[^>]+>/g, ""));
   }));
   if (!boxOff("stocks")) add("stocks", "Stocks", (P.stocks || DATA.stocks).filter(function (x) { return shown("s:" + x.id) && hit(x.id + " " + tk(x.id) + " " + (x.name || "")); }).map(function (x) {
-    var qt = QUOTES[tk(x.id)];
+    var qt = QUOTES[qk(x.id)];
     return sRow("open", "s:" + x.id, esc(tk(x.id)), x.name || "", qt && qt.c != null ? (qt.c >= 0 ? "+" : "") + qt.c.toFixed(2) + "%" : "");
   }));
   if (!boxOff("tv")) add("tv", "TV shows", tvShows().filter(function (s) { return hit(s.n); }).map(function (s) { return sRow("tvopen", String(s.id), cut(s.n, 120), "", ""); }));
@@ -4122,12 +4122,18 @@ function openTwitch(login) {
 // ---- Stock prices (Finnhub via a Supabase function, so the key stays private) ----
 var QUOTES = {}, QLOADED = false, QERR = "";
 function tk(id) { return id.indexOf(":") >= 0 ? id.split(":").pop() : id; }
+// The name a price is asked for (and kept under): a stock on an exchange outside the US keeps its exchange (XETR:SAP), so it is
+// that listing's price in its own currency, not the US listing of the same name (SAP in dollars, AIR = another company)
+function qk(id) {
+  var i = id.indexOf(":"), g = i > 0 ? MK_PRE[id.slice(0, i).toUpperCase()] : "";
+  return g && !/^(us|crypto|fut|fx)$/.test(g) ? id.toUpperCase() : tk(id);
+}
 var qBusy = false, qLast = 0;
 function fetchQuotes(force) {
   if (!sb || !USER || qBusy) return;
   if (!force && Date.now() - qLast < 45000) return;
   qBusy = true; qLast = Date.now();
-  var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
+  var list = (P.stocks || DATA.stocks).map(function (x) { return qk(x.id); });
   sb.functions.invoke("quotes", { body: { symbols: list } }).then(function (r) {
     qBusy = false;
     if (r.error) QERR = r.error.message;
@@ -4146,7 +4152,7 @@ function fetchSparks(force) {
   var range = sparkRange();
   if (!force && range === SPARKR && Date.now() - spkLast < 540000) return;
   spkBusy = true; spkLast = Date.now();
-  var list = (P.stocks || DATA.stocks).map(function (x) { return tk(x.id); });
+  var list = (P.stocks || DATA.stocks).map(function (x) { return qk(x.id); });
   sb.functions.invoke("quotes", { body: { spark: list, range: range } }).then(function (r) {
     spkBusy = false;
     // an older "quotes" function does not know this request and answers without "spark": then there are simply no charts
@@ -4178,9 +4184,26 @@ function importSymbols(list, names) {
     if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: (names && names[v]) || "", p: null, c: null });
     delete P.hidden["s:" + v];
   });
-  persist(); render(); fetchQuotes(true);
+  persist(); render(); renderStSet(); fetchQuotes(true);
 }
 function hasStock(id) { return (P.stocks || []).some(function (x) { return x.id === id; }); }
+// Settings > Stocks: every stock on the list, each with ✕ to take it off for good (hiding it in Edit mode keeps it on the list)
+function renderStSet() {
+  var el = $("stList");
+  if (!el) return;
+  var SL = P.stocks || DATA.stocks;
+  el.innerHTML = SL.length ? SL.map(function (x) {
+    return '<span class="stchip' + (P.hidden["s:" + x.id] ? " off" : "") + '" title="' + esc(x.id + (x.name ? " · " + x.name : "") + (P.hidden["s:" + x.id] ? " (hidden)" : "")) + '"><b>' + esc(tk(x.id)) + "</b>" +
+      '<button data-a="stdel" data-k="' + esc(x.id) + '" aria-label="Remove ' + esc(tk(x.id)) + '" title="Remove from the list">✕</button></span>';
+  }).join("") : '<span class="mut sn">No stocks yet.</span>';
+}
+function stDel(id) {
+  P.stocks = (P.stocks || DATA.stocks).filter(function (x) { return x.id !== id; });
+  delete P.hidden["s:" + id];
+  if (Array.isArray(P.pa)) P.pa = P.pa.filter(function (a) { return !a || a.s !== id; });   // its price alerts go with it
+  persist(); render(); renderStSet();
+  stMsg("Removed " + tk(id) + ".");
+}
 function stMsg(t) { if ($("stMsg")) $("stMsg").textContent = t || ""; }
 
 // ---- Finding a stock by company name (Settings > Stocks and the setup guide): type a name, pick from the list ----
@@ -4220,7 +4243,7 @@ function stPick(i) {
   if (!P.stocks) P.stocks = DATA.stocks.map(function (x) { return { id: x.id, name: x.name, p: x.p, c: x.c }; });
   if (!hasStock(f.s)) P.stocks.push({ id: f.s, name: f.n, p: null, c: null });
   delete P.hidden["s:" + f.s];
-  persist(); render(); fetchQuotes(true);
+  persist(); render(); renderStSet(); fetchQuotes(true);
   if (WIZ && $("wzPage")) { WIZMSG = "Added " + f.s + (f.n ? " (" + f.n + ")" : "") + "."; wizRender(); return; }
   if ($("stockRes")) $("stockRes").innerHTML = stFoundHtml();
 }
@@ -7708,7 +7731,7 @@ function tvSym(id) {
 var STOPEN = "";   // the stock whose window is open (the chart switch redraws its chart)
 function openStock(id) {
   STOPEN = id;
-  var s = tk(id), q = QUOTES[s], se = encodeURIComponent(s.replace(/_/g, "-"));
+  var s = tk(id), q = QUOTES[qk(id)], se = encodeURIComponent(s.replace(/_/g, "-"));
   var lk = function (u, l) { return '<a class="lnk2" target="_blank" rel="noopener noreferrer" href="' + u + '">' + l + "</a>"; };
   var sw = '<span class="seg stsw" id="stSw" role="group" aria-label="Chart style"><button data-a="stchart" data-k="line" title="Price line: hover anywhere for the price">' +
     '<svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M1 9l4-4 3 2 6-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
@@ -7724,7 +7747,7 @@ function openStock(id) {
 // "adv" = TradingView's full chart with candles, volume and its own toolbar.
 function stChartKind() { return P.stChart === "adv" ? "adv" : "line"; }
 function stChart(id) {
-  var el = $("tv"), sw = $("stSw"), q = QUOTES[tk(id)], kind = stChartKind();
+  var el = $("tv"), sw = $("stSw"), q = QUOTES[qk(id)], kind = stChartKind();
   if (!el) return;
   el.innerHTML = ""; el.className = "tv tv-" + kind;
   if (sw) Array.prototype.forEach.call(sw.children, function (b) { b.classList.toggle("on", b.dataset.k === kind); b.setAttribute("aria-pressed", b.dataset.k === kind); });
@@ -7760,7 +7783,7 @@ document.addEventListener("submit", function (e) {
     if (!P.stocks.some(function (x) { return x.id === v; })) P.stocks.push({ id: v, name: nm || "", p: null, c: null });
     delete P.hidden["s:" + v];
     $("stockIn").value = ""; STFOR = ""; if ($("stockRes")) $("stockRes").innerHTML = ""; stMsg("Added " + v + ".");
-    persist(); render(); fetchQuotes(true);
+    persist(); render(); renderStSet(); fetchQuotes(true);
   };
   // A full name (NASDAQ:NVDA) or a currency pair (BTCUSD) is added as it is. Anything else is checked against the search first,
   // so that typing "Tesla" and pressing Enter shows the list instead of adding a symbol called TESLA.
@@ -7822,6 +7845,7 @@ document.addEventListener("click", function (e) {
   if (a === "bmimpno") { BMIMP = null; bmImpDraw(); bmImpMsg(""); return; }
   if (/^ics(impgo|impno|reload|del)$/.test(a)) { icsAct(a, k); return; }
   if (a === "stpick") { stPick(k); return; }
+  if (a === "stdel") { stDel(k); return; }
   if (a === "stimpgo") { stImpGo(); return; }
   if (a === "stimpno") { STIMP = null; stImpDraw(); stMsg(""); return; }
   if (/^wiz/.test(a)) { wizAct(a, k); return; }
@@ -7845,7 +7869,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); return; }
   if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
@@ -8548,7 +8572,7 @@ function openHelp() {
       "<b>Your TradingView watchlist</b>:" + ol(["Open any chart on <a href=\"https://www.tradingview.com\" target=\"_blank\" rel=\"noopener\">tradingview.com</a> while signed in. Your watchlist is the panel on the right.", "Click <b>&bull;&bull;&bull;</b> at the top of that panel and choose <b>Advanced view</b> (or <b>Share</b>); turn link sharing on.", "Copy the link (it looks like <code>https://www.tradingview.com/watchlists/12345678/</code>), paste it into the link field and press Import."])]) +
     h4("The box") +
     ul(["Each row shows the price, a small chart and the day&rsquo;s change. Choose what the chart covers (today, the week, the month, or off) in " + S("Stocks") + ". In a narrow box the price is cut short to make room.",
-      "Sort with the dropdown. Star or hide a stock in Edit mode.",
+      "Sort with the dropdown. Star or hide a stock in Edit mode. To take one off the list for good, press ✕ next to it in <b>Settings → Stocks</b>.",
       "Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept.",
       "Big indices are drawn with TradingView&rsquo;s own index price, as the official feeds cannot be shown outside TradingView. For the Nasdaq Composite that is the Nasdaq 100, as the window says."]) +
     h4("Market hours (the clock button)") +
@@ -8988,7 +9012,7 @@ function stockAlerts(data) {
   var n = NTF(), now = Date.now(), sent = 0;
   if (n.stock === false || !P.stocks) return;
   P.stocks.forEach(function (x) {
-    var s = tk(x.id), q = data[s];
+    var s = tk(x.id), q = data[qk(x.id)];
     if (!q || !q.p || P.hidden["s:" + x.id]) return;
     var h = QH[s] = (QH[s] || []).filter(function (o) { return now - o.t < 2100000; });
     var today = q.c != null ? (q.c >= 0 ? "+" : "") + q.c.toFixed(1) + "% today" : "", go = { a: "stock", k: x.id }, fast = false;
@@ -9567,7 +9591,7 @@ function sumParts(S) {
   out.rd = RD.filter(function (x) { return x.ts > cut && !S.x["r:" + x.s]; }).slice(0, N).map(function (x) {
     return '<div class="row' + (isRead(x.u) ? " rd" : "") + '"><span><button class="lnk" data-a="open" data-k="' + esc("r:" + x.u) + '">' + esc(String(x.t).slice(0, 140)) + "</button> <small>r/" + esc(x.s) + '</small></span><span class="r mut">' + ago(x.ts) + "</span></div>";
   }).join("");
-  var mv = (P.stocks || []).map(function (x) { var q = QUOTES[tk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, N);
+  var mv = (P.stocks || []).map(function (x) { var q = QUOTES[qk(x.id)]; return q && q.c != null && !P.hidden["s:" + x.id] ? { id: x.id, c: q.c } : null; }).filter(Boolean).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); }).slice(0, N);
   out.movers = mv.length ? '<div class="chips">' + mv.map(function (x) { return '<button data-a="open" data-k="' + esc("s:" + x.id) + '"><b>' + esc(tk(x.id)) + '</b> <span class="' + (x.c >= 0 ? "up" : "down") + '">' + (x.c >= 0 ? "+" : "") + x.c.toFixed(1) + "%</span></button>"; }).join("") + "</div>" : "";
   var mail = [0, 1].map(function (i) { var c = P.mail && P.mail[i], m = MAIL[i]; if (!mailOn(c) || !m || m.error) return ""; var n = mailN(i); return '<button data-a="mail" data-k="' + i + '"><b>' + esc(c.name || "Mail") + "</b> " + n.txt + " " + n.lab + "</button>"; }).join("");
   out.mail = mail ? '<div class="chips">' + mail + "</div>" : "";
