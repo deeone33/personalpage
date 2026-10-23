@@ -11,11 +11,33 @@ body.adminpage{background:var(--bg);color:var(--fg)}
 #aMsg{margin:0 0 14px;padding:9px 12px;border-radius:10px;background:var(--acsoft);border:1px solid var(--ac);font-size:14px}
 .agate{max-width:520px;margin:12vh auto 0;padding:26px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:16px}
 .agate h2{margin:0 0 8px}
-.atiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.atile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
-.atile b{display:block;font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
-.atile span{font-size:12.5px;color:var(--fg)}
-.atile small{display:block;font-size:11.5px;color:var(--mut)}
+/* the numbers at the top: one slim line each (number, what, a short note); point at one for the details */
+.atiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px}
+.atile{display:flex;align-items:baseline;gap:7px;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:default}
+.atile:hover{border-color:var(--ac)}
+.atile b{font-size:19px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.atile span{font-size:12.5px;color:var(--fg);white-space:nowrap}
+.atile small{font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* phone: two tiles per row, the small line under the label */
+@media (max-width:520px){.atiles{grid-template-columns:1fr 1fr;gap:6px}.atile{flex-wrap:wrap;column-gap:5px;row-gap:0;padding:6px 10px}.atile span{white-space:normal}.atile small{flex-basis:100%}}
+/* the hover box */
+#atip{position:fixed;z-index:90;max-width:300px;padding:7px 10px;border-radius:9px;background:var(--solid,#151a24);border:1px solid var(--line);box-shadow:0 12px 30px -10px rgba(0,0,0,.65);font-size:12px;line-height:1.45;pointer-events:none}
+#atip[hidden]{display:none}
+#atip b{display:block;font-weight:700;margin-bottom:2px}
+#atip span{display:block;color:var(--mut)}
+[data-tip]{cursor:help}
+.bars i[data-tip],.hb[data-tip]{cursor:default}
+[data-det]{cursor:pointer}
+/* the details window (a click) */
+#adet{position:fixed;inset:0;z-index:95;display:flex;align-items:flex-start;justify-content:center;padding:70px 14px 14px;background:rgba(0,0,0,.45)}
+#adet[hidden]{display:none}
+.adbox{width:min(520px,100%);max-height:calc(100vh - 90px);display:flex;flex-direction:column;background:var(--solid,#151a24);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px -14px rgba(0,0,0,.7)}
+.adhead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.adhead b{font-size:14px}
+.adhead button{border:0;background:none;color:var(--mut);font-size:14px;padding:2px 6px;cursor:pointer}
+.adbody{overflow-y:auto;padding:8px 14px 12px;font-size:13px}
+.adbody>div{padding:4px 0;border-top:1px solid var(--line)}
+.adbody>div:first-child{border-top:0}
 /* the three tabs */
 .atabs{display:flex;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--line)}
 .atabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 14px;font-size:14px;font-weight:600;color:var(--mut)}
@@ -71,7 +93,7 @@ tr.frow.isnew .mail{font-weight:700}
 .evr.evauth .evwhat{color:var(--ac);font-weight:600}
 .evdet{font-size:12px}
 .evnow{color:#3ecf8e;font-weight:600}
-.evlist>.amore{display:block;width:100%;margin:8px 0 0;padding:5px 10px;font-size:12px;border-radius:8px}
+.evlist>.amore,.apanel>.amore{display:block;width:100%;margin:8px 0 0;padding:5px 10px;font-size:12px;border-radius:8px}
 @media(max-width:900px){.evr{grid-template-columns:3.4em minmax(0,1fr);row-gap:1px}.evr .evwhat,.evr .evdet{grid-column:2}.evr .evwhat{font-size:12.5px}}
 .vlist b{font-weight:600;font-variant-numeric:tabular-nums}
 .atable tr.vrow{cursor:pointer}
