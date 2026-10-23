@@ -58,6 +58,21 @@ tr.frow.isnew .mail{font-weight:700}
 .vlist .evauth>span:nth-child(2){color:var(--ac,#7c83ff);font-weight:600}
 .vlist .evfirst>span:nth-child(2){color:#3ecf8e;font-weight:600}
 .vlist>.amore{display:block;margin:6px 0 0;padding:4px 10px;font-size:12px;border-radius:8px}
+/* the activity timeline: a heading per day, then time · who · what · details */
+.evlist{font-size:13px}
+.evday{margin:12px 0 2px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.evday:first-child{margin-top:2px}
+.evr{display:grid;grid-template-columns:3.4em minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr);gap:12px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line)}
+.evday+.evr{border-top:0}
+.evr time{font-variant-numeric:tabular-nums;color:var(--mut)}
+.evr>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evr .evwho .mut{font-size:12px;margin-left:4px}
+.evr.evfirst .evwhat{color:#3ecf8e;font-weight:600}
+.evr.evauth .evwhat{color:var(--ac);font-weight:600}
+.evdet{font-size:12px}
+.evnow{color:#3ecf8e;font-weight:600}
+.evlist>.amore{display:block;width:100%;margin:8px 0 0;padding:5px 10px;font-size:12px;border-radius:8px}
+@media(max-width:900px){.evr{grid-template-columns:3.4em minmax(0,1fr);row-gap:1px}.evr .evwhat,.evr .evdet{grid-column:2}.evr .evwhat{font-size:12.5px}}
 .vlist b{font-weight:600;font-variant-numeric:tabular-nums}
 .atable tr.vrow{cursor:pointer}
 .atable tr.vrow:hover td{background:var(--acsoft)}

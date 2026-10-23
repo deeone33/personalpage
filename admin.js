@@ -6,7 +6,7 @@
 (function () {
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, LATESTN = 25, FF = "todo", FK = "all", FOPEN = {}, COPEN = {};
+  var sb = null, FN = window.FEEDS_FN || "feeds", D = null, Q = "", OPEN = {}, SORT = "seen", SORTDIR = -1, TAB = "visitors", VF = "all", VOPEN = {}, LATESTN = 25, LF = "notme", FF = "todo", FK = "all", FOPEN = {}, COPEN = {};
   try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) {}
   // use the accent colour chosen on the main page, if there is one
   try {
@@ -52,14 +52,29 @@
   function isUuid(x) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(x || "")); }
   // the timeline: what happened, in words
   var EVW = { first: "Opened the page, first time", open: "Opened the page", login: "Signed in", logout: "Signed out", user_signedup: "Created an account", user_recovery_requested: "Asked for a password reset", user_modified: "Changed password or email", user_deleted: "Account deleted" };
-  // one line: when (and until when it was in use), what, who or from where, the device, where they came from
+  // the timeline, short: one line per event under a heading per day, with the time, who, what, and the useful details
+  // (how long the page was in use or that it is open now, phone or computer, and where they came from when not direct)
+  var EVS = { first: "First visit", open: "Visit", login: "Signed in", logout: "Signed out", user_signedup: "Created an account", user_recovery_requested: "Asked for a password reset", user_modified: "Changed password or email", user_deleted: "Account deleted" };
+  function dayLabel(t) { var k = dayKey(t); return k === dayKey(Date.now()) ? "Today" : k === dayKey(Date.now() - 86400000) ? "Yesterday" : new Date(t).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); }
   function evRow(e, byId, side) {
-    var hm = function (t) { return new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); };
-    var when = stamp(e.t);
-    var u = e.u && byId[e.u], who = u ? u.email : e.u ? "a deleted account" : "not signed in";
-    var what = (EVW[e.kind] || e.kind) + (e.until ? ", in use until " + (dayKey(e.until) === dayKey(e.t) ? hm(e.until) : stamp(e.until)) : "");
-    var auth = e.kind !== "first" && e.kind !== "open";
-    return '<div class="' + (auth ? "evauth" : e.kind === "first" ? "evfirst" : "") + '"><b>' + esc(when) + "</b><span>" + esc(what) + "</span><span>" + esc(side === "ip" ? e.ip || "–" : side === "both" ? who + " · " + (e.ip || "–") : who) + "</span><span>" + esc(auth ? "" : device(e.ua)) + '</span><span class="mut">' + esc(auth ? "" : [e.ref || "Direct", e.lang].filter(Boolean).join(" · ")) + "</span></div>";
+    var hm = new Date(e.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    var u = e.u && byId[e.u], auth = e.kind !== "first" && e.kind !== "open", where = [e.ip, e.cc ? country(e.cc) : ""].filter(Boolean).join(" · ");
+    var who = side === "ip" ? '<span class="mut">' + esc(where || "–") + "</span>"
+      : u ? "<b>" + esc(u.email) + "</b>" + (u.admin ? ' <span class="tag y">you</span>' : "") + (side === "both" ? ' <span class="mut">' + esc(e.ip || "") + "</span>" : "")
+      : e.u ? "a deleted account" : "Visitor" + (side === "both" ? ' <span class="mut">' + esc(where) + "</span>" : "");
+    var det = [];
+    if (!auth) {
+      var now = e.until && Date.now() - e.until < 360000;
+      det.push(e.until ? (now ? '<span class="evnow">on now</span> · ' : "") + "used " + dur((e.until - e.t) / 1000) : "opened");
+      var ph = /Android|iPhone|iPad|Mobile/i.test(e.ua || ""), bot = /bot|crawl|spider|headless|curl|python|wget/i.test(e.ua || "");
+      det.push(bot ? "a bot" : ph ? "phone" : "computer");
+      if (e.ref) det.push("from " + esc(e.ref));
+    }
+    return '<div class="evr ' + (auth ? "evauth" : e.kind === "first" ? "evfirst" : "") + '"><time>' + hm + '</time><span class="evwho">' + who + '</span><span class="evwhat">' + esc(EVS[e.kind] || e.kind) + '</span><span class="evdet mut">' + det.join(" · ") + "</span></div>";
+  }
+  function evList(list, byId, side) {
+    var last = "";
+    return list.map(function (e) { var k = dayKey(e.t), h = k !== last ? '<div class="evday">' + esc(dayLabel(e.t)) + "</div>" : ""; last = k; return h + evRow(e, byId, side); }).join("");
   }
   function lastDays(n) { var out = []; for (var i = n - 1; i >= 0; i--) out.push(dayKey(Date.now() - i * 86400000)); return out; }
   function bars(vals, days, unit) {
@@ -241,11 +256,11 @@
     visits.forEach(function (v) { var t = Date.parse(v.at), k = v.ip || "unknown"; if (!firstAt[k] || t < firstAt[k]) firstAt[k] = t; });
     visits.forEach(function (v) {
       var t = Date.parse(v.at), la = Date.parse(v.last_at) || 0, k = v.ip || "unknown";
-      EV.push({ t: t, until: la - t >= 60000 ? la : 0, kind: firstAt[k] === t ? "first" : "open", ip: k, u: v.user_id || "", ua: v.ua, ref: v.ref, lang: v.lang, tz: v.tz });
+      EV.push({ t: t, until: la - t >= 60000 ? la : 0, kind: firstAt[k] === t ? "first" : "open", ip: k, cc: v.cc || "", u: v.user_id || "", ua: v.ua, ref: v.ref, lang: v.lang, tz: v.tz });
     });
     (D.auth || []).forEach(function (a) {
       var t = Date.parse(a.at); if (!t) return;
-      EV.push({ t: t, kind: a.what, ip: a.ip || "", u: a.who || "" });
+      EV.push({ t: t, kind: a.what, ip: a.ip || "", cc: (IP[a.ip] && IP[a.ip].cc) || "", u: a.who || "" });
       if (a.ip && IP[a.ip]) { IP[a.ip].act = Math.max(IP[a.ip].act, t); if (isUuid(a.who)) IP[a.ip].who[a.who] = 1; }
     });
     EV.sort(function (a, b) { return b.t - a.t; });   // by when it started, so the times read in order
@@ -280,9 +295,14 @@
         panel("How they got here", "The site they clicked from. “Direct” means they typed the address or used a bookmark.", hbars(top(function (o) { return o.ref || "Direct"; }, 6)), "w3") + "</div>";
       // everyone's latest activity in one list
       if (D.authErr) h += '<div class="apanel w12 awarn"><b>Sign-ins are not in the timeline yet.</b> <span class="mut">' + esc(D.authErr) + "</span></div>";
-      h += '<div class="apanel w12"><h2>Latest activity</h2><p class="ahint">Everything on the front page, newest first: the page opened (the first time from an address, or again) and until when it was in use, and sign-ups, sign-ins, sign-outs and password resets. Click an address below for all of its activity, or an account under Accounts for its own.</p><div class="vlist evall">' +
-        (EV.slice(0, LATESTN).map(function (e) { return evRow(e, byId, "both"); }).join("") || '<div class="mut">Nothing yet.</div>') +
-        (EV.length > LATESTN ? '<button class="amore" data-more="1">Show 50 more</button>' : "") + "</div></div>";
+      // who to show: everyone, everyone but you (to begin with), only accounts, or only visitors who are not signed in
+      // "you" = your account, and also visits without an account from addresses your account uses (you, signed out)
+      var myIp = {}; EV.forEach(function (e) { var u = e.u && byId[e.u]; if (u && u.admin && e.ip) myIp[e.ip] = 1; });
+      var EVF = EV.filter(function (e) { var u = e.u && byId[e.u]; return LF === "all" ? true : LF === "notme" ? !(u && u.admin) && !(!e.u && myIp[e.ip]) : LF === "acc" ? !!e.u : !e.u; });
+      h += '<div class="apanel w12"><h2>Latest activity <span class="achips">' + [["notme", "Not me"], ["all", "Everyone"], ["acc", "Accounts"], ["anon", "Visitors"]].map(function (f) { return '<button data-lf="' + f[0] + '"' + (LF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
+        '<p class="ahint">Newest first. A visit shows how long the page was in use (<span class="evnow">on now</span> while it still is); sign-ups, sign-ins and sign-outs come from the sign-in log. <b>Not me</b> leaves out your account and your own addresses. Click an address below, or an account under Accounts, for all of its activity.</p><div class="evlist">' +
+        (evList(EVF.slice(0, LATESTN), byId, "both") || '<div class="mut">Nothing yet.</div>') +
+        (EVF.length > LATESTN ? '<button class="amore" data-more="1">Show 50 more</button>' : "") + "</div></div>";
       h += '<div class="apanel w12"><h2>Visitors by IP address <span class="achips">' + [["all", "Everyone"], ["anon", "Not signed in"], ["user", "Signed in"]].map(function (f) { return '<button data-vf="' + f[0] + '"' + (VF === f[0] ? ' class="on"' : "") + ">" + f[1] + "</button>"; }).join("") + "</span></h2>" +
         '<p class="ahint">One line per IP address, last used first, for the last 30 days (visits are kept for 90). <b>Last active</b> is when the page was last open and in view there (it checks in every 5 minutes); point at it for when it was last opened. A visit is the page being opened or reloaded (within 30 minutes counts once); click a line to see each visit and how long it was in use. <b>Person or bot</b> is a best guess from the address, the browser and its clock; hover the label for the reasons.</p>' +
         '<div class="tablewrap"><table class="atable"><thead><tr><th>IP address</th><th>Country</th><th title="When the page was last open and in view from this address">Last active</th><th title="Visits from this address in the last 30 days, signed in or not">Visits</th><th>Person or bot</th><th>Who</th><th>Device</th><th>Came from</th></tr></thead><tbody>' +
@@ -292,7 +312,7 @@
           var out = '<tr class="vrow" data-ip="' + esc(o.ip) + '"><td class="mail">' + esc(o.ip) + "</td><td>" + esc(country(o.cc)) + '</td><td class="num" title="' + esc("Active " + stamp(o.act) + " · last opened " + stamp(o.last)) + '">' + ago(o.act) + '</td><td class="num">' + o.n + '</td><td><span class="tag kd-' + kd.k + '" title="' + esc(kd.why.join("; ")) + '">' + kd.l + "</span></td><td>" + (who.length ? who.join(", ") : '<span class="mut">not signed in</span>') + "</td><td>" + esc(device(o.ua)) + "</td><td>" + esc(o.ref || "Direct") + "</td></tr>";
           // everything from this address, newest first: opened (first time / again, and until when it was in use), and sign-ins
           if (VOPEN[o.ip]) { var evs = EV.filter(function (e) { return e.ip === o.ip; });
-            out += '<tr class="udetail"><td colspan="8"><p class="ahint kdwhy"><b>' + kd.l + ":</b> " + esc(kd.why.join("; ")) + '</p><div class="vlist">' + evs.slice(0, 60).map(function (e) { return evRow(e, byId, "who"); }).join("") +
+            out += '<tr class="udetail"><td colspan="8"><p class="ahint kdwhy"><b>' + kd.l + ":</b> " + esc(kd.why.join("; ")) + '</p><div class="evlist">' + evList(evs.slice(0, 60), byId, "who") +
               (evs.length > 60 ? '<div class="mut">… and ' + (evs.length - 60) + " earlier</div>" : "") + "</div></td></tr>"; }
           return out;
         }).join("") || '<tr><td colspan="8" class="mut">' + (visits.length ? "Nobody matches." : "No visits recorded yet.") + "</td></tr>") +
@@ -327,7 +347,7 @@
               "</div></div></div>" + (function () {
                 // this account's whole story, newest first: every visit (from which address, and until when it was in use) and its sign-ins
                 var mine = EV.filter(function (e) { return e.u === u.id; });
-                return '<h3 style="margin-top:12px">Activity, last 30 days</h3><div class="vlist">' + (mine.slice(0, 60).map(function (e) { return evRow(e, byId, "ip"); }).join("") || '<div class="mut">Nothing in the last 30 days.</div>') +
+                return '<h3 style="margin-top:12px">Activity, last 30 days</h3><div class="evlist">' + (evList(mine.slice(0, 60), byId, "ip") || '<div class="mut">Nothing in the last 30 days.</div>') +
                   (mine.length > 60 ? '<div class="mut">… and ' + (mine.length - 60) + " earlier</div>" : "") + "</div>";
               })() + "</td></tr>";
           }
@@ -410,6 +430,8 @@
     var vf = e.target.closest("[data-vf]");
     if (vf) { VF = vf.dataset.vf; render(); return; }
     if (e.target.closest("[data-more]")) { LATESTN += 50; render(); return; }
+    var lf = e.target.closest("[data-lf]");
+    if (lf) { LF = lf.dataset.lf; LATESTN = 25; render(); return; }
     var th = e.target.closest("th[data-sort]");
     if (th) { if (SORT === th.dataset.sort) SORTDIR = -SORTDIR; else { SORT = th.dataset.sort; SORTDIR = SORT === "email" ? 1 : -1; } render(); return; }
     var row = e.target.closest("tr.urow");
