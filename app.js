@@ -1,4 +1,4 @@
-var VERSION = "0.28.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.28.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4747,6 +4747,8 @@ function cleanLinks(list) { (list || []).forEach(function (x) { if (x && x.u) x.
 //   nalert / mail    up to where highlight-word and new-mail notifications have been given
 // Links and announcement keys are stored as short fingerprints, to keep this small.
 var SEENREMOTE = {}, LASTSTAMP = load("sp_stamp", {});
+// "seen up to here" times per box: the ones this device wrote itself, and the latest one that came from another device
+var OWNSEEN = load("sp_ownseen", {}), RSEEN = load("sp_rseen", {});
 function hs(s) { s = String(s); var a = 5381, b = 52711; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); a = ((a * 33) ^ c) | 0; b = ((b * 33) ^ c) | 0; } return ((a >>> 0) * 4096 + ((b >>> 0) % 4096)).toString(36); }
 function sy() {
   if (!P.sy || typeof P.sy !== "object") P.sy = {};
@@ -4756,12 +4758,20 @@ function sy() {
 // One notification on every device: each device makes its own card for the same thing, so it is known by its kind and
 // text (not by when this device happened to announce it).
 function nKey(e) { return hs((e.k || "") + "|" + (e.t || "") + "|" + (e.b || "")); }
+// ...and by what it is about, which stays the same on every device even when its wording does not (a stream's title or
+// game changes, a stock's percentage moves): the kind, what clicking it opens (the streamer, the inbox, the stock, the
+// story), when the thing happened (to the minute) when that is known, and the title without its numbers.
+function nKey2(e) {
+  var a = e.act || {}, when = e.et ? Math.round(e.et / 60000) : "";
+  return hs("2|" + (e.k || "") + "|" + (a.a || "") + "|" + (a.k != null ? a.k : "") + "|" + when + "|" + String(e.t || "").replace(/[\d.,:%+−-]+/g, "#"));
+}
+function nDelAt(e) { var d = (P.sy && P.sy.ndel) || {}; return Math.max(+d[nKey2(e)] || 0, +d[nKey(e)] || 0); }
 // Gone from the bell because of what was done on any device: removed one by one (ndel), or the whole history cleared
 // (nclear). It counts from when the thing happened where that is known; a device that only told you a little after the
 // clear (or whose clock runs a minute ahead) does not keep it. A card made after this device already knew of that clear
 // (e.nc) is newer than it and stays. A new notification with the same text later is not affected.
 function nGone(e) {
-  var s = P.sy || {}, nc = +s.nclear || 0, d = s.ndel && +s.ndel[nKey(e)], t = Math.min(e.ts, e.et || e.ts);
+  var s = P.sy || {}, nc = +s.nclear || 0, d = nDelAt(e), t = Math.min(e.ts, e.et || e.ts);
   if (d && t <= d + 600000) return true;
   return !!nc && (+e.nc || 0) < nc && (e.et ? e.et <= nc : e.ts <= nc + 60000);
 }
@@ -4770,16 +4780,16 @@ function nRemoveWhere(fn) {
   var s = sy(), now = Date.now(), hit = NLOG.filter(fn);
   Object.keys(TOASTS).forEach(function (id) { if (TOASTS[id] && fn(TOASTS[id])) { var el = $("to" + id); if (el) el.remove(); delete TOASTS[id]; } });
   if (!hit.length) return;
-  hit.forEach(function (e) { s.ndel[nKey(e)] = now; });
-  syCap(s.ndel, 200);
+  hit.forEach(function (e) { s.ndel[nKey(e)] = now; s.ndel[nKey2(e)] = now; });
+  syCap(s.ndel, 300);
   NLOG = NLOG.filter(function (e) { return hit.indexOf(e) < 0; });
   save("sp_nlog", NLOG); persist();
 }
 function nRemove(e) {
   if (!e) return;
-  var k = nKey(e), s = sy();
-  s.ndel[k] = Date.now(); syCap(s.ndel, 200);
-  NLOG = NLOG.filter(function (x) { return x !== e && !(nKey(x) === k && nGone(x)); });
+  var k = nKey(e), k2 = nKey2(e), s = sy();
+  s.ndel[k] = s.ndel[k2] = Date.now(); syCap(s.ndel, 300);
+  NLOG = NLOG.filter(function (x) { return x !== e && !((nKey(x) === k || nKey2(x) === k2) && nGone(x)); });
   save("sp_nlog", NLOG); persist(); render();
 }
 function syCap(o, n) { var k = Object.keys(o); if (k.length > n) k.sort(function (a, b) { return o[a] - o[b]; }).slice(0, k.length - n).forEach(function (x) { delete o[x]; }); }
@@ -4788,16 +4798,21 @@ function isRead(u) { return !!(READ[u] || (P.sy && P.sy.read && P.sy.read[hs(u)]
 function adoptSync() {
   var s = P.sy;
   if (!s || typeof s !== "object") return;
-  var ch = false;
+  var ch = false, rch = false;
   var lists = { news: NEWSALL, tg: TGP, rd: RD }, fch = false;
   ["news", "tg", "rd"].forEach(function (b) {
     var t = +(s.seen && s.seen[b]) || 0;
-    if (t <= (NSEEN[b] || 0)) return;
-    NSEEN[b] = t; SEENREMOTE[b] = 1; ch = true;
-    // posts this device happened to load after that moment, but which are from before it, are not new either
-    (lists[b] || []).forEach(function (x) { if (x.u && x.ts && x.ts <= t && FIRST[x.u] > t) { FIRST[x.u] = x.ts; fch = true; } });
+    if (t > (NSEEN[b] || 0)) { NSEEN[b] = t; SEENREMOTE[b] = 1; ch = true; }
+    // "Seen up to here" from ANOTHER device (not one this device wrote itself): everything published before that moment
+    // is not new here either, also when this device had marked things seen later on its own, and also a post this device
+    // met only afterwards. It goes by when posts were published, so the two devices' clocks do not have to agree.
+    if (t > (OWNSEEN[b] || 0) && t > (RSEEN[b] || 0)) {
+      RSEEN[b] = t; rch = true;
+      (lists[b] || []).forEach(function (x) { if (x.u && x.ts && x.ts <= t && !(FIRST[x.u] <= x.ts)) { FIRST[x.u] = x.ts; fch = true; } });
+    }
   });
   if (ch) save("sp_nseen", NSEEN);
+  if (rch) save("sp_rseen", RSEEN);
   if (fch) save("sp_first", FIRST);
   if ((+s.nalert || 0) > load("sp_nalert", 0)) save("sp_nalert", +s.nalert);
   [0, 1].forEach(function (i) { var t = +(s.mail && s.mail[i]) || 0; if (t > load("sp_mailts" + i, 0)) save("sp_mailts" + i, t); });
@@ -4812,7 +4827,8 @@ function stampFirst(list, box) {
   // not new here either, even though this device meets them for the first time now.
   var away = !!SEENREMOTE[box] && (LASTSTAMP[box] || 0) < (NSEEN[box] || 0);
   FIRST._i[box] = 1;
-  (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init ? x.ts : away ? Math.min(now, x.ts || now) : now; changed = true; } });
+  // (published before "seen up to here" came from another device: not new either)
+  (list || []).forEach(function (x) { if (x.u && !FIRST[x.u]) { FIRST[x.u] = init || (x.ts && x.ts <= (RSEEN[box] || 0)) ? x.ts : away ? Math.min(now, x.ts || now) : now; changed = true; } });
   LASTSTAMP[box] = now; save("sp_stamp", LASTSTAMP); SEENREMOTE[box] = 0;
   if (!changed) return;
   var k = Object.keys(FIRST);
@@ -4829,8 +4845,8 @@ function stampFirst(list, box) {
 function isNewItem(x, box) { return PREVIEW ? !!x.nw : isNewTs(FIRST[x.u] || x.ts, box); }
 function markSeen(box, t) {
   var s = sy();
-  (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = Math.max(NSEEN[b] || 0, t || Date.now()); if (!t) SEENREMOTE[b] = 0; s.seen[b] = Math.max(+s.seen[b] || 0, NSEEN[b]); });
-  save("sp_nseen", NSEEN);
+  (box ? [box] : ["news", "tg", "rd"]).forEach(function (b) { NSEEN[b] = Math.max(NSEEN[b] || 0, t || Date.now()); if (!t) SEENREMOTE[b] = 0; s.seen[b] = Math.max(+s.seen[b] || 0, NSEEN[b]); OWNSEEN[b] = Math.max(OWNSEEN[b] || 0, s.seen[b]); });
+  save("sp_nseen", NSEEN); save("sp_ownseen", OWNSEEN);
   persist();
 }
 function markReadUrl(u) {
@@ -8101,6 +8117,11 @@ function persist() {
   SAVE_WANTED = true;
   saveTimer = setTimeout(syncSave, 600);
 }
+// Leaving the tab or closing it: a change that is still waiting (marking things seen, removing a notification) is sent
+// at once, not after the short pause, so it reaches your other devices even when you close the tab right after
+function saveNowIfWaiting() { if (SAVE_WANTED && sb && USER && PREFS_READY) { clearTimeout(saveTimer); syncSave(); } }
+document.addEventListener("visibilitychange", function () { if (document.hidden) saveNowIfWaiting(); });
+window.addEventListener("pagehide", saveNowIfWaiting);
 function syncSave() {
   if (!sb || !USER) return;
   if (syncBusy) { clearTimeout(saveTimer); saveTimer = setTimeout(syncSave, 400); return; }
@@ -8210,7 +8231,7 @@ function auth(fn) {
 // What this browser keeps for the signed-in account. Signing out, or another account signing in here, clears all of it,
 // so nothing of one account is ever shown in, or saved into, another.
 var ACCT_KEYS = ["sp_prefs", "sp_wall", "sp_twitch", "sp_nread", "sp_nalert", "sp_notified", "sp_brief", "sp_nlog", "sp_mailts0", "sp_mailts1", "sp_ytv", "sp_first", "sp_adm",
-  "sp_icsc", "sp_twoff", "sp_calc", "sp_nseen", "sp_stamp", "sp_sumseen", "sp_admseen", "sp_stockn", "sp_sndlog", "sp_owner"];
+  "sp_icsc", "sp_twoff", "sp_calc", "sp_nseen", "sp_stamp", "sp_sumseen", "sp_admseen", "sp_stockn", "sp_sndlog", "sp_owner", "sp_ownseen", "sp_rseen"];
 function wipeLocal() { try { ACCT_KEYS.forEach(function (x) { localStorage.removeItem(x); }); } catch (ex) {} }
 function signOut() {
   if (sb) sb.auth.signOut();
