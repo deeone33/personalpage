@@ -1,4 +1,4 @@
-var VERSION = "0.32.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.32.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -7939,7 +7939,8 @@ function mNav(kind, what) {
   if (old) old.remove();
   var id = kind === "sp" ? spOpenId() : "", n = kind === "st" ? stockRows().length : spNavList(id).indexOf(id) >= 0 ? spNavList(id).length : 0, bell = "";
   if (id) {
-    var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id), can = x ? x.f.state !== "post" : e && !e.fights && e.state !== "post", on = spFolOn(id);
+    // (a whole UFC card can be followed; a whole tennis tournament not: too many matches, follow one match instead)
+    var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id), can = x ? x.f.state !== "post" : e && (!e.fights || e.kind === "card") && e.state !== "post", on = spFolOn(id);
     if (can || on) {
       var say = on ? "Following: you are told " + spFolWhat(id) + ". Click to stop" : "Follow this " + what + ": you are told " + spFolWhat(id) + ", then it stops by itself";
       bell = '<button data-a="spfol" data-k="' + esc(id) + '" class="spbell' + (on ? " on" : "") + '" title="' + esc(say) + '" aria-label="' + esc(say) + '" aria-pressed="' + on + '"><svg viewBox="0 0 24 24" width="15" height="15" fill="' + (on ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg></button>';
@@ -8770,7 +8771,7 @@ function openHelp() {
     p("Choose your leagues in " + S("Sports") + ". ESPN supplies football (leagues and cups from more than twenty countries, the World Cup, the European Championship, the Nations League), NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC. SHL (Swedish hockey) comes from shl.se, and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg; those four need you to be signed in.") +
     h4("The box") +
     ul(["Pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> (set in " + S("Sports") + ": everything on now, today and coming up in that sport).",
-      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next game in the box, or the previous or next fight on a UFC card.", "<b>Follow one game</b>: the bell beside ‹ › in a game&rsquo;s window (also a single UFC fight, tennis match, race or golf tournament). You are told only the big moments for that sport: football the kick-off, every goal, extra time or penalties and full time; ice hockey every goal, overtime and the final; esports every map; basketball, American football, rugby and Australian football the half-time score, overtime and the final; baseball and cricket the start and the final; a fight how it ended; a tennis match each set; a race the winner. It stops by itself when the game is over. A small bell marks the games you follow in the box.",
+      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next game in the box, or the previous or next fight on a UFC card.", "<b>Follow one game</b>: the bell beside ‹ › in a game&rsquo;s window (also a UFC fight or a whole UFC card, a tennis match, a race weekend or a golf tournament). You are told only the big moments for that sport: football the kick-off, every goal, extra time or penalties and full time; ice hockey every goal, overtime and the final; esports every map; basketball, American football, rugby and Australian football the half-time score, overtime and the final; baseball and cricket the start and the final; a fight how it ended, and a whole card each fight&rsquo;s start and outcome; a tennis match each set (a whole tournament has too many matches, so you follow one match); a race weekend when qualifying, a sprint and the race start and who took pole or won (not practice); golf the winner. It stops by itself when the game is over. A small bell marks the games you follow in the box.",
       "<b>Results</b> goes back in time, newest first with a heading for each day: team leagues to the start of the month (in its first week, the month before too); UFC, Formula 1 and golf four weeks; tennis, SHL and esports about a week. It lists the 120 newest; pick one sport to see further back.",
       "<b>Search</b>: ⌕ finds a team, player, fighter, league or event in everything loaded for your leagues. Several words narrow it down (<code>ufc allen</code>). Press ⌕ again to close."]) +
     h4("A game&rsquo;s window") +
@@ -10179,6 +10180,8 @@ var SPPREV = {}, SPV = 0;
 //   football: kick-off, every goal, extra time / penalties, full time · ice hockey: start, every goal, overtime / shootout, final
 //   esports: start, every map, final · basketball, American football, rugby, Australian football: start, half-time, overtime, final
 //   baseball, cricket: start, final · a UFC fight: start, result · a tennis match: start, each set, result · a race or golf: start, winner
+// the sessions of a race weekend worth a notification (practice is not)
+var RACE_KEY = /qualif|sprint|race|shootout|grand prix/i;
 function spFolMap() {
   var m = P.spFol && typeof P.spFol === "object" ? P.spFol : {}, now = Date.now(), gone = false;
   Object.keys(m).forEach(function (k) { if (!(now - m[k] < 3 * 86400000)) { delete m[k]; gone = true; } });   // forgotten after 3 days
@@ -10191,7 +10194,8 @@ function spFolWhat(id) {
   var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id);
   if (!e) return "";
   if (x) return e.kind === "tour" ? "when the match starts, each set and the result" : "when the fight starts and how it ended";
-  if (e.kind === "race") return "when it starts and who won";
+  if (e.fights) return "when each fight starts and how it ended";   // a whole UFC card
+  if (e.kind === "race") return (e.sessions || []).some(function (s) { return RACE_KEY.test(s.n); }) ? "when qualifying and the race (and a sprint, if there is one) start, and who took pole or won; practice is left out" : "when it starts and who won";
   if (e.sp === "football") return "kick-off, every goal, extra time or penalties, and full time";
   if (e.sp === "hockey") return "the start, every goal, overtime or a shootout, and the final score";
   if (e.sp === "esports") return "the start, every map and the final score";
@@ -10233,8 +10237,9 @@ function spAlerts() {
         if (p.st === "in" && cur.st === "post" && once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go);
         if (isFol && cur.st === "post") spFolDone(e.id);   // over: following stops by itself
       } else if (e.fights) {
+        var cardFol = e.kind === "card" && !!fol[e.id];   // the whole UFC card: every fight's start and outcome
         e.fights.forEach(function (f) {
-          var fk = fightKey(e, f), isFol = !!fol[fk];
+          var fk = fightKey(e, f), isFol = !!fol[fk] || cardFol;
           if (!(favOn && (spIsFav(f.a) || spIsFav(f.b))) && !isFol) return;
           var id = e.id + ":" + f.a + ":" + f.b, p = SPPREV[id], sets = (f.sa || []).length;
           SPPREV[id] = f.state; var ps = SPPREV[id + ":sets"]; SPPREV[id + ":sets"] = sets;
@@ -10246,15 +10251,28 @@ function spAlerts() {
             toast("sport", "Set " + (n + 1) + ": " + f.a + " " + ga + "–" + gb + " " + f.b, e.title, go);
           }
           if (p === "in" && f.state === "post" && once("spf:" + id)) toast("sport", f.aw ? f.a + " beat " + f.b : f.bw ? f.b + " beat " + f.a : "Finished: " + f.a + " vs " + f.b, (f.detail ? f.detail + " · " : "") + e.title, go);
-          if (isFol && f.state === "post") spFolDone(fk);
+          if (fol[fk] && f.state === "post") spFolDone(fk);
         });
+        if (cardFol && e.state === "post" && e.fights.every(function (f) { return f.state === "post"; })) spFolDone(e.id);   // the card is over
       } else if (e.kind === "race" && fol[e.id]) {
-        // a race or golf tournament you follow: when it starts, and the winner
         var pr = SPPREV[e.id]; SPPREV[e.id] = e.state;
-        if (pr === "pre" && e.state === "in" && once("spk:" + e.id)) toast("sport", "Started: " + e.title, e.lg, go);
-        if (pr === "in" && e.state === "post" && once("spf:" + e.id)) {
-          var done = (e.sessions || []).filter(function (s) { return s.res && s.res.length; }), last = done[done.length - 1], win = (e.field && e.field[0] && e.field[0].n) || (last && last.res[0]) || (e.top && e.top[0] && e.top[0].n) || "";
-          toast("sport", (win ? win + " won: " : "Finished: ") + e.title, e.lg, go);
+        var key = (e.sessions || []).filter(function (s) { return RACE_KEY.test(s.n); });
+        if (key.length) {
+          // a race weekend: qualifying, a sprint and the race, each when it starts and who took pole or won (practice is left out)
+          key.forEach(function (s) {
+            var sk = e.id + ":" + s.n, ps = SPPREV[sk];
+            SPPREV[sk] = s.state;
+            if (!ps) return;
+            if (ps === "pre" && s.state === "in" && once("spk:" + sk)) toast("sport", "Started: " + s.n, e.title, go);
+            if (ps === "in" && s.state === "post" && s.res && s.res[0] && once("spf:" + sk)) toast("sport", s.n + ": " + (/qualif|shootout/i.test(s.n) ? "pole for " : "won by ") + s.res[0], (s.res[1] ? "2. " + s.res[1] + (s.res[2] ? " · 3. " + s.res[2] : "") + " · " : "") + e.title, go);
+          });
+        } else {
+          // golf (one long event): when it starts, and the winner
+          if (pr === "pre" && e.state === "in" && once("spk:" + e.id)) toast("sport", "Started: " + e.title, e.lg, go);
+          if (pr === "in" && e.state === "post" && once("spf:" + e.id)) {
+            var win = (e.field && e.field[0] && e.field[0].n) || (e.top && e.top[0] && e.top[0].n) || "";
+            toast("sport", (win ? win + " won: " : "Finished: ") + e.title, e.lg, go);
+          }
         }
         if (e.state === "post" && pr) spFolDone(e.id);
       }
@@ -10899,7 +10917,7 @@ function openSport(id, back) {
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin" data-sp="' + esc(id) + '" data-sig="' + esc(spSig(id)) + '">' + spBackBtn() + body + spCalBtns(e) + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
-  mNav("sp", "game");
+  mNav("sp", e.kind === "card" ? "card" : e.kind === "race" ? ((e.sessions || []).length ? "weekend" : "tournament") : e.fights ? "event" : "game");
   if (e.kind === "team") { spTabLoad(e); spSumLoad(e); }
   if (e.kind === "race" || e.kind === "tour") spRankLoad(e);
   if (e.kind === "card") fillOdds($("mBody"));
