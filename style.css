@@ -813,6 +813,11 @@ body.resizing{user-select:none}
 .si a:hover{color:var(--ac)}
 .si small{color:var(--mut)}
 .stlinks{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
+/* a stock's news: always the same height (about six headlines, more by scrolling), so the window does not grow and shrink
+   while the news loads or when one stock has none, also when stepping with ‹ › */
+#stInfo{height:200px;overflow-y:auto;overscroll-behavior:contain;margin-top:10px;padding-right:4px}
+#stInfo h3{position:sticky;top:0;z-index:1;background:var(--solid);margin:0;padding:2px 0 6px}
+#stInfo h3 + .si{margin-top:0}
 
 /* ---- Summary ---- */
 .chips{display:flex;flex-wrap:wrap;gap:5px}
