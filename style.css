@@ -1424,6 +1424,7 @@ body.noshadow #srchAns{box-shadow:none}
 #mNav .spbell{display:flex;align-items:center;padding:5px 9px;margin-right:4px}
 #mNav .spbell.on{color:var(--ac);border-color:var(--ac)}
 .mbox .ph{position:relative}
+.spbubd{margin-top:6px}.spbubd button{font-size:12px;padding:4px 10px}
 #spBub{position:absolute;right:0;top:calc(100% + 4px);z-index:20;max-width:min(320px,100%);background:var(--solid);border:1px solid var(--ac);border-radius:10px;padding:7px 10px;font-size:12.5px;line-height:1.4;box-shadow:0 12px 30px -10px rgba(0,0,0,.6);animation:menuin .14s var(--ease)}
 .spbi{color:var(--ac);margin-right:5px;display:inline-flex;vertical-align:-1px}
 @media (pointer:coarse){#mNav button{padding:8px 14px}}

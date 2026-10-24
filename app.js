@@ -1,4 +1,4 @@
-var VERSION = "0.32.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.32.5";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -8133,6 +8133,7 @@ document.addEventListener("click", function (e) {
   if (a === "spdgo") { spdRun(); return; }
   if (a === "spdclear") { save("sp_speedh", []); spdDraw(); return; }
   if (a === "spfol") { spFolToggle(k); return; }
+  if (a === "spfoldesk") { spFolDesk(); return; }
   if (a === "wxday") { WXDAY = WXDAY === +k ? -1 : +k; if (WXM && WXM.j && WXM.j.current && $("cityBody")) $("cityBody").innerHTML = cityTools(WXM.c) + wxHtml(WXM.j); return; }
   if (a === "mnav") { var mv = k.split(":"); if (mv[0] === "st") stockStep(+mv[1]); else spStep(+mv[1]); return; }
   if (/^adm(tab|load|seen|open|x)$/.test(a)) { admAct(a, k); return; }
@@ -8769,7 +8770,7 @@ function openHelp() {
     p("Choose your leagues in " + S("Sports") + ". ESPN supplies football (leagues and cups from more than twenty countries, the World Cup, the European Championship, the Nations League), NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC. SHL (Swedish hockey) comes from shl.se, and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg; those four need you to be signed in.") +
     h4("The box") +
     ul(["Pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> (set in " + S("Sports") + ": everything on now, today and coming up in that sport).",
-      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next game in the box, or the previous or next fight on a UFC card.", "<b>Follow one game</b>: the bell beside ‹ › in a game&rsquo;s window (also a UFC fight or a whole UFC card, a tennis match, a race weekend or a golf tournament). You are told only the big moments for that sport: football the kick-off, every goal, extra time or penalties and full time; ice hockey every goal, overtime and the final; esports every map; basketball, American football, rugby and Australian football the half-time score, overtime and the final; baseball and cricket the start and the final; a fight how it ended, and a whole card each fight&rsquo;s start and outcome; a tennis match each set (a whole tournament has too many matches, so you follow one match); a race weekend when qualifying, a sprint and the race start and who took pole or won (not practice); golf the winner. It stops by itself when the game is over. A small bell marks the games you follow in the box.",
+      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next game in the box, or the previous or next fight on a UFC card.", "<b>Follow one game</b>: the bell beside ‹ › in a game&rsquo;s window (also a UFC fight or a whole UFC card, a tennis match, a race weekend or a golf tournament). You are told only the big moments for that sport: football the kick-off, every goal, extra time or penalties and full time; ice hockey every goal, overtime and the final; esports every map; basketball, American football, rugby and Australian football the half-time score, overtime and the final; baseball and cricket the start and the final; a fight how it ended, and a whole card each fight&rsquo;s start and outcome; a tennis match each set (a whole tournament has too many matches, so you follow one match); a race weekend when qualifying, a sprint and the race start and who took pole or won (not practice); golf the winner. It stops by itself when the game is over, and keeps checking while the page is in a background tab; to be told while you are in another tab, switch on desktop notifications (the bubble under the bell offers it on a computer). If a followed game ended while the page was closed, you get its result when you open it. A small bell marks the games you follow in the box.",
       "<b>Results</b> goes back in time, newest first with a heading for each day: team leagues to the start of the month (in its first week, the month before too); UFC, Formula 1 and golf four weeks; tennis, SHL and esports about a week. It lists the 120 newest; pick one sport to see further back.",
       "<b>Search</b>: ⌕ finds a team, player, fighter, league or event in everything loaded for your leagues. Several words narrow it down (<code>ufc allen</code>). Press ⌕ again to close."]) +
     h4("A game&rsquo;s window") +
@@ -10210,9 +10211,19 @@ function spFolToggle(id) {
   if (old) old.remove();
   if (!b) return;
   var bub = document.createElement("div"); bub.id = "spBub"; bub.setAttribute("role", "status");
-  bub.innerHTML = on ? "<b>Following.</b> You are told " + esc(spFolWhat(id)) + "." + (NTF().sport === false ? " <b>Sports notifications are off in Settings → Notifications.</b>" : "") : "Not following any more.";
+  // without desktop notifications a notice can only show inside this tab: on a computer, offer to switch them on in one click
+  // (phone browsers do not show a website's notifications this way, so there it is not offered)
+  var desk = on && NTF().sport !== false && !NTF().desktop && window.Notification && Notification.permission !== "denied" && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+  bub.innerHTML = on ? "<b>Following.</b> You are told " + esc(spFolWhat(id)) + "." + (NTF().sport === false ? " <b>Sports notifications are off in Settings → Notifications.</b>" : "") +
+    (desk ? '<div class="spbubd"><button data-a="spfoldesk">Also tell me when I&rsquo;m in another tab</button></div>' : "") : "Not following any more.";
   b.closest(".ph").appendChild(bub);
-  clearTimeout(spFolToggle.t); spFolToggle.t = setTimeout(function () { if (bub.parentNode) bub.remove(); }, on ? 4500 : 1800);
+  clearTimeout(spFolToggle.t); spFolToggle.t = setTimeout(function () { if (bub.parentNode) bub.remove(); }, !on ? 1800 : desk ? 9000 : 4500);
+}
+// the button in that bubble: desktop notifications on (Settings → Notifications), and the browser asks once for permission
+function spFolDesk() {
+  P.ntf = Object.assign({}, P.ntf || {}, { desktop: true }); persist(); askNotify();
+  var bub = $("spBub");
+  if (bub) { bub.innerHTML = "<b>Done.</b> You are also told while you are in another tab (allow it if your browser asks)."; clearTimeout(spFolToggle.t); spFolToggle.t = setTimeout(function () { if (bub.parentNode) bub.remove(); }, 4000); }
 }
 function spAlerts() {
   var favOn = spAlertsOn(), fol = NTF().sport !== false ? spFolMap() : {};
@@ -10226,8 +10237,11 @@ function spAlerts() {
         if (!(favOn && e.names.some(spIsFav)) && !isFol) return;
         var cur = { st: e.state, h: +e.home.s || 0, a: +e.away.s || 0, d: String(e.detail || "") }, p = SPPREV[e.id], foot = e.sp === "football";
         SPPREV[e.id] = cur;
-        if (!p) return;   // first look at this game: nothing to compare with yet
         var score = e.home.n + " " + cur.h + "–" + cur.a + " " + e.away.n;
+        if (!p) {   // first look at this game: nothing to compare with yet. A followed game that ended meanwhile still gives its result.
+          if (isFol && cur.st === "post") { if (once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go); spFolDone(e.id); }
+          return;
+        }
         if (p.st === "pre" && cur.st === "in" && once("spk:" + e.id)) toast("sport", (foot ? "Kick-off: " : "Started: ") + e.home.n + " – " + e.away.n, e.lg, go);
         if (cur.st !== "pre" && (foot || e.sp === "hockey") && cur.h + cur.a > p.h + p.a && once("spg:" + e.id + ":" + cur.h + "-" + cur.a)) {
           var side = cur.h > p.h ? "h" : "a", g = (e.ev || []).filter(function (x) { return x.k === "goal" && x.side === side; }).pop();
@@ -10240,7 +10254,7 @@ function spAlerts() {
           var xt = /\b(OT|overtime|SO|shootout|ET|extra time|pens|penalt)/i;
           if (xt.test(cur.d) && !xt.test(p.d) && once("spx:" + e.id)) toast("sport", (foot ? (/pen/i.test(cur.d) ? "Penalties: " : "Extra time: ") : /shoot|\bSO\b/i.test(cur.d) ? "Shootout: " : "Overtime: ") + score, e.lg, go);
         }
-        if (p.st === "in" && cur.st === "post" && once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go);
+        if (p.st !== "post" && cur.st === "post" && once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go);
         if (isFol && cur.st === "post") spFolDone(e.id);   // over: following stops by itself
       } else if (e.fights) {
         var cardFol = e.kind === "card" && !!fol[e.id];   // the whole UFC card: every fight's start and outcome
@@ -10249,14 +10263,15 @@ function spAlerts() {
           if (!(favOn && (spIsFav(f.a) || spIsFav(f.b))) && !isFol) return;
           var id = e.id + ":" + f.a + ":" + f.b, p = SPPREV[id], sets = (f.sa || []).length;
           SPPREV[id] = f.state; var ps = SPPREV[id + ":sets"]; SPPREV[id + ":sets"] = sets;
-          if (!p) return;
+          var res = function () { toast("sport", f.aw ? f.a + " beat " + f.b : f.bw ? f.b + " beat " + f.a : "Finished: " + f.a + " vs " + f.b, (f.detail ? f.detail + " · " : "") + e.title, go); };
+          if (!p) { if (isFol && f.state === "post" && once("spf:" + id)) res(); if (fol[fk] && f.state === "post") spFolDone(fk); return; }   // (ended while the page was not looking)
           if (p === "pre" && f.state === "in" && once("spk:" + id)) toast("sport", "On now: " + f.a + " vs " + f.b, e.title, go);
           // a tennis match you follow: a set is over when the next one starts
           if (isFol && e.kind === "tour" && f.state === "in" && ps != null && sets > ps && sets > 1 && once("sps:" + id + ":" + (sets - 1))) {
             var n = sets - 2, ga = (f.sa || [])[n], gb = (f.sb || [])[n];
             toast("sport", "Set " + (n + 1) + ": " + f.a + " " + ga + "–" + gb + " " + f.b, e.title, go);
           }
-          if (p === "in" && f.state === "post" && once("spf:" + id)) toast("sport", f.aw ? f.a + " beat " + f.b : f.bw ? f.b + " beat " + f.a : "Finished: " + f.a + " vs " + f.b, (f.detail ? f.detail + " · " : "") + e.title, go);
+          if (p !== "post" && f.state === "post" && once("spf:" + id)) res();   // (also straight from "pre": a fight that started and ended between two looks)
           if (fol[fk] && f.state === "post") spFolDone(fk);
         });
         if (cardFol && e.state === "post" && e.fights.every(function (f) { return f.state === "post"; })) spFolDone(e.id);   // the card is over
@@ -11396,7 +11411,7 @@ setInterval(function () {
   if (!e || !live || e.id.indexOf("x/") === 0) return;
   var lgId = e.id.slice(0, e.id.lastIndexOf(":")), lg = spLeagues().filter(function (l) { return l.id === lgId; })[0] || SP_CATALOG.filter(function (l) { return l.id === lgId; })[0];
   if (!lg || lg.kind === "tour" || (SP_NOW[lg.id] && Date.now() - SP_NOW[lg.id].t < 18000)) return;   // (tennis: its file is large, it stays at the box's pace)
-  spGet(lg, SP_CATALOG.indexOf(lg)).then(function () { render(); spLiveTick(); });
+  spGet(lg, SP_CATALOG.indexOf(lg)).then(function () { spAlerts(); render(); spLiveTick(); });   // (the alerts too: this is now the only refresh of that league)
 }, 20000);
 function spLiveTick() { spRedraw(false); }
 // draws an open game or fight window again in place (force: also when the game itself has not changed, e.g. after 🔔)
@@ -12628,7 +12643,7 @@ document.addEventListener("visibilitychange", function () {
   // The last refresh is more than 15 minutes old: everything is fetched now, and the gaps are filled (Telegram fetches
   // back to what it had; News and Reddit keep what they had), so nothing is missing and no reload is needed.
   if (HIDDEN_AT && Date.now() - Math.max(LASTFULL, HIDDEN_AT) > 900000) { refreshAll(); LASTFULL = Date.now(); }
-  else render();
+  else { render(); fetchSports(); }   // live scores at once (only the leagues that are due are asked again)
   HIDDEN_AT = 0;
 });
 
@@ -12642,5 +12657,6 @@ function bg(kind) { return function () { var n = NTF(); return !!(n.desktop || n
 every(60000, fetchTwitch, bg("live"));
 every(120000, fetchNews, function () { return bg("news")() || bg("words")(); });
 every(60000, fetchTG, bg("words"));
-every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(60000, fetchSports, bg("sport")); every(300000, checkUpdate);
+// sports keep loading in the background while you follow a game with 🔔 (else it would stand still until you come back)
+every(300000, fetchQuotes, bg("stock")); every(600000, fetchYT); every(300000, fetchMail, bg("mail")); every(300000, fetchReddit); every(60000, fetchSports, function () { return bg("sport")() || (NTF().sport !== false && Object.keys(spFolMap()).length > 0); }); every(300000, checkUpdate);
 setInterval(tick, 1000);
