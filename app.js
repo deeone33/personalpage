@@ -1,4 +1,4 @@
-var VERSION = "0.32.5";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.32.6";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2872,7 +2872,7 @@ function rdrSwitch() {
   }
   if (!cnt) { cnt = document.createElement("span"); cnt.id = "rdrCnt"; cnt.className = "mut"; cnt.setAttribute("aria-live", "off"); aa.parentNode.insertBefore(cnt, aa); }
   var nw = RDR.dir === "new", say = "Scrolling down goes to " + (nw ? "newer" : "older") + " posts. Press to turn the list around.";
-  b.textContent = nw ? "↓ Newer" : "↓ Older"; b.title = say; b.setAttribute("aria-label", say);
+  b.textContent = layM() ? (nw ? "↓ New" : "↓ Old") : nw ? "↓ Newer" : "↓ Older"; b.title = say; b.setAttribute("aria-label", say);   // (shorter on a phone)
 }
 // ---- The reader's own font, text size and line spacing (Aa beside ↓ Older), kept per device ----
 // Only the posts change: the boxes and the rest of the page keep their font. A font is fetched the first time it is needed.
@@ -8747,7 +8747,7 @@ function openHelp() {
     ul(["One post at a time: a long post scrolls inside the window and stops at its end; a couple more wheel clicks move on to the next.",
       "News: the full article is fetched from the site and shown under the picture. Where a site does not allow it (a paywall, some Google News links) the summary stays with a note, and <b>Read the full article</b> opens the site.",
       "<b>Catching up</b>: the small list button at the top of the box (before ⌕) opens the reader at the oldest post you have not seen, under a <b>New</b> line, and you scroll down to the newest. A post counts as read once you reach it.",
-      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around. <b>Aa</b> beside it changes the reader&rsquo;s font (easy-to-read ones such as Atkinson Hyperlegible), text size and line spacing; only the posts change, and this device remembers it. Beside it, <b>7 new</b> counts the unread posts still ahead of you and counts down as you read; <b>12/48</b> shows where you are in the list.",
+      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>; on a phone <b>↓ New</b> or <b>↓ Old</b>) turns the order around. <b>Aa</b> beside it changes the reader&rsquo;s font (easy-to-read ones such as Atkinson Hyperlegible), text size and line spacing; only the posts change, and this device remembers it. Beside it, <b>7 new</b> counts the unread posts still ahead of you and counts down as you read; <b>12/48</b> shows where you are in the list.",
       "Videos do not start by themselves, and stop when you scroll away.",
       "Telegram: <b>Load older posts</b> at the old end. Reddit: <b>Top comments</b> under a post.",
       "On a phone the reader fills the screen and you scroll with your thumb. On a phone, the back button (or back gesture) closes the open window or Settings instead of leaving the page."]) +

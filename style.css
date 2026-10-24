@@ -1432,6 +1432,19 @@ body.noshadow #srchAns{box-shadow:none}
 #rdrCnt .rdrnw{font-size:11px;font-weight:700;color:var(--ac);background:var(--acsoft);border-radius:99px;padding:2px 7px}
 #rdrAaW{margin-left:auto;margin-right:6px}
 #rdrCnt + #rdrAaW{margin-left:0}
+/* phone: the window's top line never gets wider than the screen (a phone set to big text would otherwise widen the whole
+   page, cutting off Close and the right edge of the text): smaller buttons, and if it still does not fit, it wraps */
+@media (max-width:560px){
+  .mbox .ph{flex-wrap:wrap;row-gap:6px;min-width:0}
+  .mbox .ph > *{flex-shrink:1;min-width:0}
+  .mbox .ph #mTitle{flex:1 1 0}   /* a long title wraps beside the buttons, as before; only the buttons ever go to a second line */
+  #rdrSw,#rdrAa,.mbox:has(.rdr) #mClose{padding:5px 9px;font-size:13px}
+  #rdrCnt{margin-right:4px;gap:4px}
+  #rdrAaW{margin-right:4px}
+  #rdrSw{margin-right:4px}
+  .rdp{padding-right:4px}
+}
+#modal{overflow-x:hidden}
 #rdrAaW + #rdrSw{margin-left:0}
 #rdrAa{font-weight:700;padding:6px 10px}
 .rfmenu{min-width:210px;z-index:30}
