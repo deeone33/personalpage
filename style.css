@@ -351,6 +351,15 @@ button.pill{cursor:pointer;line-height:1.5}
 .icsrow input{flex:1 1 140px;min-width:0;font:inherit;font-size:13px;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:5px 10px}
 .icsrow button{flex:none;padding:3px 9px}
 .icsrow select{flex:0 1 150px;min-width:0}
+.wzunits{display:flex;align-items:center;gap:8px}
+/* Tools > Speed test */
+.spdg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 10px}
+.spdc{display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:12px 6px;transition:border-color .2s}
+.spdc.on{border-color:var(--ac)}
+.spdc span{font-size:12px}
+.spdc b{font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.spdc small{font-size:11px;color:var(--mut)}
+@media (max-width:520px){.spdc b{font-size:20px}}
 /* Settings > Stocks: the list, as small chips with ✕ */
 .stlist{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .stchip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:1px 2px 1px 8px;font-size:12.5px;background:var(--card)}
@@ -1383,7 +1392,9 @@ body.noshadow #srchAns{box-shadow:none}
 .rdredge .pvnote{margin:8px 0 0}
 #rdrSw{margin-left:auto;margin-right:8px;white-space:nowrap}
 /* the reader's Aa: its own font, size and line spacing (only the posts change; the buttons under them keep the page font) */
+#rdrCnt{margin-left:auto;margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 #rdrAaW{margin-left:auto;margin-right:6px}
+#rdrCnt + #rdrAaW{margin-left:0}
 #rdrAaW + #rdrSw{margin-left:0}
 #rdrAa{font-weight:700;padding:6px 10px}
 .rfmenu{min-width:210px;z-index:30}

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/ https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org https://api.tvmaze.com https://*.api.radio-browser.info; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/ https://s3.tradingview.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.twitch.tv https://id.twitch.tv https://open.er-api.com https://api.coingecko.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://site.api.espn.com https://sports.core.api.espn.com https://api.mymemory.translated.net https://itunes.apple.com https://musicbrainz.org https://api.tvmaze.com https://*.api.radio-browser.info https://speed.cloudflare.com; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#0b0e14">
 <title>OmniTree – free start page for news, sports, stocks, Twitch and mail</title>
@@ -161,6 +161,11 @@
       <div id="wcList"></div>
       <div class="mut sn">The small box shows each city’s time and date, and how many hours it is ahead or behind. On a phone you tap the date instead of pointing at it. On the page, a small ⁺¹ after a time means it is already tomorrow there.</div>
     </div>
+  </section>
+
+  <section class="setgrp" data-cat="Page" data-sec="Weather">
+    <div class="mut sn" data-kw="weather city cities forecast">To change the city or add more, click the Weather box.</div>
+    <label data-kw="units fahrenheit celsius mph wind temperature imperial metric inches rain">Units <select id="wxUnits"><option value="">Automatic (°F and mph in the US)</option><option value="m">°C, m/s and mm</option><option value="i">°F, mph and inches</option></select></label>
   </section>
 
   <section class="setgrp" data-cat="Page" data-sec="Search bar">
