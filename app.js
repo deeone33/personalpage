@@ -1,4 +1,4 @@
-var VERSION = "0.31.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.32.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -2996,13 +2996,15 @@ function rdrCur(L) {
   return cur;
 }
 function rdrFit() { var L = $("rdrL"); if (L) L.style.setProperty("--rh", L.clientHeight + "px"); }
-// "12 / 48" in the top bar: the post you are at, counted from the top of the list
+// In the top bar: "7 new" (the unread posts still ahead of you, counting down as you read; gone when there are none), and
+// small beside it where you are, "12/48"
 function rdrCount() {
   var L = $("rdrL"), el = $("rdrCnt");
-  if (!L || !el) return;
-  var ps = L.querySelectorAll(".rdp"), cur = rdrCur(L), n = Array.prototype.indexOf.call(ps, cur) + 1;
-  el.textContent = ps.length ? Math.max(1, n) + " / " + ps.length : "";
-  el.title = "Post " + Math.max(1, n) + " of " + ps.length + " in this reader";
+  if (!L || !el || !RDR) return;
+  var ps = L.querySelectorAll(".rdp"), cur = rdrCur(L), n = Math.max(1, Array.prototype.indexOf.call(ps, cur) + 1), left = 0;
+  Array.prototype.forEach.call(ps, function (p) { if (RDR.nw[p.dataset.u] && !p._rd) left++; });
+  el.innerHTML = ps.length ? (left ? '<b class="rdrnw">' + left + " new</b>" : "") + "<span>" + n + "/" + ps.length + "</span>" : "";
+  el.title = (left ? left + " unread still to come · " : "Nothing unread left · ") + "post " + n + " of " + ps.length;
 }
 window.addEventListener("resize", rdrFit);
 document.addEventListener("wheel", function (e) {
@@ -3038,7 +3040,6 @@ function rdrOnScroll() { if (RDR && !RDR.raf) RDR.raf = setTimeout(function () {
 function rdrScan() {
   var R = RDR, L = $("rdrL");
   if (!R || !L) return;
-  rdrCount();
   var top = L.scrollTop, ch = L.clientHeight, far = Math.abs(top - R.last) > ch * 3, lo = far ? top : Math.min(top, R.last), hi = (far ? top : Math.max(top, R.last)) + ch / 2, got = [];
   if (top + ch >= L.scrollHeight - 4) hi = top + ch;
   R.last = top;
@@ -3053,6 +3054,7 @@ function rdrScan() {
     else if (!v.paused) v.pause();   // a video you scrolled away from stops playing
   }
   if (got.length) rdrRead(got);
+  rdrCount();   // (after the posts just read are marked, so "new" counts down at once)
 }
 function rdrRead(keys) {
   var R = RDR;
@@ -3116,6 +3118,7 @@ function rdrSync() {
   }
   var set = function (id, h) { var el = $(id); if (el && el.getAttribute("data-h") !== h) { el.innerHTML = h; el.setAttribute("data-h", h); } };
   set("rdrTop", rdrEdge(true)); set("rdrEnd", rdrEdge(false));
+  if (fresh.length) rdrCount();   // posts that just arrived count too
 }
 // Reddit comments under a post in the reader, when you ask for them
 function rdrCom(u) {
@@ -4046,6 +4049,7 @@ function openModal(title, html) {
     var el = document.activeElement, inWin = el && el.closest && (el.closest("#modal") || el.closest("#panel"));
     MOPEN = el && el !== document.body && !inWin ? { key: KEYNAV, el: el, a: el.getAttribute("data-a"), k: el.getAttribute("data-k") } : null;
   }
+  if ($("mNav")) $("mNav").remove();   // a stock's or a game's ‹ › belong to that window only
   $("mTitle").textContent = title; $("mBody").innerHTML = html; $("modal").hidden = false;
 }
 function closeModal() {
@@ -4063,6 +4067,27 @@ function closeModal() {
 }
 $("mClose").onclick = closeModal;
 $("modal").onclick = function (e) { if (e.target.id === "modal") closeModal(); };
+// ---- Phone: the back button (or back gesture) closes the open window or Settings instead of leaving the site ----
+// While one is open, the page adds one step to the browser's history; Back takes that step and closes it. Closed any other
+// way (Close, ✕, Esc), the step is taken off again, so Back afterwards works as before. A computer is not affected.
+var HNAV_IGN = 0, hnavT = 0;
+function hnavOpen() { return !$("modal").hidden || !$("panel").hidden; }
+function hnavSync() {
+  var ours = !!(history.state && history.state.omni);
+  try {
+    if (hnavOpen() && !ours && layM()) history.pushState({ omni: 1 }, "");   // (a step left over from the phone layout is still taken off)
+    else if (!hnavOpen() && ours) { HNAV_IGN++; history.back(); }
+  } catch (e) {}
+}
+(function () {
+  var mo = new MutationObserver(function () { clearTimeout(hnavT); hnavT = setTimeout(hnavSync, 0); });   // (a window closed and another opened at once is one change)
+  mo.observe($("modal"), { attributes: true, attributeFilter: ["hidden"] });
+  mo.observe($("panel"), { attributes: true, attributeFilter: ["hidden"] });
+})();
+window.addEventListener("popstate", function () {
+  if (HNAV_IGN) { HNAV_IGN--; return; }
+  if (!$("modal").hidden) closeModal(); else if (!$("panel").hidden) $("panel").hidden = true;
+});
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") { if (!$("modal").hidden) closeModal(); else $("panel").hidden = true; closeMenus(); }
   if ((e.key === "Enter" || e.key === " ") && e.target.getAttribute && e.target.getAttribute("role") === "button" && e.target.tagName !== "BUTTON") { e.preventDefault(); e.target.click(); }
@@ -6614,11 +6639,24 @@ function openCalc() { putWidget("calc"); var c = document.querySelector(".calc")
 // about 55 MB). The last result is kept on this device.
 var SPD = null;
 function spdHtml() {
-  var r = SPD || {}, last = load("sp_speed", null), num = function (v, u) { return v != null ? "<b>" + v + "</b><small>" + u + "</small>" : '<b class="mut">–</b><small>' + u + "</small>"; };
+  var r = SPD || {}, num = function (v, u) { return v != null ? "<b>" + v + "</b><small>" + u + "</small>" : '<b class="mut">–</b><small>' + u + "</small>"; };
   var cell = function (k, l, v, u) { return '<div class="spdc' + (r.step === k ? " on" : "") + '"><span class="mut">' + l + "</span>" + num(v, u) + "</div>"; };
   return '<div class="spd"><div class="spdg">' + cell("ping", "Ping", r.ping, "ms") + cell("down", "Download", r.down, "Mbit/s") + cell("up", "Upload", r.up, "Mbit/s") + "</div>" +
-    '<p class="mut sn" id="spdMsg">' + esc(r.msg || (last ? "Last test " + when(last.t) + ": " + last.down + " down, " + last.up + " up, ping " + last.ping + " ms." : "Measures your connection against Cloudflare’s nearest server.")) + "</p>" +
-    '<p class="tools"><button data-a="spdgo"' + (r.busy ? " disabled" : "") + ">" + (r.busy ? "Testing…" : SPD ? "Test again" : "Start") + '</button></p><p class="mut sn">On a phone this uses mobile data: up to about 55 MB on a fast connection, much less on a slow one.</p></div>';
+    '<p class="mut sn" id="spdMsg">' + esc(r.msg || "Measures your connection against Cloudflare’s nearest server.") + "</p>" +
+    '<p class="tools"><button data-a="spdgo"' + (r.busy ? " disabled" : "") + ">" + (r.busy ? "Testing…" : SPD ? "Test again" : "Start") + '</button></p><p class="mut sn">On a phone this uses mobile data: up to about 55 MB on a fast connection, much less on a slow one.</p>' + spdHist() + "</div>";
+}
+// The last 10 tests on this device: a small chart (download and upload) and one line each, newest first
+function spdHistList() { var h = load("sp_speedh", []); return Array.isArray(h) ? h.filter(function (x) { return x && x.t && x.down != null; }).slice(-10) : []; }
+function spdHist() {
+  var h = spdHistList();
+  if (!h.length) return "";
+  var W = 300, H = 56, mx = Math.max.apply(null, h.map(function (x) { return Math.max(+x.down || 0, +x.up || 0); }).concat([1])), n = h.length;
+  var px = function (i) { return n < 2 ? W / 2 : 6 + i * (W - 12) / (n - 1); }, py = function (v) { return H - 4 - (+v || 0) / mx * (H - 10); };
+  var line = function (k, cls) { return (n > 1 ? '<polyline class="' + cls + '" points="' + h.map(function (x, i) { return px(i).toFixed(1) + "," + py(x[k]).toFixed(1); }).join(" ") + '"/>' : "") + h.map(function (x, i) { return '<circle class="' + cls + '" cx="' + px(i).toFixed(1) + '" cy="' + py(x[k]).toFixed(1) + '" r="2.5"/>'; }).join(""); };
+  var dt = function (t) { return new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace("Sept", "Sep"); };
+  return '<div class="spdh"><h3>Your last ' + (n === 1 ? "test" : n + " tests") + ' <span class="spdk"><i class="dn"></i>Download <i class="upk"></i>Upload</span><button class="lnk2" data-a="spdclear">Clear</button></h3>' +
+    '<svg class="spdc2" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="Download and upload of your last tests">' + line("up", "upk") + line("down", "dn") + "</svg>" +
+    '<div class="spdl">' + h.slice().reverse().map(function (x) { return "<div><span class=\"mut\">" + dt(x.t) + "</span><b>" + (+x.down || 0) + " ↓</b><b>" + (+x.up || 0) + " ↑</b><span class=\"mut\">" + (+x.ping || 0) + " ms</span></div>"; }).join("") + '</div><p class="mut sn">Mbit/s. Kept on this device only.</p></div>';
 }
 function spdDraw() { var b = document.querySelector("#mBody .spd"); if (b) b.outerHTML = spdHtml(); }
 function openSpeed() { SPD = null; openModal("Speed test", spdHtml()); }
@@ -6663,7 +6701,8 @@ function spdRun() {
     return run("up", [1e5, 1e6, 3e6, 1e7]);
   }).then(function () {
     R.busy = false; R.step = ""; R.msg = "Done. Speeds are the best of each step; a page or video needs about 5 Mbit/s, 4K video about 25.";
-    save("sp_speed", { t: Date.now(), ping: R.ping, down: R.down, up: R.up }); spdDraw();
+    var res = { t: Date.now(), ping: R.ping, down: R.down, up: R.up };
+    save("sp_speedh", spdHistList().concat([res]).slice(-10)); spdDraw();
   }).catch(function (e) {
     if (gone()) return;
     R.busy = false; R.step = ""; R.msg = "The test could not finish. Check the connection and try again."; spdDraw();
@@ -7642,7 +7681,7 @@ function radioToggle(id, isOn) {
 var WX = null;
 var WC = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
 function wxText(c) { return WC[c] || "Unknown"; }
-var WXM = null, CITYRES = [];
+var WXM = null, CITYRES = [], WXDAY = -1;   // WXDAY: the day of the 7 whose hours are open in the weather window
 // Until you choose a city yourself, the page guesses one from the time zone your device is set to (for example
 // Europe/Stockholm gives Stockholm). The browser hands that over without asking, and no position or IP lookup is involved.
 var BTZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
@@ -7704,7 +7743,7 @@ function locPick(i) {
   persist(); fetchClockTz(); closeModal();
 }
 function wxUrl(c) {
-  return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max,snowfall_sum,wind_gusts_10m_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
+  return "https://api.open-meteo.com/v1/forecast?latitude=" + c.lat + "&longitude=" + c.lon + "&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m&hourly=temperature_2m,precipitation_probability,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,uv_index_max,snowfall_sum,wind_gusts_10m_max&wind_speed_unit=ms&timezone=auto&forecast_days=7";
 }
 function loadWx(c) { return fetch(wxUrl(c)).then(function (r) { return r.json(); }); }
 // Units: the forecast always comes in °C, m/s, mm and cm, and is only written out in °F, mph and inches when that is
@@ -7749,12 +7788,18 @@ function wxHtml(j) {
   var i = h.time.findIndex(function (t) { return t.slice(0, 13) >= now; }); if (i < 0) i = 0;
   var hrs = "";
   for (var n = i; n < i + 12 && n < h.time.length; n++) hrs += '<div class="hr"><b>' + h.time[n].slice(11, 16) + "</b><span>" + wxDeg(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
+  // a click on a day opens its hours under it (one day at a time; today from the current hour)
   var days = d.time.map(function (t, k) {
-    var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
-    return '<div class="row"><span>' + wxIcon(d.weather_code[k], 1, 20) + " " + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + wxMm(d.precipitation_sum[k]) + " · " + wxDeg(d.temperature_2m_min[k]) + "° / <b>" + wxDeg(d.temperature_2m_max[k]) + "°</b></span></div>";
+    var nm = new Date(t + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" }), open = WXDAY === k, dh = "";
+    if (open) h.time.forEach(function (ht, n) {
+      if (ht.slice(0, 10) !== t || (k === 0 && ht.slice(0, 13) < now)) return;
+      dh += '<div class="hr"><b>' + ht.slice(11, 13) + "</b>" + (h.weather_code ? wxIcon(h.weather_code[n], h.is_day ? h.is_day[n] : 1, 16) : "") + "<span>" + wxDeg(h.temperature_2m[n]) + "°</span><small>" + h.precipitation_probability[n] + "%</small></div>";
+    });
+    return '<div class="row wxdr' + (open ? " on" : "") + '" data-a="wxday" data-k="' + k + '" role="button" tabindex="0" aria-expanded="' + open + '" title="' + (open ? "Hide the hours" : "Show this day hour by hour") + '"><span>' + wxIcon(d.weather_code[k], 1, 20) + " " + nm + " <small>" + wxText(d.weather_code[k]) + '</small></span><span class="r">' + wxMm(d.precipitation_sum[k]) + " · " + wxDeg(d.temperature_2m_min[k]) + "° / <b>" + wxDeg(d.temperature_2m_max[k]) + '°</b><i class="wxchev" aria-hidden="true">' + (open ? "▴" : "▾") + "</i></span></div>" +
+      (open ? (dh ? '<div class="hrs wxdh">' + dh + "</div>" : '<p class="mut sn">No more hours today.</p>') : "");
   }).join("");
   return warnBox + '<div class="mrow"><span class="wi">' + wxIcon(c.weather_code, c.is_day, 34) + '</span><b class="big">' + wxDeg(c.temperature_2m) + "°</b><span>" + wxText(c.weather_code) + '</span></div><div class="mut">Feels like ' + wxDeg(c.apparent_temperature) + "° · wind " + wxWind(c.wind_speed_10m) + " · humidity " + c.relative_humidity_2m + "%</div>" +
-    '<h3>Next 12 hours (temperature, chance of rain)</h3><div class="hrs">' + hrs + "</div><h3>7 days</h3>" + days +
+    '<h3>Next 12 hours (temperature, chance of rain)</h3><div class="hrs">' + hrs + '</div><h3>7 days <small class="mut">· click a day for its hours</small></h3>' + days +
     '<p class="mut">Sunrise ' + d.sunrise[0].slice(11, 16) + " · Sunset " + d.sunset[0].slice(11, 16) + " · UV max " + d.uv_index_max[0] + "</p>";
 }
 function sameCity(a, b) { return a && b && a.name === b.name && Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01; }
@@ -7770,7 +7815,7 @@ function cityTools(c) {
   return '<div class="tools"><button data-a="cityhome">Use for the tile</button>' + (saved ? '<button data-a="cityrm">Remove from my cities</button>' : '<button data-a="citysave">Save to my cities</button>') + "</div>";
 }
 function showCity(c, j) {
-  WXM = { c: c, j: j || null };
+  WXM = { c: c, j: j || null }; WXDAY = -1;
   $("cityChips").innerHTML = cityChips();
   if (j) { $("cityBody").innerHTML = cityTools(c) + wxHtml(j); return; }
   $("cityBody").innerHTML = '<p class="mut">Loading ' + esc(c.name) + "...</p>";
@@ -7875,15 +7920,38 @@ function stockStep(d) {
 }
 // ← and → in a game's window: the game before or after it as the Sports box lists them; in a fight, the fight before or
 // after it on the card. Nothing happens for a game the box does not show (one opened from a team page, say).
-function spStep(d) {
-  var id = spOpenId(), list = [];
-  if (!id) return;
+function spNavList(id) {
+  var list = [];
   if (id.indexOf("#") > 0) { var x = fightFind(id); if (x) list = x.e.fights.map(function (f) { return fightKey(x.e, f); }); }
   else Array.prototype.forEach.call(document.querySelectorAll('.sprow [data-a="open"][data-k^="p:"]'), function (b) { var k = b.dataset.k.slice(2); if (k.indexOf("#") < 0 && list.indexOf(k) < 0) list.push(k); });
-  var i = list.indexOf(id);
+  return list;
+}
+function spStep(d) {
+  var id = spOpenId(), list = id ? spNavList(id) : [], i = list.indexOf(id);
   if (i < 0 || list.length < 2) return;
   var n = list[(i + d + list.length) % list.length];
   if (n.indexOf("#") > 0) openFight(n); else openSport(n, true);
+}
+// ‹ › beside Close in a stock's or a game's window (the same as ← and → on the keyboard); only when there is somewhere to go
+// In a game's window also 🔔: follow just this game (not a whole UFC card or tennis tournament: a fight or match in it)
+function mNav(kind, what) {
+  var old = $("mNav");
+  if (old) old.remove();
+  var id = kind === "sp" ? spOpenId() : "", n = kind === "st" ? stockRows().length : spNavList(id).indexOf(id) >= 0 ? spNavList(id).length : 0, bell = "";
+  if (id) {
+    var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id), can = x ? x.f.state !== "post" : e && !e.fights && e.state !== "post", on = spFolOn(id);
+    if (can || on) {
+      var say = on ? "Following: you are told " + spFolWhat(id) + ". Click to stop" : "Follow this " + what + ": you are told " + spFolWhat(id) + ", then it stops by itself";
+      bell = '<button data-a="spfol" data-k="' + esc(id) + '" class="spbell' + (on ? " on" : "") + '" title="' + esc(say) + '" aria-label="' + esc(say) + '" aria-pressed="' + on + '"><svg viewBox="0 0 24 24" width="15" height="15" fill="' + (on ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg></button>';
+      // and a line under the title, so it is clear on a phone too (no pointing there)
+      var w = document.querySelector("#mBody .spwin[data-sp]");
+      if (w && on) w.insertAdjacentHTML("afterbegin", '<p class="mut sn spfoln">Following this ' + what + ": you are told " + esc(spFolWhat(id)) + (NTF().sport === false ? ". <b>Sports notifications are off in Settings → Notifications.</b>" : ".") + "</p>");
+    }
+  }
+  if (n < 2 && !bell) return;
+  var el = document.createElement("span"); el.id = "mNav";
+  el.innerHTML = bell + (n < 2 ? "" : '<button data-a="mnav" data-k="' + kind + ':-1" title="Previous ' + what + ' (←)" aria-label="Previous ' + what + '">‹</button><button data-a="mnav" data-k="' + kind + ':1" title="Next ' + what + ' (→)" aria-label="Next ' + what + '">›</button>');
+  $("mClose").parentNode.insertBefore(el, $("mClose"));
 }
 document.addEventListener("keydown", function (e) {
   if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || $("modal").hidden || RDR || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -7903,6 +7971,7 @@ function openStock(id) {
   openModal(id, '<div class="mrow sthead">' + (q ? '<b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") : "") + sw + "</div>" +
     '<div id="tv" class="tv"></div>' + (TV_NOTE[id] ? '<p class="mut sn stnote">' + esc(TV_NOTE[id]) + "</p>" : "") + '<div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
     '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + '<button class="lnk2" data-a="paopen" data-k="' + esc(id) + '">Set a price alert</button></p>');
+  mNav("st", "stock");
   loadStockNews(id);
   stChart(id);
 }
@@ -8063,6 +8132,10 @@ document.addEventListener("click", function (e) {
   if (a === "clockmenu") { audio(); MENU_OPEN = ""; if (k === "s") startStopwatch(); else if (k === "calc") { render(); openCalc(); } else if (k === "speed") { render(); openSpeed(); } else if (k === "adm") { render(); admAct("admopen"); } else openClock(k); return; }
   if (/^calc(key|sci|deg)$/.test(a)) { calcAct(a, k); return; }
   if (a === "spdgo") { spdRun(); return; }
+  if (a === "spdclear") { save("sp_speedh", []); spdDraw(); return; }
+  if (a === "spfol") { spFolToggle(k); return; }
+  if (a === "wxday") { WXDAY = WXDAY === +k ? -1 : +k; if (WXM && WXM.j && WXM.j.current && $("cityBody")) $("cityBody").innerHTML = cityTools(WXM.c) + wxHtml(WXM.j); return; }
+  if (a === "mnav") { var mv = k.split(":"); if (mv[0] === "st") stockStep(+mv[1]); else spStep(+mv[1]); return; }
   if (/^adm(tab|load|seen|open|x)$/.test(a)) { admAct(a, k); return; }
   if (a === "swfs") { swFs(k); return; }
   if (a === "noteedit") { noteEdit(k); return; }
@@ -8642,7 +8715,7 @@ function openHelp() {
     h4("Your city") +
     p("Until you choose one, the city is a guess from your device&rsquo;s time zone: Swedish time gives Stockholm, Estonian time Tallinn. No permission is asked, and neither your position nor your IP address is used, so it can be the wrong city in the right country. The setup guide asks you to confirm it.") +
     p("There are two separate cities; changing one does not change the other:") +
-    ol(["<b>The weather box</b>: click it, type a city, click a result, then press <b>Use for the tile</b>. <b>Settings → Weather</b> switches between °C and °F; by default the US gets °F, mph and inches.", "<b>The date and time at the top</b>: " + S("Date &amp; time") + " " + A + " <b>Change</b>, type a city and click <b>Use</b>."]) +
+    ol(["<b>The weather box</b>: click it, type a city, click a result, then press <b>Use for the tile</b>. <b>Settings → Weather</b> switches between °C and °F; by default the US gets °F, mph and inches. In the weather window, click a day of the 7 to see it hour by hour.", "<b>The date and time at the top</b>: " + S("Date &amp; time") + " " + A + " <b>Change</b>, type a city and click <b>Use</b>."]) +
     p("In the weather window you can also save more cities and switch between them.");
 
   html += h3("news", "News &amp; Telegram") +
@@ -8674,10 +8747,10 @@ function openHelp() {
     ul(["One post at a time: a long post scrolls inside the window and stops at its end; a couple more wheel clicks move on to the next.",
       "News: the full article is fetched from the site and shown under the picture. Where a site does not allow it (a paywall, some Google News links) the summary stays with a note, and <b>Read the full article</b> opens the site.",
       "<b>Catching up</b>: the small list button at the top of the box (before ⌕) opens the reader at the oldest post you have not seen, under a <b>New</b> line, and you scroll down to the newest. A post counts as read once you reach it.",
-      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around. <b>Aa</b> beside it changes the reader&rsquo;s font (easy-to-read ones such as Atkinson Hyperlegible), text size and line spacing; only the posts change, and this device remembers it. The number beside it (12 / 48) shows where you are in the list.",
+      "Keys: <code>↓</code> <code>↑</code> (or <code>J</code> <code>K</code>) go one post on or back; Esc closes. The button beside Close (<b>↓ Newer</b> or <b>↓ Older</b>) turns the order around. <b>Aa</b> beside it changes the reader&rsquo;s font (easy-to-read ones such as Atkinson Hyperlegible), text size and line spacing; only the posts change, and this device remembers it. Beside it, <b>7 new</b> counts the unread posts still ahead of you and counts down as you read; <b>12/48</b> shows where you are in the list.",
       "Videos do not start by themselves, and stop when you scroll away.",
       "Telegram: <b>Load older posts</b> at the old end. Reddit: <b>Top comments</b> under a post.",
-      "On a phone the reader fills the screen and you scroll with your thumb."]) +
+      "On a phone the reader fills the screen and you scroll with your thumb. On a phone, the back button (or back gesture) closes the open window or Settings instead of leaving the page."]) +
     h4("Reading settings (" + S("News, Telegram &amp; Reddit") + ")") +
     ul(["<b>Clicking a post opens</b> the reader, or just that post.",
       "<b>Scrolling in the reader moves</b> one post at a time, or freely.",
@@ -8697,7 +8770,7 @@ function openHelp() {
     p("Choose your leagues in " + S("Sports") + ". ESPN supplies football (leagues and cups from more than twenty countries, the World Cup, the European Championship, the Nations League), NBA, college basketball and football, NHL, NFL, MLB, rugby, cricket, Australian football, tennis, Formula 1, IndyCar, NASCAR, golf and UFC. SHL (Swedish hockey) comes from shl.se, and Counter-Strike 2, League of Legends and Dota 2 from bo3.gg; those four need you to be signed in.") +
     h4("The box") +
     ul(["Pick a sport and a view: <b>Live &amp; today</b>, <b>Upcoming</b>, <b>Results</b>, <b>Favorites</b>, and <b>★ your favorite sport</b> (set in " + S("Sports") + ": everything on now, today and coming up in that sport).",
-      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <code>←</code> <code>→</code> go to the previous or next game in the box, or the previous or next fight on a UFC card.",
+      "Point at a game for a short summary; click it for its window. While a game is on, its window updates by itself: every 20 seconds (SHL and esports every minute). <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next game in the box, or the previous or next fight on a UFC card.", "<b>Follow one game</b>: the bell beside ‹ › in a game&rsquo;s window (also a single UFC fight, tennis match, race or golf tournament). You are told only the big moments for that sport: football the kick-off, every goal, extra time or penalties and full time; ice hockey every goal, overtime and the final; esports every map; basketball, American football, rugby and Australian football the half-time score, overtime and the final; baseball and cricket the start and the final; a fight how it ended; a tennis match each set; a race the winner. It stops by itself when the game is over. A small bell marks the games you follow in the box.",
       "<b>Results</b> goes back in time, newest first with a heading for each day: team leagues to the start of the month (in its first week, the month before too); UFC, Formula 1 and golf four weeks; tennis, SHL and esports about a week. It lists the 120 newest; pick one sport to see further back.",
       "<b>Search</b>: ⌕ finds a team, player, fighter, league or event in everything loaded for your leagues. Several words narrow it down (<code>ufc allen</code>). Press ⌕ again to close."]) +
     h4("A game&rsquo;s window") +
@@ -8739,7 +8812,7 @@ function openHelp() {
     h4("The box") +
     ul(["Each row shows the price, a small chart and the day&rsquo;s change. Choose what the chart covers (today, the week, the month, or off) in " + S("Stocks") + ". In a narrow box the price is cut short to make room.",
       "Sort with the dropdown. Star or hide a stock in Edit mode. To take one off the list for good, press ✕ next to it in <b>Settings → Stocks</b>.",
-      "Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept. <code>←</code> <code>→</code> go to the previous or next stock in the box.",
+      "Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept. <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next stock in the box.",
       "Big indices are drawn with TradingView&rsquo;s own index price, as the official feeds cannot be shown outside TradingView. For the Nasdaq Composite that is the Nasdaq 100, as the window says."]) +
     h4("Market hours (the clock button)") +
     ul(["The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open, and its &ldquo;down&rdquo; color while it is closed.",
@@ -8913,7 +8986,7 @@ function openHelp() {
     ul(["Times are in your own time zone.", "An event of several days shows on its first day with the last day in its name.", "&ldquo;Every second week&rdquo;, an end date and skipped days are followed; rarer rules are simplified."]);
 
   html += h3("timers", "Timers &amp; calculator") +
-    ul(["The Tools icon (four small squares, first in the menu box) has <b>Timer</b>, <b>Countdown</b>, <b>Stopwatch</b>, <b>Calculator</b> and <b>Speed test</b> (ping, download and upload; on a phone it uses mobile data). <code>I</code> starts a timer and <code>O</code> a stopwatch.",
+    ul(["The Tools icon (four small squares, first in the menu box) has <b>Timer</b>, <b>Countdown</b>, <b>Stopwatch</b>, <b>Calculator</b> and <b>Speed test</b> (ping, download and upload; on a phone it uses mobile data; your last 10 tests are listed under it with a small chart). <code>I</code> starts a timer and <code>O</code> a stopwatch.",
       "Several can run at once, with names; they keep running if you close the tab.",
       "A finished timer or countdown rings every few seconds until you press <b>Stop</b> or remove it. Set how loud in " + S("Notifications") + " " + A + " <b>Alarm volume</b>."]) +
     h4("Calculator") +
@@ -10049,11 +10122,15 @@ function fetchSports(force) {
   var alerts = spAlertsOn(), auto = spAutoLgs();
   // the league of a game whose window is open keeps updating, whatever the box shows (or if it is switched off)
   var openE = spOpenId() ? spFind(spOpenId().split("#")[0]) : null, openLg = openE ? openE.id.slice(0, openE.id.lastIndexOf(":")) : "";
-  if (boxOff("sports") && !alerts && !Object.keys(auto).length && !openLg) return;
+  // ...and so do the leagues of the games you follow with 🔔
+  var must = {};
+  if (openLg) must[openLg] = 1;
+  if (NTF().sport !== false) Object.keys(spFolMap()).forEach(function (k) { k = k.split("#")[0]; must[k.slice(0, k.lastIndexOf(":"))] = 1; });
+  if (boxOff("sports") && !alerts && !Object.keys(auto).length && !Object.keys(must).length) return;
   var now = Date.now(), jobs = [], xs = [], sport = spSport();
   spLeagues().forEach(function (lg) {
-    if (boxOff("sports") && !alerts && !Object.keys(auto).length && lg.id !== openLg) return;
-    if (sport && lg.sp !== sport && !alerts && !auto[lg.id] && lg.id !== openLg) return;
+    if (boxOff("sports") && !alerts && !Object.keys(auto).length && !must[lg.id]) return;
+    if (sport && lg.sp !== sport && !alerts && !auto[lg.id] && !must[lg.id]) return;
     var pri = SP_CATALOG.indexOf(lg), c = SP_NOW[lg.id], live = c && c.ev.some(function (e) { return e.state === "in" || (e.state === "pre" && e.ts - now < 90000 && now - e.ts < 1200000); });
     var due = force || !c || now - c.t > (live ? (lg.kind === "tour" ? 175000 : 55000) : 290000);
     if (lg.x) { if (due && sb && USER) xs.push(lg); return; }
@@ -10097,14 +10174,47 @@ function spGetX(list) {
 // ---- Favorites: a notification when a ★ team's game starts, when a goal is scored (football and ice hockey; in other
 // sports the score changes all the time) and when it ends. Also when a ★ fighter or tennis player goes on and finishes.
 var SPPREV = {}, SPV = 0;
+// ---- Following one game (🔔 in its window): told only the big moments of that one game, then it stops by itself.
+// P.spFol = { game id or fight key: when you started following }. What you are told depends on the sport:
+//   football: kick-off, every goal, extra time / penalties, full time · ice hockey: start, every goal, overtime / shootout, final
+//   esports: start, every map, final · basketball, American football, rugby, Australian football: start, half-time, overtime, final
+//   baseball, cricket: start, final · a UFC fight: start, result · a tennis match: start, each set, result · a race or golf: start, winner
+function spFolMap() {
+  var m = P.spFol && typeof P.spFol === "object" ? P.spFol : {}, now = Date.now(), gone = false;
+  Object.keys(m).forEach(function (k) { if (!(now - m[k] < 3 * 86400000)) { delete m[k]; gone = true; } });   // forgotten after 3 days
+  if (gone) { P.spFol = m; persist(); }
+  return m;
+}
+function spFolOn(id) { return !!spFolMap()[id]; }
+function spFolDone(id) { var m = spFolMap(); if (m[id]) { delete m[id]; P.spFol = m; persist(); SPV++; } }
+function spFolWhat(id) {
+  var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id);
+  if (!e) return "";
+  if (x) return e.kind === "tour" ? "when the match starts, each set and the result" : "when the fight starts and how it ended";
+  if (e.kind === "race") return "when it starts and who won";
+  if (e.sp === "football") return "kick-off, every goal, extra time or penalties, and full time";
+  if (e.sp === "hockey") return "the start, every goal, overtime or a shootout, and the final score";
+  if (e.sp === "esports") return "the start, every map and the final score";
+  if (/^(basketball|amfootball|rugby|afl)$/.test(e.sp)) return "the start, the half-time score, overtime, and the final score";
+  return "the start and the final score";
+}
+function spFolToggle(id) {
+  var m = spFolMap();
+  if (m[id]) delete m[id]; else m[id] = Date.now();
+  P.spFol = m; persist(); SPV++; render();
+  spRedraw(true);
+}
 function spAlerts() {
-  if (!spAlertsOn()) return;
+  var favOn = spAlertsOn(), fol = NTF().sport !== false ? spFolMap() : {};
+  if (!favOn && !Object.keys(fol).length) return;
+  var hi = function (sp) { return /^(basketball|amfootball|rugby|afl)$/.test(sp); };
   Object.keys(SP_NOW).forEach(function (key) {
     SP_NOW[key].ev.forEach(function (e) {
       var go = { a: "sport", k: e.id };
       if (e.kind === "team") {
-        if (!e.names.some(spIsFav)) return;
-        var cur = { st: e.state, h: +e.home.s || 0, a: +e.away.s || 0 }, p = SPPREV[e.id], foot = e.sp === "football";
+        var isFol = !!fol[e.id];
+        if (!(favOn && e.names.some(spIsFav)) && !isFol) return;
+        var cur = { st: e.state, h: +e.home.s || 0, a: +e.away.s || 0, d: String(e.detail || "") }, p = SPPREV[e.id], foot = e.sp === "football";
         SPPREV[e.id] = cur;
         if (!p) return;   // first look at this game: nothing to compare with yet
         var score = e.home.n + " " + cur.h + "–" + cur.a + " " + e.away.n;
@@ -10113,16 +10223,40 @@ function spAlerts() {
           var side = cur.h > p.h ? "h" : "a", g = (e.ev || []).filter(function (x) { return x.k === "goal" && x.side === side; }).pop();
           toast("sport", "Goal! " + score, (g && g.who ? g.who + (g.min ? " " + g.min : "") + (g.pen ? " (pen)" : "") + (g.og ? " (own goal)" : "") + " · " : "") + e.lg, go);
         }
+        if (isFol && cur.st === "in") {
+          // esports: each map (the score counts maps); the high-scoring sports: the half-time score; all: overtime, extra time, penalties
+          if (e.sp === "esports" && cur.h + cur.a > p.h + p.a && once("spm:" + e.id + ":" + cur.h + "-" + cur.a)) toast("sport", "Map won: " + score, e.lg, go);
+          if (hi(e.sp) && /^(half|ht\b)/i.test(cur.d) && !/^(half|ht\b)/i.test(p.d) && once("sph:" + e.id)) toast("sport", "Half-time: " + score, e.lg, go);
+          var xt = /\b(OT|overtime|SO|shootout|ET|extra time|pens|penalt)/i;
+          if (xt.test(cur.d) && !xt.test(p.d) && once("spx:" + e.id)) toast("sport", (foot ? (/pen/i.test(cur.d) ? "Penalties: " : "Extra time: ") : /shoot|\bSO\b/i.test(cur.d) ? "Shootout: " : "Overtime: ") + score, e.lg, go);
+        }
         if (p.st === "in" && cur.st === "post" && once("spf:" + e.id)) toast("sport", (foot ? "Full time: " : "Final: ") + score, e.lg, go);
+        if (isFol && cur.st === "post") spFolDone(e.id);   // over: following stops by itself
       } else if (e.fights) {
         e.fights.forEach(function (f) {
-          if (!spIsFav(f.a) && !spIsFav(f.b)) return;
-          var id = e.id + ":" + f.a + ":" + f.b, p = SPPREV[id];
-          SPPREV[id] = f.state;
+          var fk = fightKey(e, f), isFol = !!fol[fk];
+          if (!(favOn && (spIsFav(f.a) || spIsFav(f.b))) && !isFol) return;
+          var id = e.id + ":" + f.a + ":" + f.b, p = SPPREV[id], sets = (f.sa || []).length;
+          SPPREV[id] = f.state; var ps = SPPREV[id + ":sets"]; SPPREV[id + ":sets"] = sets;
           if (!p) return;
           if (p === "pre" && f.state === "in" && once("spk:" + id)) toast("sport", "On now: " + f.a + " vs " + f.b, e.title, go);
+          // a tennis match you follow: a set is over when the next one starts
+          if (isFol && e.kind === "tour" && f.state === "in" && ps != null && sets > ps && sets > 1 && once("sps:" + id + ":" + (sets - 1))) {
+            var n = sets - 2, ga = (f.sa || [])[n], gb = (f.sb || [])[n];
+            toast("sport", "Set " + (n + 1) + ": " + f.a + " " + ga + "–" + gb + " " + f.b, e.title, go);
+          }
           if (p === "in" && f.state === "post" && once("spf:" + id)) toast("sport", f.aw ? f.a + " beat " + f.b : f.bw ? f.b + " beat " + f.a : "Finished: " + f.a + " vs " + f.b, (f.detail ? f.detail + " · " : "") + e.title, go);
+          if (isFol && f.state === "post") spFolDone(fk);
         });
+      } else if (e.kind === "race" && fol[e.id]) {
+        // a race or golf tournament you follow: when it starts, and the winner
+        var pr = SPPREV[e.id]; SPPREV[e.id] = e.state;
+        if (pr === "pre" && e.state === "in" && once("spk:" + e.id)) toast("sport", "Started: " + e.title, e.lg, go);
+        if (pr === "in" && e.state === "post" && once("spf:" + e.id)) {
+          var done = (e.sessions || []).filter(function (s) { return s.res && s.res.length; }), last = done[done.length - 1], win = (e.field && e.field[0] && e.field[0].n) || (last && last.res[0]) || (e.top && e.top[0] && e.top[0].n) || "";
+          toast("sport", (win ? win + " won: " : "Finished: ") + e.title, e.lg, go);
+        }
+        if (e.state === "post" && pr) spFolDone(e.id);
       }
     });
   });
@@ -10264,7 +10398,7 @@ function spRowHtml(e, W, plain) {
     if (e.kind === "card" && e.state === "in" && e.fights && e.fights.length) return fightsLive(e).map(function (f) { return fightRow(e, f); }).join("");
     var w = W[e.sp], vars = e.kind === "team" ? ' style="--scw:' + (w.sc * 0.6 + 0.2).toFixed(2) + "em;--stw:" + Math.min(w.st, 4).toFixed(2) + 'em"' : "";
     return '<div class="row sprow' + (e.kind === "team" ? "" : " spx") + (e.state === "in" ? " splive" : "") + (e.state === "post" && !plain ? " rd" : "") + '"' + vars + '><span><button class="lnk ' + (e.kind === "team" ? "spg" : "spt") + '" data-a="open" data-k="' + esc("p:" + e.id) + '">' + spIcon(e.sp) + spTitle(e) + "</button>" +
-      '</span><span class="r">' + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e, !!SPQ) + "</span></div>";
+      '</span><span class="r">' + spBellI(e.id) + (e.fav && e.kind !== "team" ? '<i class="fv">★</i>' : "") + spWhen(e, !!SPQ) + "</span></div>";
   }).join("");
 }
 // ---- The story of a game: who scored and when, cards, period scores, stats and top performers ----
@@ -10765,6 +10899,7 @@ function openSport(id, back) {
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin" data-sp="' + esc(id) + '" data-sig="' + esc(spSig(id)) + '">' + spBackBtn() + body + spCalBtns(e) + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
+  mNav("sp", "game");
   if (e.kind === "team") { spTabLoad(e); spSumLoad(e); }
   if (e.kind === "race" || e.kind === "tour") spRankLoad(e);
   if (e.kind === "card") fillOdds($("mBody"));
@@ -11202,8 +11337,10 @@ function fightRow(e, f) {
   var fav = spIsFav(f.a) || spIsFav(f.b), nm = function (n, w) { return "<b" + (w ? ' class="win"' : "") + ">" + esc(lastName(n)) + "</b>"; };
   return '<div class="row sprow spx' + (f.state === "in" ? " splive" : "") + (f.state === "post" ? " rd" : "") + '"><span><button class="lnk spt" data-a="open" data-k="' + esc("p:" + fightKey(e, f)) + '">' + spIcon(e.sp) +
     '<span class="spn">' + nm(f.a, f.aw) + ' <i class="vs">v</i> ' + nm(f.b, f.bw) + (f.wc ? " <small>" + esc(f.wc.replace(/weight$/i, "")) + "</small>" : "") + "</span></button></span>" +
-    '<span class="r">' + (fav ? '<i class="fv">★</i>' : "") + fightWhen(e, f) + "</span></div>";
+    '<span class="r">' + spBellI(fightKey(e, f)) + (fav ? '<i class="fv">★</i>' : "") + fightWhen(e, f) + "</span></div>";
 }
+// the small 🔔 on the row of a game or fight you follow
+function spBellI(id) { return spFolOn(id) ? '<i class="spbi" title="You follow this one" aria-label="Followed"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg></i>' : ""; }
 function spFind(id) {
   var e = null;
   Object.keys(SP_PAST).forEach(function (k) { (SP_PAST[k].ev || []).forEach(function (x) { if (x.id === id) e = x; }); });
@@ -11237,9 +11374,11 @@ setInterval(function () {
   if (!lg || lg.kind === "tour" || (SP_NOW[lg.id] && Date.now() - SP_NOW[lg.id].t < 18000)) return;   // (tennis: its file is large, it stays at the box's pace)
   spGet(lg, SP_CATALOG.indexOf(lg)).then(function () { render(); spLiveTick(); });
 }, 20000);
-function spLiveTick() {
+function spLiveTick() { spRedraw(false); }
+// draws an open game or fight window again in place (force: also when the game itself has not changed, e.g. after 🔔)
+function spRedraw(force) {
   var id = spOpenId(), w = id && document.querySelector("#mBody .spwin[data-sp]");
-  if (!w || spSig(id) === w.dataset.sig || !spSig(id)) return;
+  if (!w || !spSig(id) || (!force && spSig(id) === w.dataset.sig)) return;
   var box = w.closest(".mbox"), top = box ? box.scrollTop : 0, keep = {};
   // the parts that load on their own come back at once, so nothing jumps while they load again
   ["spSum", "spTab", "spSc", "spStats", "spLn", "spLead", "fgStats", "fgTape", "fgRes"].forEach(function (k) { var el = $(k); if (el && el.innerHTML) keep[k] = el.innerHTML; });
@@ -11325,6 +11464,7 @@ function openFight(key) {
   openModal(e.title, '<div class="spwin fwf" data-sp="' + esc(key) + '" data-sig="' + esc(spSig(key)) + '"><div class="spscore">' + fighterHead(f, "a", e) + '<div class="spmid"><span class="mut sn">' + esc(f.wc || "") + (f.rounds ? " · " + f.rounds + " rounds" : "") + "</span>" + fightWhen(e, f) + '<span id="fgRes" class="sn"></span>' +
     '<span class="fgbtn"><button class="ib sm" data-a="open" data-k="' + esc("p:" + e.id) + '">‹ Whole card</button>' + (e.link ? '<a class="btn ib sm" target="_blank" rel="noopener noreferrer" href="' + esc(e.link) + '">ESPN</a>' : "") + "</span></div>" + fighterHead(f, "b", e) + "</div>" +
     '<div id="fgStats"></div><div id="fgTape"><p class="mut sn">Loading the fighters…</p></div></div>');
+  mNav("sp", "fight");
   fillOdds($("mBody"));
   var live = function () { return SP_OPEN === key && !$("modal").hidden; };
   // how it ended
@@ -11671,11 +11811,11 @@ function wizPage(id) {
   return "<p><b>You are set.</b> A few things worth knowing:</p><ul><li><b>Move and resize boxes:</b> cogwheel → Edit. Drag a box by its ⠿ tab, click it for its buttons, or drag its edge to resize it. A phone keeps its own layout.</li>" +
     "<li><b>Everything else</b> is in the cogwheel → Settings. Run this guide again from Settings → Layout &amp; boxes.</li>" +
     "<li><b>Notes, to-dos and calendar</b> are icons in the menu box; timers, the stopwatch and a calculator are under <b>Tools</b> (the four squares). All of them can be docked at the side of the page, and on a computer dragged up, down or to the other side. The arrow beside a docked one&rsquo;s title folds it to one line.</li>" +
-    "<li><b>Weather:</b> click the weather box to change the city or save more cities.</li>" +
+    "<li><b>Weather:</b> click the weather box to change the city or save more cities, and click a day there to see it hour by hour.</li>" +
     "<li><b>Search bar:</b> it also does sums, currency and unit conversions, dates and translations. Start with <code>ss</code> to search every box on the page at once. Type <code>help</code> in it to see everything.</li>" +
     "<li><b>Discover:</b> the compass button at the top of the News, Twitch, YouTube, TV shows and Podcasts boxes finds new things: news sites by country and language, live streams, any video, channel or playlist, what is on TV, popular podcasts. The box itself keeps showing only yours.</li>" +
-    "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event.</li>" +
-    "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows.</li>" +
+    "<li><b>Sports:</b> the box also has Results for finished games and a search (⌕) for a team, player or event. In a game&rsquo;s window, the bell follows just that game: you are told its big moments until it ends.</li>" +
+    "<li><b>News, Telegram and Reddit:</b> click a post to read it in full (news articles included) and scroll on through the others in the same window. The small list button at the top of the box starts at the oldest post you have not seen, and ⌕ searches further back than the box shows. At the top of that window, “7 new” counts down the unread posts left.</li>" +
     "<li><b>Radio:</b> pick your stations in Settings → Radio, or search for your own station there and add it.</li>" +
     "<li><b>Podcasts:</b> press + on a show in Discover to follow it. Episodes play in the Radio box; its first button switches between radio and podcasts.</li>" +
     "<li><b>Stocks:</b> click a stock for its chart and news. The switch above the chart changes between a simple price line (point anywhere for the price) and the full chart.</li>" +

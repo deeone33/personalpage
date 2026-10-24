@@ -360,6 +360,18 @@ button.pill{cursor:pointer;line-height:1.5}
 .spdc b{font-size:26px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
 .spdc small{font-size:11px;color:var(--mut)}
 @media (max-width:520px){.spdc b{font-size:20px}}
+.spdh h3{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.spdh h3 .lnk2{margin-left:auto;font-size:12px}
+.spdk{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:var(--mut);text-transform:none;letter-spacing:0}
+.spdk i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-left:4px}
+.spdk i.dn{background:var(--ac)}.spdk i.upk{background:var(--mut)}
+.spdc2{display:block;width:100%;height:56px;margin:2px 0 6px}
+.spdc2 polyline{fill:none;stroke-width:1.8;vector-effect:non-scaling-stroke}
+.spdc2 .dn{stroke:var(--ac)}.spdc2 circle.dn{fill:var(--ac);stroke:none}
+.spdc2 .upk{stroke:var(--mut)}.spdc2 circle.upk{fill:var(--mut);stroke:none}
+.spdl div{display:grid;grid-template-columns:1fr auto auto auto;gap:4px 14px;padding:3px 0;border-bottom:1px solid var(--line);font-size:12.5px;font-variant-numeric:tabular-nums}
+.spdl div:last-child{border:0}
+.spdl b{font-weight:600;text-align:right}
 /* Settings > Stocks: the list, as small chips with ✕ */
 .stlist{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .stchip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:1px 2px 1px 8px;font-size:12.5px;background:var(--card)}
@@ -530,6 +542,13 @@ label.add{display:flex;justify-content:space-between;align-items:center;gap:8px;
 .hr{display:flex;flex-direction:column;align-items:center;min-width:0;padding:5px 1px;border:1px solid var(--line);border-radius:9px;font-variant-numeric:tabular-nums;font-size:12.5px;line-height:1.35}
 .hr small{font-size:11px}
 @media(max-width:560px){.hrs{grid-template-columns:repeat(6,minmax(0,1fr))}}
+/* the weather window's 7 days: a click opens that day's hours under it */
+.wxdr{cursor:pointer;border-radius:8px}
+.wxdr:hover,.wxdr.on{background:var(--acsoft)}
+.wxchev{font-style:normal;color:var(--mut);margin-left:6px;font-size:11px}
+.wxdh{margin:4px 0 8px}
+.wxdh .hr svg{margin:1px 0}
+@media(max-width:560px){.wxdh{grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}.wxdh .hr{padding:3px 0;font-size:11.5px;line-height:1.25}.wxdh .hr small{font-size:10px}}
 /* the weather window fits on screen without a scroll bar */
 .mbox:has(.hrs){max-height:96vh}
 .mbox:has(.hrs) .row{padding:4px 0}
@@ -1130,6 +1149,9 @@ body.noshadow #srchAns{box-shadow:none}
 .fwf .spscore{padding:0 0 2px;gap:8px;align-items:start}
 .fwf .spteam{gap:2px}
 .fwf .spteam.fgt img{width:68px;height:49px}
+/* a fighter's name wraps between first and last name, never inside a word (only a single name too long for the line is broken) */
+.spwin .spteam.fgt b,.spwin .spteam.fgt .lnk{overflow-wrap:break-word;word-break:normal;hyphens:manual}
+@media (max-width:520px){.spteam.fgt .lnk{font-size:13.5px}.spwin.fwf .spscore{grid-template-columns:minmax(0,1fr) minmax(0,108px) minmax(0,1fr)}.fwf .fgbtn{flex-direction:column;align-items:center}}
 .fwf .spteam .ib.sm{padding:0 7px;margin-top:2px}
 .fwf .spmid{gap:5px;padding-top:6px}
 .fwf .fgbtn{display:flex;gap:5px;margin-top:4px}
@@ -1392,7 +1414,15 @@ body.noshadow #srchAns{box-shadow:none}
 .rdredge .pvnote{margin:8px 0 0}
 #rdrSw{margin-left:auto;margin-right:8px;white-space:nowrap}
 /* the reader's Aa: its own font, size and line spacing (only the posts change; the buttons under them keep the page font) */
-#rdrCnt{margin-left:auto;margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#mNav{margin-left:auto;margin-right:8px;padding-left:8px;display:flex;gap:4px;flex:none}
+#mNav button{padding:5px 11px;font-size:16px;line-height:1}
+#mNav .spbell{display:flex;align-items:center;padding:5px 9px;margin-right:4px}
+#mNav .spbell.on{color:var(--ac);border-color:var(--ac)}
+.spfoln{margin:0 0 8px;color:var(--ac)}
+.spbi{color:var(--ac);margin-right:5px;display:inline-flex;vertical-align:-1px}
+@media (pointer:coarse){#mNav button{padding:8px 14px}}
+#rdrCnt{margin-left:auto;margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+#rdrCnt .rdrnw{font-size:11px;font-weight:700;color:var(--ac);background:var(--acsoft);border-radius:99px;padding:2px 7px}
 #rdrAaW{margin-left:auto;margin-right:6px}
 #rdrCnt + #rdrAaW{margin-left:0}
 #rdrAaW + #rdrSw{margin-left:0}
