@@ -1423,7 +1423,8 @@ body.noshadow #srchAns{box-shadow:none}
 #mNav button{padding:5px 11px;font-size:16px;line-height:1}
 #mNav .spbell{display:flex;align-items:center;padding:5px 9px;margin-right:4px}
 #mNav .spbell.on{color:var(--ac);border-color:var(--ac)}
-.spfoln{margin:0 0 8px;color:var(--ac)}
+.mbox .ph{position:relative}
+#spBub{position:absolute;right:0;top:calc(100% + 4px);z-index:20;max-width:min(320px,100%);background:var(--solid);border:1px solid var(--ac);border-radius:10px;padding:7px 10px;font-size:12.5px;line-height:1.4;box-shadow:0 12px 30px -10px rgba(0,0,0,.6);animation:menuin .14s var(--ease)}
 .spbi{color:var(--ac);margin-right:5px;display:inline-flex;vertical-align:-1px}
 @media (pointer:coarse){#mNav button{padding:8px 14px}}
 #rdrCnt{margin-left:auto;margin-right:8px;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}

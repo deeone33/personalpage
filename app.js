@@ -1,4 +1,4 @@
-var VERSION = "0.32.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.32.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -4050,6 +4050,7 @@ function openModal(title, html) {
     MOPEN = el && el !== document.body && !inWin ? { key: KEYNAV, el: el, a: el.getAttribute("data-a"), k: el.getAttribute("data-k") } : null;
   }
   if ($("mNav")) $("mNav").remove();   // a stock's or a game's ‹ › belong to that window only
+  if ($("spBub")) $("spBub").remove();
   $("mTitle").textContent = title; $("mBody").innerHTML = html; $("modal").hidden = false;
 }
 function closeModal() {
@@ -7944,9 +7945,6 @@ function mNav(kind, what) {
     if (can || on) {
       var say = on ? "Following: you are told " + spFolWhat(id) + ". Click to stop" : "Follow this " + what + ": you are told " + spFolWhat(id) + ", then it stops by itself";
       bell = '<button data-a="spfol" data-k="' + esc(id) + '" class="spbell' + (on ? " on" : "") + '" title="' + esc(say) + '" aria-label="' + esc(say) + '" aria-pressed="' + on + '"><svg viewBox="0 0 24 24" width="15" height="15" fill="' + (on ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg></button>';
-      // and a line under the title, so it is clear on a phone too (no pointing there)
-      var w = document.querySelector("#mBody .spwin[data-sp]");
-      if (w && on) w.insertAdjacentHTML("afterbegin", '<p class="mut sn spfoln">Following this ' + what + ": you are told " + esc(spFolWhat(id)) + (NTF().sport === false ? ". <b>Sports notifications are off in Settings → Notifications.</b>" : ".") + "</p>");
     }
   }
   if (n < 2 && !bell) return;
@@ -10203,10 +10201,18 @@ function spFolWhat(id) {
   return "the start and the final score";
 }
 function spFolToggle(id) {
-  var m = spFolMap();
-  if (m[id]) delete m[id]; else m[id] = Date.now();
+  var m = spFolMap(), on = !m[id];
+  if (on) m[id] = Date.now(); else delete m[id];
   P.spFol = m; persist(); SPV++; render();
   spRedraw(true);
+  // what you will be told: a small bubble under the bell for a few seconds, over the window (nothing in it moves)
+  var b = document.querySelector("#mNav .spbell"), old = $("spBub");
+  if (old) old.remove();
+  if (!b) return;
+  var bub = document.createElement("div"); bub.id = "spBub"; bub.setAttribute("role", "status");
+  bub.innerHTML = on ? "<b>Following.</b> You are told " + esc(spFolWhat(id)) + "." + (NTF().sport === false ? " <b>Sports notifications are off in Settings → Notifications.</b>" : "") : "Not following any more.";
+  b.closest(".ph").appendChild(bub);
+  clearTimeout(spFolToggle.t); spFolToggle.t = setTimeout(function () { if (bub.parentNode) bub.remove(); }, on ? 4500 : 1800);
 }
 function spAlerts() {
   var favOn = spAlertsOn(), fol = NTF().sport !== false ? spFolMap() : {};
