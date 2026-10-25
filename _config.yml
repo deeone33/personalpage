@@ -1,0 +1,2 @@
+# GitHub Pages leaves out folders that start with a dot unless they are named here (security.txt lives in .well-known)
+include: [".well-known"]

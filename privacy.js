@@ -1,4 +1,6 @@
 // OmniTree privacy page: the request form. It is stored like feedback (type "privacy") and read in the admin page.
+// (Inside another site's frame the page hides itself and opens as itself, so the form cannot be laid under someone else's page.)
+if (window.top !== window.self) { document.documentElement.style.display = "none"; try { window.top.location.replace(window.self.location.href); } catch (e) {} }
 (function () {
   function $(id) { return document.getElementById(id); }
   var sb = null, busy = false;

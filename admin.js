@@ -1,4 +1,6 @@
 // OmniTree admin overview.
+// (Inside another site's frame the page hides itself and opens as itself: nobody can lay it under their own buttons.)
+if (window.top !== window.self) { document.documentElement.style.display = "none"; try { window.top.location.replace(window.self.location.href); } catch (e) {} }
 // This page holds no data of its own. Everything comes from the feeds function, which first asks Supabase who is
 // signed in and only answers when that is the site owner's confirmed email. Anyone else who opens this page gets "Not allowed".
 // Five tabs: Visitors (everyone who opened the front page, by IP address), Accounts, What is used, Server use (the calls

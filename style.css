@@ -80,7 +80,7 @@ footer a{color:var(--ac)}
 /* the plain-text introduction under the boxes, for visitors who are not signed in */
 #intro{max-width:760px;margin:26px auto 0;font-size:13px;line-height:1.55;color:var(--mut);text-align:center}
 #intro[hidden]{display:none}
-#intro h1{font-size:16px;margin:0 0 6px;color:var(--fg);font-weight:600}
+#intro h2{font-size:16px;margin:0 0 6px;color:var(--fg);font-weight:600}
 #intro p{margin:0 0 6px}
 #intro a{color:var(--ac)}
 .mut{color:var(--mut)}
@@ -258,6 +258,7 @@ p.tools{align-items:center;gap:6px}
 .clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;line-height:1.35}
 .clamp small{color:var(--mut)}
 .tgmd{font-size:.85em;color:var(--mut);white-space:nowrap}
+.smpl{font-size:11px;padding:0 2px 4px}
 .flt{width:100%;font:inherit;font-size:calc(13px*var(--fs,1));color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:9px;padding:5px 10px;margin:0 0 6px;outline:0}
 .flt:focus{border-color:var(--ac)}
 .fv{color:var(--ac);font-style:normal;margin-right:4px}

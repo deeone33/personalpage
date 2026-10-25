@@ -1,4 +1,8 @@
-var VERSION = "0.33.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.33.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+// Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
+// (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
+// in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
+if (window.top !== window.self) { document.documentElement.style.display = "none"; try { window.top.location.replace(window.self.location.href); } catch (e) {} }
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -963,7 +967,8 @@ function render() {
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
-  T.stocks = tile("stocks", "Stocks", (st.length ? lst("stocks", st.map(function (x) {
+  // the preview's prices are made up (the chart in a stock's window is real): said once at the top, so nobody takes them for live
+  T.stocks = tile("stocks", "Stocks", (PREVIEW && st.length ? '<div class="smpl mut">Sample prices · sign in for live ones</div>' : "") + (st.length ? lst("stocks", st.map(function (x) {
     var c = x.c, up = c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[qk(x.id)];
     // the day chart takes its color from today's change (the number next to it); a week or month chart from its own direction
     var rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
@@ -7360,7 +7365,7 @@ var CONV_LIST = [
   { c: "USD", n: "US Dollar" }, { c: "EUR", n: "Euro" }, { c: "SEK", n: "Swedish krona" }, { c: "RUB", n: "Russian ruble" },
   { c: "GBP", n: "British pound" }, { c: "BTC", n: "Bitcoin", g: "bitcoin" }, { c: "ETH", n: "Ethereum", g: "ethereum" }, { c: "SOL", n: "Solana", g: "solana" }
 ];
-var RATES = {}, RATESerr = "", ratesBusy = false;   // USD value of 1 unit of each currency
+var RATES = {}, RATESerr = "", ratesBusy = false, FXAT = 0;   // USD value of 1 unit of each currency; FXAT: when the rates service last updated them
 function fetchRates() {
   if (ratesBusy) return; ratesBusy = true;
   var crypto = CONV_LIST.filter(function (x) { return x.g; });
@@ -7370,7 +7375,7 @@ function fetchRates() {
   ]).then(function (r) {
     ratesBusy = false;
     var fx = r[0], cg = r[1];
-    if (fx && fx.rates) { FXALL = fx.rates; RATES.USD = 1; CONV_LIST.forEach(function (x) { if (!x.g && fx.rates[x.c]) RATES[x.c] = 1 / fx.rates[x.c]; }); }
+    if (fx && fx.rates) { FXALL = fx.rates; FXAT = +fx.time_last_update_unix * 1000 || Date.now(); RATES.USD = 1; CONV_LIST.forEach(function (x) { if (!x.g && fx.rates[x.c]) RATES[x.c] = 1 / fx.rates[x.c]; }); }
     if (cg) crypto.forEach(function (x) { if (cg[x.g] && cg[x.g].usd) RATES[x.c] = cg[x.g].usd; });
     RATESerr = (fx && fx.rates) || Object.keys(RATES).length ? "" : "Rates unavailable right now.";
     render();
@@ -12053,7 +12058,7 @@ function tabCounts() {
 }
 function tabTitle() {
   var t = tabc(), c = tabCounts(), n = 0, base = USER ? "OmniTree" : TITLE0;
-  if (t.on) Object.keys(c).forEach(function (k) { if (t.b[k]) n += c[k]; });
+  if (t.on && !PREVIEW) Object.keys(c).forEach(function (k) { if (t.b[k]) n += c[k]; });   // (the preview's unread items are made up: no count)
   var want = (n ? "(" + (n > 99 ? "99+" : n) + ") " : "") + base;
   if (document.title !== want) document.title = want;
   var dot = t.on && t.dot && n > 0;
@@ -12166,7 +12171,9 @@ var UNITS = {};
   ["vol", 0.001, "ml"], ["vol", 0.1, "dl"], ["vol", 1, "l liter liters litre litres"], ["vol", 3.78541, "gal gallon gallons"], ["vol", 0.236588, "cup cups"], ["vol", 0.473176, "pint pints"], ["vol", 0.0295735, "floz"],
   ["spd", 1, "m/s"], ["spd", 1 / 3.6, "km/h kmh kph"], ["spd", 0.44704, "mph"], ["spd", 0.514444, "kn knot knots"],
   ["time", 1, "s sec second seconds"], ["time", 60, "min minute minutes"], ["time", 3600, "h hr hour hours"], ["time", 86400, "day days"], ["time", 604800, "week weeks"], ["time", 31557600, "year years"],
-  ["data", 1, "kb"], ["data", 1024, "mb"], ["data", 1048576, "gb"], ["data", 1073741824, "tb"],
+  // data: kB, MB, GB, TB as drives and plans are sold (1 GB = 1,000 MB); KiB, MiB, GiB, TiB the binary ones (1 GiB = 1,024 MiB)
+  ["data", 1, "kb"], ["data", 1000, "mb"], ["data", 1e6, "gb"], ["data", 1e9, "tb"],
+  ["data", 1.024, "kib"], ["data", 1048.576, "mib"], ["data", 1073741.824, "gib"], ["data", 1099511627.776, "tib"],
   ["temp", 0, "c celsius °c"], ["temp", 1, "f fahrenheit °f"], ["temp", 2, "k kelvin"]
 ].forEach(function (u) { u[2].split(" ").forEach(function (n) { UNITS[n] = { k: u[0], f: u[1], n: u[2].split(" ")[0] }; }); });
 var CUR_ALIAS = { "$": "USD", "€": "EUR", "£": "GBP", dollar: "USD", dollars: "USD", euro: "EUR", euros: "EUR", pound: "GBP", pounds: "GBP", bitcoin: "BTC", bitcoins: "BTC", ether: "ETH", sol: "SOL" };
@@ -12181,6 +12188,15 @@ function ansNum(n) {
 function calcAnswer(q) {
   q = q.trim();
   if (!q || q.length > 80 || q.charAt(0) === "!" || /^https?:/i.test(q)) return null;
+  // two units at once: "5 ft 3 in to cm", "6 lb 4 oz in kg"
+  var cm = /^(\d+(?:[.,]\d+)?)\s*(ft|feet|foot|lb|lbs|pound|pounds|m|kg)\s*(\d+(?:[.,]\d+)?)\s*(in|inch|inches|oz|ounce|ounces|cm|g)\s+(?:in|to|as)\s+([a-z]+)$/i.exec(q);
+  if (cm) {
+    var u1 = UNITS[cm[2].toLowerCase()], u2 = UNITS[cm[4].toLowerCase()], ut = UNITS[cm[5].toLowerCase()];
+    if (u1 && u2 && ut && u1.k === u2.k && u2.k === ut.k && u1.k !== "temp") {
+      var tot = (+cm[1].replace(",", ".") * u1.f + +cm[3].replace(",", ".") * u2.f) / ut.f;
+      return { show: cm[1] + " " + u1.n + " " + cm[3] + " " + u2.n + " = " + ansNum(+tot.toPrecision(6)) + " " + ut.n, raw: ansNum(+tot.toPrecision(6)) };
+    }
+  }
   var m = /^(.*?)\s*([a-z$€£°][a-z\/°]*)\s+(?:in|to|as)\s+([a-z$€£°][a-z\/°]*)$/i.exec(q) || /^(.*?)\s*([a-z$€£°][a-z\/°]*)\s*(?:=|->|→)\s*([a-z$€£°][a-z\/°]*)$/i.exec(q) || /^([$€£])\s*(.+?)\s+(?:in|to|as)\s+([a-z$€£]+)$/i.exec(q);
   if (m) {
     if (/^[$€£]$/.test(m[1])) m = [0, m[2], m[1], m[3]];
@@ -12189,13 +12205,20 @@ function calcAnswer(q) {
     var a = UNITS[m[2].toLowerCase()], b = UNITS[m[3].toLowerCase()], ca = usdOf(m[2]), cb = usdOf(m[3]), out;
     if (ca && cb && !(a && b && a.k === b.k)) {
       out = amt * ca.v / cb.v;
-      return { show: fmtNum(amt) + " " + ca.c + " = " + fmtNum(out) + " " + cb.c, raw: String(+out.toPrecision(8)) };
+      // where the rates come from and how fresh they are (crypto: CoinGecko, the rest: open.er-api.com)
+      var isC = function (c) { return CONV_LIST.some(function (x) { return x.c === c && x.g; }); }, cg = isC(ca.c) || isC(cb.c), fx = !isC(ca.c) || !isC(cb.c);
+      var note = "Rates from " + [fx ? "open.er-api.com" : "", cg ? "CoinGecko" : ""].filter(Boolean).join(" and ") + (fx && FXAT ? ", updated " + when(FXAT) : "");
+      return { show: fmtNum(amt) + " " + ca.c + " = " + fmtNum(out) + " " + cb.c, raw: String(+out.toPrecision(8)), note: note };
     }
     if (a && b && a.k === b.k) {
       if (a.k === "temp") { var kel = a.f === 0 ? amt + 273.15 : a.f === 1 ? (amt - 32) * 5 / 9 + 273.15 : amt; out = b.f === 0 ? kel - 273.15 : b.f === 1 ? (kel - 273.15) * 9 / 5 + 32 : kel; }
       else out = amt * a.f / b.f;
       out = +out.toPrecision(6);
-      return { show: ansNum(amt) + " " + a.n + " = " + ansNum(out) + " " + b.n, raw: ansNum(out) };
+      // data: written as KB, GiB…; between two decimal units the binary figure comes along ("1 TB = 1,000 GB · binary: 1 TiB = 1,024 GiB")
+      var dn = function (n) { return a.k === "data" ? n.toUpperCase().replace("KB", "kB").replace(/IB$/, "iB") : n; };
+      var bin = a.k === "data" && !/i/.test(a.n + b.n) ? UNITS[a.n.charAt(0) + "ib"] && UNITS[b.n.charAt(0) + "ib"] ? +(amt * UNITS[a.n.charAt(0) + "ib"].f / UNITS[b.n.charAt(0) + "ib"].f).toPrecision(6) : null : null;
+      var nn = function (n) { return a.k === "data" && Math.abs(n) >= 1000 && Math.abs(n) < 1e15 ? n.toLocaleString("en-GB", { maximumFractionDigits: 6 }) : ansNum(n); };   // (1,000 GB)
+      return { show: nn(amt) + " " + dn(a.n) + " = " + nn(out) + " " + dn(b.n) + (bin != null ? " · binary: " + nn(amt) + " " + dn(a.n.charAt(0) + "ib") + " = " + nn(bin) + " " + dn(b.n.charAt(0) + "ib") : ""), raw: ansNum(out) };
     }
     return null;
   }
@@ -12288,14 +12311,44 @@ function trRun(a) {
     done(t && +j.responseStatus === 200 ? { t: unent(String(t)), from: from ? String(from).slice(0, 5) : "" } : { err: /limit|quota/i.test(String((j && j.responseDetails) || "")) ? "The free translation limit for today is used up." : "No translation found." });
   }).catch(function () { done({ err: "The translation service did not answer." }); });
 }
+// ---- "time in tokyo": the time in any city (a saved world clock at once, any other city looked up by name) ----
+var TIMEC = {};
+function timeAsk(q) { var m = /^(?:what(?:'s| is) the time|what time is it|current time|local time|time|clock)(?: now)? (?:in|at) (.{2,40}?)\??$/i.exec(q.trim()); return m ? m[1].trim() : ""; }
+function timeShow(name, tz) { var d = new Date(); return name + ": " + d.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit" }) + ", " + d.toLocaleDateString("en-GB", { timeZone: tz, weekday: "short", day: "numeric", month: "short" }); }
+function timeRun(city) {
+  var inp = $("srchIn"), typed = inp.value, key = city.toLowerCase();
+  var done = function (r) {
+    TIMEC[key] = r;
+    if (inp.value !== typed) return;   // you typed on in the meantime
+    SRCHANS = r.tz ? { show: timeShow(r.n, r.tz), raw: new Date().toLocaleTimeString("en-GB", { timeZone: r.tz, hour: "2-digit", minute: "2-digit" }) } : { show: "No city called “" + city + "” found", hint: 1, soft: 1 };
+    $("srchAns").hidden = false;
+    $("srchAns").innerHTML = "<b>" + esc(SRCHANS.show) + "</b><small>" + (r.tz ? esc(String(r.tz).replace(/_/g, " ")) + " · Enter to copy" : "") + "</small>";
+  };
+  var wc = (clk().wc || []).filter(function (w) { return String(w.n).toLowerCase() === key; })[0];
+  if (wc) { done({ n: wc.n, tz: wc.tz }); return; }
+  if (TIMEC[key]) { done(TIMEC[key]); return; }
+  fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=" + encodeURIComponent(city)).then(function (r) { return r.json(); }).then(function (j) {
+    var x = j && j.results && j.results[0];
+    done(x && x.timezone ? { n: String(x.name).slice(0, 40) + (x.country ? ", " + String(x.country).slice(0, 30) : ""), tz: String(x.timezone) } : {});
+  }).catch(function () { done({}); });
+}
+// What the bar cannot answer but looks like a question for it: says so instead of nothing (Enter still searches the web)
+function hintAnswer(q) {
+  q = q.trim();
+  if (/^weather\b/i.test(q)) return { show: "Not answered here: the weather is in the Weather box (click it for other cities)", hint: 1, soft: 1 };
+  if (/\d/.test(q) && /^[\d\s.,+\-*\/^()%]+$/.test(q) && /[+\-*\/^%]/.test(q)) return { show: /\/\s*0+(?![.\d])/.test(q) ? "Not a number: dividing by zero" : "Not understood: check the sum", hint: 1, soft: 1 };
+  if (/^[\d.,]+\s*[a-z$€£°]+\s+(?:in|to)\s+[a-z$€£°]+$/i.test(q)) return { show: "Not understood. Try: 10 km in miles · 100 usd to eur · 5 ft 3 in to cm · 1 tb in gb", hint: 1, soft: 1 };
+  return null;
+}
 function srchShow() {
-  var q = $("srchIn").value, box = $("srchAns"), tr = trAsk(q);
+  var q = $("srchIn").value, box = $("srchAns"), tr = trAsk(q), tc = !tr && timeAsk(q);
   clearTimeout(trTimer);
   var sq = siteAsk(q);
-  var a = SRCHANS = (sq ? { show: "Search all boxes for “" + sq + "”", site: sq } : null) || scratch(q) || (new RegExp("^\\s*(" + cmdW("help") + "|\\?)\\s*$", "i").test(q) ? { show: "What the search bar can do", help: 1 } : null) || (tr ? { show: "Translating to " + tr.toName + "…", wait: 1 } : null) || dateAnswer(q) || calcAnswer(q);
+  var a = SRCHANS = (sq ? { show: "Search all boxes for “" + sq + "”", site: sq } : null) || scratch(q) || (new RegExp("^\\s*(" + cmdW("help") + "|\\?)\\s*$", "i").test(q) ? { show: "What the search bar can do", help: 1 } : null) || (tr ? { show: "Translating to " + tr.toName + "…", wait: 1 } : null) || (tc ? { show: "Looking up the time in " + tc + "…", wait: 1 } : null) || dateAnswer(q) || calcAnswer(q) || hintAnswer(q);
   box.hidden = !a;
-  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.save ? "Enter to save" : a.site ? "Enter to search" : a.help ? "Enter to open" : a.wait ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
+  if (a) box.innerHTML = "<b>" + esc(a.show) + "</b><small>" + (a.note ? esc(a.note) + " · " : "") + (a.save ? "Enter to save" : a.site ? "Enter to search" : a.help ? "Enter to open" : a.wait || a.hint ? "" : a.soft ? "click to copy" : "Enter to copy") + "</small>";
   if (tr) trTimer = setTimeout(function () { trRun(tr); }, 500);   // wait until you stop typing
+  if (tc) trTimer = setTimeout(function () { timeRun(tc); }, 400);
   if (sq || SLIVE) debounced("ssLive", function () { siteLive(siteAsk($("srchIn").value)); });
 }
 // "help" in the search bar: everything the bar can do, in one small window
@@ -12311,8 +12364,9 @@ function searchHelpHtml() {
     row(cmdW("ss") + " ferry", "Search all boxes at once: news, Telegram, Reddit, sports, stocks, TV shows, podcasts, videos, streams, notes, calendar, bookmarks, read later, mail and settings. The boxes with a search of their own (News, Telegram, Reddit and Sports) follow while you type, letter by letter; Enter opens a window that lists everything found, box by box. Taking the words away, Esc, or closing that window ends the search in the boxes too." + (ssKeyName() ? " <code>" + ssKeyName() + "</code> does the same with whatever is typed, without the word." : "")) +
     "<tr><th colspan=\"2\">Answers (Enter copies the answer)</th></tr>" +
     row("12*45", "Sums: <code>+ - * / ^</code>, brackets, <code>15% of 240</code>, <code>sqrt(2)</code>, <code>pi</code>, also abs, round, floor, ceil, ln, log, sin, cos, tan.") +
-    row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>.") +
-    row("10 km in miles", "Units: length, weight, volume, speed, time, data and temperature (<code>72 f in c</code>).") +
+    row("100 usd in eur", "Currencies (every one the rates service lists) and BTC, ETH, SOL: <code>0.5 btc to usd</code>, <code>$100 in sek</code>. Where the rates come from, and when they were updated, is shown under the answer.") +
+    row("10 km in miles", "Units: length, weight, volume, speed, time, data and temperature (<code>72 f in c</code>), also two at once (<code>5 ft 3 in to cm</code>). Data as drives are sold, <code>1 tb in gb</code> = 1,000 GB, with the binary figure (GiB) beside it.") +
+    row("time in tokyo", "The time in any city: <code>what time is it in new york</code>. Anything that looks like a question for the bar but is not understood gets a hint instead.") +
     row("days until 24 dec", "Dates: <code>days since 1 jan 2020</code>, <code>90 days from today</code>, <code>today + 30 days</code>, <code>in 3 weeks</code>, <code>2 months before 1 may</code>, <code>between 1 mar and 24 dec</code>, <code>week number</code>, <code>what day is 1 may 2027</code>, <code>today</code>.") +
     row(cmdW("tr") + " hello to swedish", "Translate. The language it is written in is worked out for you; without <code>to …</code> it goes to English: <code>" + cmdW("tr") + " tere hommikust</code>. Sent to the free MyMemory service.") +
     "<tr><th colspan=\"2\">Save</th></tr>" +
@@ -12328,7 +12382,7 @@ function searchHelpHtml() {
 function openSearchHelp() { openModal("Search bar", searchHelpHtml()); }
 // Enter (or a click on the answer): the answer goes into the box, selected, and onto the clipboard
 function srchTake() {
-  if (!SRCHANS || SRCHANS.wait) return;
+  if (!SRCHANS || SRCHANS.wait || SRCHANS.hint) return;   // (a hint is only advice: nothing to copy)
   if (SRCHANS.site) { var sq = SRCHANS.site; SRCHANS = null; $("srchAns").hidden = true; $("srchIn").value = ""; $("srchIn").blur(); openSite(sq); return; }
   if (SRCHANS.help) { SRCHANS = null; $("srchAns").hidden = true; $("srchIn").value = ""; $("srchIn").blur(); openSearchHelp(); return; }
   if (SRCHANS.save) {

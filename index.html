@@ -24,7 +24,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Montserrat:wght@500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=0.33.4">
 </head><body>
 <div id="wall"></div>
 <div id="aurora" aria-hidden="true"></div>
@@ -36,6 +36,7 @@
 <main id="app">
   <nav id="bm" aria-label="Bookmarks" hidden></nav>
   <header>
+    <h1 class="vis-hidden">OmniTree: your start page, everything in one tab</h1>
     <div id="hdl"><div id="day">Day</div><div id="date" class="mut">Date</div><div id="wclk" class="mut" hidden></div><button id="nextUp" data-a="nextday" title="Open the calendar on this day" hidden></button><div id="wcPop" role="status" hidden></div></div>
     <form id="srch" role="search" autocomplete="off"><input type="search" id="srchIn" placeholder="Search… (type help for info)" title="Type help and press Enter to see everything the search bar can do" aria-label="Search the web" enterkeyhint="search"><div id="srchAns" data-a="srchans" role="status" title="Click to copy the answer" hidden></div></form>
     <div id="logoImg" role="img" aria-label="OmniTree"><img class="lgi" alt="" src="logo-icon.png" width="136" height="129"><i class="lgs"></i><img class="lgo" alt="" src="logo-omni.png" width="247" height="74"><img class="lgt" alt="" src="logo-tree.png" width="238" height="74"></div>
@@ -60,7 +61,7 @@
   <div id="gridw"><div id="grid"></div><div id="embeds"></div></div>
   <!-- Shown only to visitors who are not signed in (and to search engines): what this page is, in plain text -->
   <section id="intro">
-    <h1>OmniTree: your start page, everything in one tab</h1>
+    <h2>OmniTree: your start page, everything in one tab</h2>
     <p>OmniTree is a free, customizable start page and personal dashboard for your browser. It puts the things you check every day side by side: news from the sources you choose, live sports scores and tables, stocks and crypto, the TV shows you follow, Twitch and YouTube, Reddit and Telegram, your unread mail, the weather, radio and podcasts, notes, to-dos, a calendar and timers. Scores, prices and headlines update by themselves while the tab is open.</p>
     <p>You decide what is on the page: switch boxes on and off, drag them where you want them, and pick colors and a wallpaper. A free account saves your setup and brings it to every device.</p>
   </section>
@@ -544,6 +545,6 @@
 <div id="upd" hidden>A new version is available <button id="updBtn">Reload</button></div>
 <div id="modal" hidden><div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle"><div class="ph"><b id="mTitle"></b><button id="mClose">Close</button></div><div id="mBody"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=0.33.4"></script>
+<script src="app.js?v=0.33.4"></script>
 </body></html>
