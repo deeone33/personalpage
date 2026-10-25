@@ -1465,8 +1465,10 @@ body.noshadow #srchAns{box-shadow:none}
 .rdr.rlh .rdart p{line-height:1.8}
 .rdrb svg{display:block}
 @media(max-width:600px){
-  #modal:has(.rdr){padding:0}
-  .mbox:has(.rdr){width:100%;height:100vh;height:100dvh;max-height:none;border-radius:0;border:0;padding:calc(20px + env(safe-area-inset-top,0px)) 14px env(safe-area-inset-bottom,0px)}
+  /* the reader fills the dark backdrop exactly (stretched, not a screen height of its own and centered): when the address
+     bar slides away, a fixed "100vh" and the space really shown differ, and centering pushed the top line half off screen */
+  #modal:has(.rdr){padding:0;align-items:stretch}
+  .mbox:has(.rdr){width:100%;height:auto;max-height:none;border-radius:0;border:0;padding:calc(20px + env(safe-area-inset-top,0px)) 14px env(safe-area-inset-bottom,0px)}
   .rdr{margin:0 -14px;padding:0 14px}
 }
 
