@@ -2059,6 +2059,7 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 /* Settings > Mail: one line per inbox with what it is and its buttons */
 .mlst{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}
 .mlst .mlok{color:var(--up)}
+.mlupd{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:6px;padding:7px 10px;border:1px solid var(--ac);border-radius:9px;font-size:12.5px;background:var(--acsoft)}
 .mlb{display:flex;gap:6px;flex-wrap:wrap}
 
 /* YouTube in the dock: one thin bar above the video (search, Up next, Autoplay, close) and a list that opens over it */

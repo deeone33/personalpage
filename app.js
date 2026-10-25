@@ -1,4 +1,4 @@
-var VERSION = "0.32.9";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.33.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -1556,6 +1556,8 @@ function fetchTv(force) {
 // What airs on one day (0 today, 1 tomorrow…) in the chosen country, on television and on streaming services (Discover).
 // Today's list is also kept in TVSCH, where the small card of a show looks for tonight's episode.
 var TVDAY = {};
+var TV_WORLD = /^(Netflix|Prime Video|Amazon Prime Video|Amazon|Disney\+|Max|HBO Max|Apple TV\+?|Paramount\+|Hulu|Peacock|SkyShowtime|Viaplay)$/i;
+var TV_LANG = { SE: "Swedish", NO: "Norwegian", DK: "Danish", FI: "Finnish", EE: "Estonian", LV: "Latvian", LT: "Lithuanian", DE: "German", AT: "German", CH: "German", FR: "French", BE: "French", ES: "Spanish", MX: "Spanish", AR: "Spanish", IT: "Italian", NL: "Dutch", PL: "Polish", PT: "Portuguese", BR: "Portuguese", JP: "Japanese", KR: "Korean", IS: "Icelandic" };
 function tvDate(n) { return new Date(Date.now() + n * 86400000).toLocaleDateString("en-CA", { timeZone: TZ }); }
 function fetchTvDay(n, force) {
   var day = tvDate(n), key = tvCc() + day, c = TVDAY[key];
@@ -1566,9 +1568,15 @@ function fetchTvDay(n, force) {
   // TVmaze lists television for few countries, so without the worldwide part most countries would be empty
   Promise.all([one("schedule?country=" + tvCc() + "&date=" + day), one("schedule/web?country=" + tvCc() + "&date=" + day), one("schedule/web?date=" + day)]).then(function (r) {
     var seen = {}, ev = [];
-    // of the worldwide list only the services that really are worldwide (a service tied to one country has its country set)
-    var world = r[2].filter(function (e) { var s = (e._embedded && e._embedded.show) || {}; return !(s.webChannel && s.webChannel.country); });
-    r[0].concat(r[1], world).forEach(function (e) {
+    // Worldwide: first only the big services everyone can watch, with shows in English or your country's own language.
+    // TVmaze gives no country to every service not tied to one, so niche ones (anime and Chinese drama services) counted as
+    // worldwide and, airing in the European night, came first; a show with no streaming service at all slipped through too.
+    // Those other worldwide releases now only fill a thin day, below everything else.
+    var lang = TV_LANG[tvCc()] || "";
+    var big = function (e) { var s = (e._embedded && e._embedded.show) || {}, w = s.webChannel, l = String(s.language || ""); return !!(w && TV_WORLD.test(String(w.name || "")) && (!l || l === "English" || l === lang)); };
+    var anyWorld = r[2].filter(function (e) { var s = (e._embedded && e._embedded.show) || {}; return !!(s.webChannel && !s.webChannel.country); });
+    var world = anyWorld.filter(big), rest = anyWorld.filter(function (e) { return !big(e); });
+    var add = function (e, low) {
       var s = e.show || (e._embedded && e._embedded.show), ep = tvEp(e);
       if (!s || !ep || seen[s.id + ":" + ep.s + ":" + ep.e]) return;
       seen[s.id + ":" + ep.s + ":" + ep.e] = 1;
@@ -1577,11 +1585,14 @@ function fetchTvDay(n, force) {
       // a streaming service often releases several episodes at once: one row per show, "S01E30–E34"
       var had = ev.filter(function (x) { return x.id === s.id && x.ep.s === ep.s; })[0];
       if (had) { if (ep.e > (had.last || had.ep.e)) had.last = ep.e; if (ep.e && ep.e < had.ep.e) { had.last = had.last || had.ep.e; had.ep = ep; } return; }
-      ev.push({ id: s.id, n: String(s.name || "").slice(0, 80), net: tvNet(s), w: +s.weight || 0, ep: ep });
-    });
-    // the 60 best-known shows of the day (and all of yours), in the order they air
+      ev.push({ id: s.id, n: String(s.name || "").slice(0, 80), net: tvNet(s), w: (+s.weight || 0) - (low ? 1000 : 0), ep: ep });
+    };
+    r[0].concat(r[1], world).forEach(function (e) { add(e); });
+    // a country TVmaze knows little about would be (nearly) empty: then the other worldwide releases fill the day, below the rest
+    if (ev.length < 20) rest.forEach(function (e) { add(e, 1); });
+    // the 60 best-known shows of the day (and all of yours); the list shows them by day, best-known first in each
     ev.sort(function (a, b) { return (tvHas(b.id) ? 1 : 0) - (tvHas(a.id) ? 1 : 0) || b.w - a.w; });
-    ev = ev.slice(0, 60).sort(function (a, b) { return a.ep.ts - b.ep.ts || b.w - a.w; });
+    ev = ev.slice(0, 60);
     TVDAY[key] = { t: Date.now(), ev: ev };
     if (n === 0) TVSCH = { t: Date.now(), key: key, ev: ev };
     tvdDraw();
@@ -1650,12 +1661,21 @@ function tvdListHtml() {
   var d = TVDAY[tvCc() + tvDate(TVD.day)], cn = (TV_CC.filter(function (o) { return o[0] === tvCc(); })[0] || ["", ""])[1], now = Date.now(), head = "", html = "";
   if (!d || !d.ev) return '<p class="mut sn">Loading…</p>';
   if (!d.ev.length) return '<p class="mut sn">Nothing found for this day.</p>';
-  d.ev.forEach(function (e) {
-    // grouped by your own day: a US evening show is on in the night in Europe, so it may well be "Tomorrow" here
+  // grouped by your own day (a US evening show is on in the night in Europe, so it may well be "Tomorrow" here), the groups
+  // in time order, and in each the best-known shows first (yours before them); the time is on the right
+  // the other worldwide releases (only there to fill a thin day) come last, under a heading of their own
+  var first = {}, main = d.ev.filter(function (e) { return e.w > -500; }), low = d.ev.filter(function (e) { return e.w <= -500; });
+  var row = function (e) { return tvdRow(e.id, e.n, [tvCode(e.ep) + (e.last && tvCode(e.ep) ? "–E" + pad2(e.last) : ""), e.net].filter(Boolean).join(" · "), tvTime(e.ep.ts)); };
+  main.forEach(function (e) {
     var hd = e.ep.ts < now - 3600000 && tvDayName(e.ep.ts) === "Today" ? "Earlier today" : tvDayName(e.ep.ts);
-    if (hd !== head) { head = hd; html += "<h3>" + hd + "</h3>"; }
-    html += tvdRow(e.id, e.n, [tvCode(e.ep) + (e.last && tvCode(e.ep) ? "–E" + pad2(e.last) : ""), e.net].filter(Boolean).join(" · "), tvTime(e.ep.ts));
+    e.hd = hd; first[hd] = Math.min(first[hd] || Infinity, e.ep.ts);
   });
+  main.sort(function (a, b) { return first[a.hd] - first[b.hd] || (tvHas(b.id) ? 1 : 0) - (tvHas(a.id) ? 1 : 0) || b.w - a.w || a.ep.ts - b.ep.ts; }).forEach(function (e) {
+    if (e.hd !== head) { head = e.hd; html += "<h3>" + e.hd + "</h3>"; }
+    html += row(e);
+  });
+  if (!main.length) html += '<p class="mut sn">No TV listings for ' + esc(cn) + " this day: TVmaze lists few channels there.</p>";
+  if (low.length) html += "<h3>Other worldwide releases</h3>" + low.sort(function (a, b) { return b.w - a.w; }).map(row).join("");
   return html + '<p class="mut sn">Television in ' + esc(cn) + " and streaming worldwide. Show information from TVmaze.com.</p>";
 }
 function tvdChips() {
@@ -5650,6 +5670,7 @@ function fetchMail() {
     // one failed check (a slow Gmail script, usually) keeps the last good numbers instead of showing "Error"
     if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
     MAIL[i] = m; mailAlerts(i, m);
+    if (!!(old && old.gsOld) !== !!(m && m.gsOld)) loadMailForm();   // Settings → Mail says when the script needs its update
   };
   var bad = function (msg) { return { error: msg || "no data" }; };
   var jobs = [];
@@ -5744,7 +5765,8 @@ function loadMailForm() {
     var c = M[i] || {}, form = MLUI[i], ex = i ? "Work" : "Personal", h = '<div class="sub"><b>' + (i ? "Second inbox" : "First inbox") + "</b>";
     if (mailOn(c) && !form) {
       h += '<label>Name <input type="text" class="mlnm" data-k="' + i + '" value="' + esc(c.name || "") + '" placeholder="' + ex + '"></label>' +
-        '<div class="mlst"><span>Gmail · <span class="mlok">connected ✓</span></span><span class="mlb"><button data-a="mlnew" data-k="' + i + '">Replace</button><button data-a="mldel" data-k="' + i + '">Remove</button></span></div>';
+        '<div class="mlst"><span>Gmail · <span class="mlok">connected ✓</span></span><span class="mlb"><button data-a="mlnew" data-k="' + i + '">Replace</button><button data-a="mldel" data-k="' + i + '">Remove</button></span></div>' +
+        (MAIL[i] && MAIL[i].gsOld ? '<div class="mlupd"><span><b>Update this Gmail script.</b> The newer version keeps its token out of web addresses (and so out of logs). It takes 2 minutes; the address and token stay the same.</span><button data-a="mlupd">Show how</button></div>' : "");
     } else if (!form) {
       h += '<div class="mlst"><span class="mut">Not connected</span><span class="mlb"><button data-a="mlpick" data-k="' + i + '">Connect Gmail</button></span></div>';
     } else {
@@ -5755,6 +5777,14 @@ function loadMailForm() {
   }).join("");
 }
 function mailMsg(t) { var m = $("mailMsg"); if (m) m.textContent = t || ""; }
+// The update of an older Gmail script (version 1 read its token from the web address): the new code and three steps
+function mailUpdHelp() {
+  openModal("Update your Gmail script", "<p>The newer script takes its token in the body of each request instead of the web address, so it never ends up in a log. Your script&rsquo;s address and token stay the same: you only replace the code.</p><ol>" +
+    '<li>Open <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> (signed in as that Gmail account) and open the project you made for this site.</li>' +
+    '<li>Select all the code in the editor and delete it. Then copy the new code and paste it in. <div class="codebox"><button class="copybtn" data-a="copycode">Copy the code</button><pre id="gsCode" hidden>' + GS_CODE + "</pre></div></li>" +
+    "<li>Press <b>Deploy</b> → <b>Manage deployments</b> → the pencil → <b>Version: New version</b> → <b>Deploy</b>. (Not “New deployment”: that would give it a new address.)</li></ol>" +
+    '<p class="mut sn">Within half an hour the site notices the new version by itself and this notice goes away. Until then mail keeps working the old way.</p>');
+}
 function mlAct(a, k) {
   var p = String(k).split("|"), i = +p[0] === 1 ? 1 : 0, M = mailFix(), c = M[i];
   mailMsg("");
@@ -8215,6 +8245,7 @@ document.addEventListener("click", function (e) {
   if (/^ytd/.test(a)) { ytdAct(a, k, b); return; }
   if (/^dk(auto|srch|q|clear|play|add|del|up|down)$/.test(a)) { dkAct(a, k); return; }
   if (/^ml(pick|new|cancel|del|save)$/.test(a)) { mlAct(a, k); return; }
+  if (a === "mlupd") { mailUpdHelp(); return; }
   if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
   if (a === "rdropen") { openReader(k, "", true); return; }
   if (a === "rdrflip") { rdrFlip(); return; }
@@ -8625,7 +8656,7 @@ function initAuth() {
   });
 }
 // The Apps Script for the Gmail box (shown in Help and in the setup guide). It is HTML-escaped because it goes into a <pre>.
-var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\nfunction doGet(e) {\n  try {\n    return handle(e);\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\nfunction handle(e) {\n  var p = PropertiesService.getScriptProperties();\n  var token = p.getProperty(&quot;T&quot;);\n  var given = e &amp;&amp; e.parameter ? e.parameter.t : &quot;&quot;;\n  if (!token) {\n    if (given) return out(JSON.stringify({ error: &quot;Open this address in your browser with nothing after /exec to get your token.&quot; }));\n    token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Mail). It is shown only once.&quot;, token: token }));\n  }\n  if (given !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n\n  var since = parseInt(e.parameter.since, 10) || 0;   // seconds; the moment you pressed &quot;Mark read&quot; on the site\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return out(hit);\n\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return out(text);\n}\n\n// Lets the site email you its notifications. It can only write to this same Gmail address, and needs the token.\nfunction doPost(e) {\n  try {\n    var p = PropertiesService.getScriptProperties();\n    var token = p.getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n    return out(JSON.stringify({ sent: true }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
+var GS_CODE = '// Paste this whole file into your Apps Script project (replace what is there), then\n// Deploy &gt; Manage deployments &gt; pencil &gt; Version: New version &gt; Deploy.\n// Version 2: the site sends the token in the body of the request (POST), never in the address.\nvar VERSION = 2;\n\nfunction out(text) {\n  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);\n}\n\n// Opened in a browser (nothing after /exec): shows your token once. The site also asks which version this is (?ping=1).\nfunction doGet(e) {\n  try {\n    var q = (e &amp;&amp; e.parameter) || {};\n    if (q.ping) return out(JSON.stringify({ v: VERSION }));\n    if (q.t) return out(JSON.stringify({ error: &quot;This script takes the token only in the body of a request. Update the site or the script.&quot; }));\n    var p = PropertiesService.getScriptProperties();\n    if (p.getProperty(&quot;T&quot;)) return out(JSON.stringify({ error: &quot;Already set up. To get a new token, run resetToken in the editor, then open this address again.&quot; }));\n    var token = Utilities.getUuid();\n    p.setProperty(&quot;T&quot;, token);\n    return out(JSON.stringify({ setup: &quot;Copy this token into the site (Settings, Mail). It is shown only once.&quot;, token: token }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// What the site asks, with the token in the body: { op: &quot;read&quot; } for your unread mail, { op: &quot;send&quot; } to email you a notification.\nfunction doPost(e) {\n  try {\n    var token = PropertiesService.getScriptProperties().getProperty(&quot;T&quot;);\n    var d = JSON.parse(e.postData.contents);\n    if (!token || d.t !== token) return out(JSON.stringify({ error: &quot;Wrong token&quot; }));\n    if (d.op === &quot;read&quot;) return out(read(parseInt(d.since, 10) || 0));\n    if (d.op === &quot;send&quot;) {\n      // only ever to this same Gmail address\n      MailApp.sendEmail(Session.getEffectiveUser().getEmail(), String(d.subject || &quot;OmniTree&quot;).slice(0, 200), String(d.body || &quot;&quot;).slice(0, 8000));\n      return out(JSON.stringify({ sent: true }));\n    }\n    return out(JSON.stringify({ error: &quot;Unknown request&quot; }));\n  } catch (err) {\n    return out(JSON.stringify({ error: String(err &amp;&amp; err.message ? err.message : err) }));\n  }\n}\n\n// since: seconds; the moment you pressed &quot;Mark read&quot; on the site\nfunction read(since) {\n  var cache = CacheService.getScriptCache();\n  var key = &quot;m&quot; + since;\n  var hit = cache.get(key);\n  if (hit) return hit;\n  var email = Session.getEffectiveUser().getEmail();\n  var items = GmailApp.search(&quot;in:inbox is:unread&quot;, 0, 20).map(function (t) {\n    var msgs = t.getMessages();\n    var m = msgs[msgs.length - 1];\n    return {\n      from: m.getFrom(),\n      subject: m.getSubject(),\n      snippet: m.getPlainBody().replace(/\\s+/g, &quot; &quot;).slice(0, 200),\n      ts: m.getDate().getTime(),\n      link: &quot;https://mail.google.com/mail/?authuser=&quot; + encodeURIComponent(email) + &quot;#inbox/&quot; + t.getId()\n    };\n  }).sort(function (a, b) { return b.ts - a.ts; });\n  var fresh = since ? GmailApp.search(&quot;in:inbox is:unread after:&quot; + since, 0, 30).length : null;\n  var text = JSON.stringify({ email: email, unread: GmailApp.getInboxUnreadCount(), fresh: fresh, items: items });\n  cache.put(key, text, 120);\n  return text;\n}\n\n// Run this once from the editor only if you lose the token and need a new one.\nfunction resetToken() {\n  PropertiesService.getScriptProperties().deleteProperty(&quot;T&quot;);\n}\n';
 // Help: one window with every part of the page, grouped, each with short headings, steps and lists. The same text is
 // on the help page (help.html), made from this; keep the two the same.
 function openHelp() {
@@ -8832,7 +8863,7 @@ function openHelp() {
       "The next and the latest episode of each show sit on their day in the calendar (switch off in " + S("TV shows") + "), and you can be told when a new one airs (" + S("Notifications") + ").",
       "The shows you follow, each with ✕, are listed in " + S("TV shows") + ". Up to 60."]) +
     h4("Discover (the compass button)") +
-    ul(["Shows what airs today, with chips for tomorrow and the five days after: the best-known shows on television in the chosen country and on streaming services that release worldwide (Netflix, Max, Prime Video…). Several episodes of one show on one day are one row (S01E30–E34).",
+    ul(["Shows what airs today, with chips for tomorrow and the five days after: the best-known shows on television in the chosen country and on streaming services that release worldwide (Netflix, Max, Prime Video…), best-known first in each day. Where TVmaze lists little for your country, other worldwide releases (such as anime) fill the day below them, under a heading of their own. Several episodes of one show on one day are one row (S01E30–E34).",
       "The list next to the search field chooses the country (also in " + S("TV shows") + "). TVmaze has full listings for the US and the UK; for most other countries the streaming part is what fills the list.",
       "Type in the field to search for any show.",
       "Click a show for its page in the same window; <b>&larr; Back</b> returns. ☆ follows a show, ★ means you follow it.",
@@ -8947,7 +8978,7 @@ function openHelp() {
     h4("Using it") +
     ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only), and clears that inbox's new-mail notifications from the bell, on all your devices.",
       "In " + S("Mail") + " each inbox shows its name (change it right there), what it is, and <b>Replace</b> and <b>Remove</b>. The address and token cannot be shown again once saved, like a password: to change them, press Replace.",
-      "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same."]);
+      "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same. The current version takes its token only in the body of each request, never in a web address; while an inbox still uses an older one, Settings " + A + " Mail says so and shows how to update."]);
 
   // ---- Tools ----
   html += h3("notes", "Notes, to-dos &amp; read later") +
