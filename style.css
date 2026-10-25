@@ -257,6 +257,7 @@ p.tools{align-items:center;gap:6px}
 .row.tg .lnk{display:block;width:100%}
 .clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;line-height:1.35}
 .clamp small{color:var(--mut)}
+.tgmd{font-size:.85em;color:var(--mut);white-space:nowrap}
 .flt{width:100%;font:inherit;font-size:calc(13px*var(--fs,1));color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:9px;padding:5px 10px;margin:0 0 6px;outline:0}
 .flt:focus{border-color:var(--ac)}
 .fv{color:var(--ac);font-style:normal;margin-right:4px}
@@ -813,6 +814,7 @@ body.resizing{user-select:none}
 .si a:hover{color:var(--ac)}
 .si small{color:var(--mut)}
 .stlinks{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
+.sthead .stcur{font-size:13px;font-weight:600;color:var(--mut);margin-left:-4px;align-self:flex-end;padding-bottom:5px}
 /* a stock's news: always the same height (about six headlines, more by scrolling), so the window does not grow and shrink
    while the news loads or when one stock has none, also when stepping with ‹ › */
 #stInfo{height:200px;overflow-y:auto;overscroll-behavior:contain;margin-top:10px;padding-right:4px}

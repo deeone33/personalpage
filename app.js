@@ -1,4 +1,4 @@
-var VERSION = "0.33.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.33.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 
 // ---- Twitch login return (runs first, before Supabase reads the URL) ----
 // The state must match the random one we saved when the login started, so another site can't plant its own token here.
@@ -885,8 +885,11 @@ function render() {
   var tq = tgShown(), tNote = foundNote("tg"), tIn = FON.tg || FQ.tg ? '<input type="search" id="tgQ" class="flt" placeholder="Search posts…" aria-label="Search the Telegram posts">' : "";
   T.telegram = tile("telegram", "Telegram", tIn + (tq.length || tNote ? lst("telegram", tq.slice(0, cntOf("tg")).map(function (g) {
     var cls = (isNewItem(g, "tg") && !isRead(g.u) ? " new" : "") + (isRead(g.u) ? " rd" : "") + (thi.length && hasWord(g.tx || g.t, thi) ? " hi" : "");
-    // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several
-    return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + esc(String(g.t).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
+    // Two full lines of the post, cut by the browser where the space ends; the channel name is shown inline, and only when there are several.
+    // A post that is only a picture or video (or has just a few words, like "Trump:") says so with a small badge.
+    var txt = String(g.tx || "").replace(/\s+/g, " ").trim(), media = g.vid ? "▶ Video" : g.img || g.th ? "📷 Photo" : "";
+    var badge = media && txt.length < 30 ? '<span class="tgmd">' + media + "</span> " : "";
+    return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + badge + esc((txt || (media ? "" : String(g.t))).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
   }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + ctlG + (tp.length ? rdrBtn("tg") + fBtn("tg") : ""));
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
@@ -1984,7 +1987,8 @@ function podTile() {
     return '<div class="row pdr"><span><button class="lnk" data-a="podshow" data-k="' + id + '">' + esc(s.n || "Podcast") + "</button>" + (s.a ? " <small>" + esc(s.a) + "</small>" : "") + "</span>" +
       '<span class="r"><button class="pdi' + (on ? " on" : "") + '" data-a="podstar" data-k="' + id + '" title="' + (on ? "You get a notification for new episodes. Click to stop" : "Get a notification for new episodes") + '" aria-label="Notification for new episodes">' + (on ? "★" : "☆") + '</button><button class="pdi" data-a="podfol" data-k="' + id + '" title="Stop following" aria-label="Stop following ' + esc(s.n || "") + '">✕</button></span></div>';
   }).join("");
-  else body = all.length ? all.slice(0, 60).map(function (e) { return podRow(e, true); }).join("") : '<div class="empty">' + (podBusy ? "Loading your shows…" : PODERR ? "Podcasts unavailable: " + esc(PODERR) : "No episodes yet.") + "</div>";
+  // the show's name beside each episode only when the list has more than one show (else it repeats on every line)
+  else body = all.length ? all.slice(0, 60).map(function (e, i, l) { return podRow(e, l.some(function (x) { return x.s !== l[0].s; })); }).join("") : '<div class="empty">' + (podBusy ? "Loading your shows…" : PODERR ? "Podcasts unavailable: " + esc(PODERR) : "No episodes yet.") + "</div>";
   var lh = Math.max(Math.round(30 * gfs()), Math.round((layRows().podcasts || 10) * 32.4 * gfs()));   // at least one row
   var list = '<div class="list pdlist" data-list="podcasts" style="height:' + lh + "px;max-height:" + lh + 'px">' + body + "</div>";
   var n = podNewN(), nb = n ? '<button class="pill ac" data-a="podseen" title="Mark everything in this box as seen">' + n + '<span class="nwl"> new</span></button>' : "";
@@ -4244,7 +4248,13 @@ function fetchQuotes(force) {
     qBusy = false;
     if (r.error) QERR = r.error.message;
     else if (!r.data || r.data._err) QERR = (r.data && r.data._err) || "no data";
-    else { QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); priceAlerts(); }
+    else {
+      QERR = ""; Object.assign(QUOTES, r.data); QLOADED = Object.keys(QUOTES).length > 0; stockAlerts(r.data); priceAlerts();
+      // a stock without a name (imported from a watchlist: symbols only) keeps the name the prices came with; your own stays
+      var named = false;
+      (P.stocks || []).forEach(function (x) { var q = QUOTES[qk(x.id)]; if (!x.name && q && q.n) { x.name = String(q.n).slice(0, 80); named = true; } });
+      if (named) persist();
+    }
     render(); fetchSparks(force);
   }).catch(function (e) { qBusy = false; QERR = String((e && e.message) || e); render(); });
 }
@@ -7997,7 +8007,7 @@ function openStock(id) {
   var sw = '<span class="seg stsw" id="stSw" role="group" aria-label="Chart style"><button data-a="stchart" data-k="line" title="Price line: hover anywhere for the price">' +
     '<svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M1 9l4-4 3 2 6-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
     '<button data-a="stchart" data-k="adv" title="Full chart: candles, volume and tools"><svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><path d="M3 1v9M7.5 0v11M12 2v7" stroke="currentColor" stroke-width="1"/><rect x="1.5" y="3" width="3" height="4" fill="currentColor"/><rect x="6" y="2" width="3" height="6" fill="none" stroke="currentColor"/><rect x="10.5" y="4" width="3" height="3" fill="currentColor"/></svg></button></span>';
-  openModal(id, '<div class="mrow sthead">' + (q ? '<b class="big">' + q.p.toFixed(2) + "</b>" + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") : "") + sw + "</div>" +
+  openModal(id, '<div class="mrow sthead">' + (q ? '<b class="big">' + q.p.toFixed(2) + "</b>" + (q.cur ? '<span class="stcur">' + esc(q.cur) + "</span>" : "") + (q.c != null ? '<span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "▲ +" : "▼ ") + q.c.toFixed(2) + "% today</span>" : "") : "") + sw + "</div>" +
     '<div id="tv" class="tv"></div>' + (TV_NOTE[id] ? '<p class="mut sn stnote">' + esc(TV_NOTE[id]) + "</p>" : "") + '<div id="stInfo"><p class="mut sn">Loading news…</p></div>' +
     '<p class="stlinks">' + lk("https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(tvSym(id)), "TradingView") + lk("https://finance.yahoo.com/quote/" + se, "Yahoo Finance") + lk("https://stocktwits.com/symbol/" + se, "StockTwits") + lk("https://www.reddit.com/search/?q=" + se + "&sort=new", "Reddit") + lk("https://news.google.com/search?q=" + se + "%20stock", "Google News") + '<button class="lnk2" data-a="paopen" data-k="' + esc(id) + '">Set a price alert</button></p>');
   mNav("st", "stock");
@@ -8843,7 +8853,7 @@ function openHelp() {
     h4("The box") +
     ul(["Each row shows the price, a small chart and the day&rsquo;s change. Choose what the chart covers (today, the week, the month, or off) in " + S("Stocks") + ". In a narrow box the price is cut short to make room.",
       "Sort with the dropdown. Star or hide a stock in Edit mode. To take one off the list for good, press ✕ next to it in <b>Settings → Stocks</b>.",
-      "Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept. <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next stock in the box.",
+      "Point at a stock for its full name, the price with its currency and today&rsquo;s change. Click a stock for its chart and recent news. The switch above the chart changes between a clean price line (point anywhere for the price; 1 day, 1 month, 3 months, 1 year, 5 years or all time) and the full chart with candles, volume and tools. Your choice is kept. <b>‹ ›</b> beside Close (or <code>←</code> <code>→</code>) go to the previous or next stock in the box.",
       "Big indices are drawn with TradingView&rsquo;s own index price, as the official feeds cannot be shown outside TradingView. For the Nasdaq Composite that is the Nasdaq 100, as the window says."]) +
     h4("Market hours (the clock button)") +
     ul(["The clock has the box&rsquo;s &ldquo;up&rdquo; color while the market most of your stocks are on is open, and its &ldquo;down&rdquo; color while it is closed.",
@@ -9018,7 +9028,7 @@ function openHelp() {
 
   html += h3("timers", "Timers &amp; calculator") +
     ul(["The Tools icon (four small squares, first in the menu box) has <b>Timer</b>, <b>Countdown</b>, <b>Stopwatch</b>, <b>Calculator</b> and <b>Speed test</b> (ping, download and upload; on a phone it uses mobile data; your last 10 tests are listed under it with a small chart). <code>I</code> starts a timer and <code>O</code> a stopwatch.",
-      "Several can run at once, with names; they keep running if you close the tab.",
+      "Several can run at once, with names. Close the tab and they keep their time: they carry on when you open the page again, and one that ran out meanwhile rings then. They can only ring while the page is open.",
       "A finished timer or countdown rings every few seconds until you press <b>Stop</b> or remove it. Set how loud in " + S("Notifications") + " " + A + " <b>Alarm volume</b>."]) +
     h4("Calculator") +
     ul(["Click the keys or type: digits, + &minus; * / ^ % ( ), Enter for the result, Backspace for one step back, Delete to clear.",
@@ -9711,10 +9721,27 @@ function showMailPeek(el, i) {
 }
 function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; $("peek").classList.remove("fpk"); }
 var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"], #grid [data-a="radinfo"], #grid [data-a="podplay"], #grid [data-a="podshow"], #grid [data-a="tvopen"]';
+// what a hover card belongs to: the element itself, or for a stock the whole row (its price and change too, not only the symbol)
+function peekEl(t) {
+  var b = t.closest && t.closest(PEEKSEL);
+  if (b) return b;
+  var r = t.closest && t.closest("#grid .row");
+  return r ? r.querySelector('[data-a="open"][data-k^="s:"]') : null;
+}
+function peekArea(b) { return b && /^s:/.test(b.dataset.k || "") ? b.closest(".row") || b : b; }
+// A stock: its full name, the price with its currency and today's change (the box shows only the symbol and a short price)
+function showStockPeek(el, id) {
+  if (EDIT) return;
+  var q = QUOTES[qk(id)], x = (P.stocks || DATA.stocks).filter(function (s) { return s.id === id; })[0] || {}, name = x.name || (q && q.n) || "";
+  $("peek").innerHTML = '<div class="pk"><b>' + esc(name || tk(id)) + "</b>" +
+    (q && q.p != null ? "<p>" + q.p.toFixed(2) + (q.cur ? " " + esc(q.cur) : "") + (q.c != null ? ' · <span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "+" : "") + q.c.toFixed(2) + "% today</span>" : "") + "</p>" : "") +
+    "<small>" + esc(id) + " · click for the chart and news</small></div>";
+  placePeek(el.closest(".row") || el);
+}
 // podcasts and TV shows: a card about the episode or the show
 var PEEK_X = { podplay: "pe:", podshow: "ps:", tvopen: "tv:" };
 document.addEventListener("mouseover", function (e) {
-  var b = e.target.closest && e.target.closest(PEEKSEL), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", rad = b && b.dataset.a === "radinfo", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : rad ? "radio" : PEEK_X[b.dataset.a] ? PEEK_X[b.dataset.a] + b.dataset.k : b.dataset.k);
+  var b = peekEl(e.target), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", rad = b && b.dataset.a === "radinfo", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : rad ? "radio" : PEEK_X[b.dataset.a] ? PEEK_X[b.dataset.a] + b.dataset.k : b.dataset.k);
   if (b && PEEK_X[b.dataset.a]) {
     if (k === peekKey) return;
     clearTimeout(peekT); peekKey = k;
@@ -9724,19 +9751,19 @@ document.addEventListener("mouseover", function (e) {
   // the Radio box: the song card shows while the mouse is on the box itself, not on its list and buttons
   if (rad && (e.target.closest("select, button, input, .dd") || MENU_OPEN)) { if (peekKey === "radio") hidePeek(); return; }
   if (rad) { if (peekKey === "radio") return; clearTimeout(peekT); peekKey = "radio"; peekT = setTimeout(function () { if (peekKey === "radio" && document.contains(b) && $("modal").hidden) showRadioPeek(b); }, 350); return; }
-  if (!b || !(mail || ftr || /^[amrpt]:/.test(k))) return;
+  if (!b || !(mail || ftr || /^[amrpts]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
   peekT = setTimeout(function () {
     if (peekKey !== k || !document.contains(b)) return;
     if (ftr) { showFighterPeek(b, b.dataset.k); return; }   // a fighter's name in a card or fight window
     if (!$("modal").hidden) return;
-    if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else if (k.charAt(0) === "t") showTwPeek(b, k.slice(2)); else showPeek(b, k);
+    if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "s") showStockPeek(b, k.slice(2)); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else if (k.charAt(0) === "t") showTwPeek(b, k.slice(2)); else showPeek(b, k);
   }, 350);
 });
 document.addEventListener("mouseout", function (e) {
-  var b = e.target.closest && e.target.closest(PEEKSEL);
-  if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) hidePeek();
+  var b = peekEl(e.target), a = peekArea(b);
+  if (b && !(e.relatedTarget && a.contains(e.relatedTarget))) hidePeek();
 });
 document.addEventListener("scroll", hidePeek, true);
 document.addEventListener("click", hidePeek, true);
