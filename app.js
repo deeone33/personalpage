@@ -1,4 +1,4 @@
-var VERSION = "0.35.6";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.7";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -8804,7 +8804,7 @@ function openHelp() {
     p("Shows one box big, with more room and more detail. Press <b>⤢</b> in the top right corner of a box (or the Z key). The other boxes shrink into a row of small tiles under the top row (weather, mail, radio, menu); each tile keeps its count: new headlines and posts, who is live, the biggest stock move.") +
     h4("What each box becomes") +
     ul(["<b>News, Reddit, Stocks, Sports, TV shows and Podcasts</b>: a bigger list (with pictures and summaries for headlines and posts, and the currency after a stock&rsquo;s price). What you click opens beside it: the same window that opens anywhere else, so a game stays live and a stock has its chart and news. Point at a row for its card without opening it.",
-      "<b>Telegram</b>: every post in full, with its picture or video in it, and your channels on the left to show or hide.",
+      "<b>Telegram</b>: every post in full, with its picture or video in it, and your channels on the left to show or hide. A post counts as read once it has been on screen for a moment, as in the reader, so it is no longer new in the box or on your other devices.",
       "<b>Twitch</b>: the streams you follow in a row (point at one for its title and preview), a big player, and its chat beside it, under it or hidden. Dock and Pop out work as usual: a docked stream keeps playing, with its sound, while you switch between the boxes, and while one is in the dock the big player waits until you press <b>▶ Play here</b> or pick a stream.",
       "<b>YouTube</b>: a player with the videos of your channels beside it. <b>A web page box</b>: its page, as big as the view."]) +
     h4("On a computer") +
@@ -12989,7 +12989,7 @@ function fzUpdate(T) {
   fzPut("fzT", nv.tools);
   var sub = fzSub(id); if ($("fzSub") && $("fzSub").textContent !== sub) $("fzSub").textContent = sub;
   if (k === "split") { fzPut("fzL", id === "news" ? fzNews() : id === "reddit" ? fzRd() : id === "stocks" ? fzSt() : '<div class="fznat">' + nv.body + "</div>"); fzMark(); fzInline(); }
-  else if (k === "tg") { var ch = fzTgCh(); fzPut("fzCh", ch); var tg = $("fzBody").querySelector(".fztg"); if (tg) tg.classList.toggle("one", !ch); if (!fzVidPlaying()) fzPut("fzF", fzTg()); }
+  else if (k === "tg") { var ch = fzTgCh(); fzPut("fzCh", ch); var tg = $("fzBody").querySelector(".fztg"); if (tg) tg.classList.toggle("one", !ch); if (!fzVidPlaying()) fzPut("fzF", fzTg()); fzWatchRead(); }
   else if (k === "tw") fzTw(nv.body);
   else if (k === "yt") fzYt(nv.body);
   else fzEmb(id);
@@ -13080,6 +13080,31 @@ function fzTgCh() {
     return '<button class="fztgc' + (off ? " off" : "") + '" data-a="fztg" data-k="' + esc(nm) + '" aria-pressed="' + !off + '" title="' + (off ? "Show" : "Hide") + ' this channel here"><span class="fzav" style="--h:' + fzHue(nm) + '">' + esc(nm.charAt(0).toUpperCase()) + "</span><span>" + esc(nm) + "</span><small>" + n + "</small></button>";
   }).join("");
 }
+// The focus view shows every Telegram post in full, so a post counts as read once most of it (or a screenful of a long
+// one) has been in view for a second, as in the reader. The box and your other devices then no longer show it as new.
+// (checked twice a second while Telegram is open in the focus view and the tab is in front)
+var FZRD = { t: 0, seen: {} };
+function fzWatchRead() { if (!FZRD.t) FZRD.t = setInterval(fzReadTick, 500); }
+function fzReadTick() {
+  var F = $("fzF");
+  if (!F || FZ.id !== "telegram") { clearInterval(FZRD.t); FZRD.t = 0; FZRD.seen = {}; return; }
+  if (document.hidden || modalUp()) return;
+  var fr = F.getBoundingClientRect(), now = Date.now(), changed = false;
+  if (!fr.height) return;
+  Array.prototype.forEach.call(F.querySelectorAll(".fzp.new[data-u]"), function (el) {
+    var r = el.getBoundingClientRect(), u = el.dataset.u, vis = Math.min(r.bottom, fr.bottom) - Math.max(r.top, fr.top);
+    if (!(vis > 0 && vis >= Math.min(r.height, fr.height) * 0.6)) { delete FZRD.seen[u]; return; }
+    if (!FZRD.seen[u]) { FZRD.seen[u] = now; return; }
+    if (now - FZRD.seen[u] < 1000) return;
+    delete FZRD.seen[u];
+    if (isRead(u)) return;
+    markReadUrl(u);
+    el.classList.remove("new");
+    var pill = el.querySelector(".fzpt .pill.ac"); if (pill) pill.remove();
+    changed = true;
+  });
+  if (changed) { clearTimeout(fzReadTick.t); fzReadTick.t = setTimeout(render, 700); }   // (the counts in the tiles and the box follow)
+}
 function fzVidPlaying() { var f = $("fzF"); return !!f && Array.prototype.some.call(f.querySelectorAll("video"), function (v) { return !v.paused && !v.ended; }); }
 function fzTg() {
   if (!TGP.length) return '<div class="fznat"><div class="empty">' + (TGERR ? "The posts could not be loaded. Press ! above for the details." : signingIn() ? (tgSrc().length ? "Loading…" : "No channels yet. Add one in Settings → News, Telegram & Reddit.") : "Sign in to load your Telegram channels.") + "</div></div>";
@@ -13088,7 +13113,7 @@ function fzTg() {
     var nw = isNewItem(g, "tg") && !isRead(g.u), vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th, txt = String(g.tx || "").trim() || (vid || img ? "" : String(g.t || ""));
     var media = vid ? '<video class="fzvid" controls playsinline preload="none"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
       : img && fzPics() ? '<button class="fzimg" data-a="fztgo" data-k="' + esc(g.u) + '" title="Show it bigger" aria-label="Show the picture bigger"><img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '"></button>' : "";
-    return '<article class="fzp' + (nw ? " new" : "") + (isRead(g.u) ? " rd" : "") + '"><span class="fzav" style="--h:' + fzHue(g.s) + '">' + esc(String(g.s).charAt(0).toUpperCase()) + '</span><div class="fzpb">' +
+    return '<article class="fzp' + (nw ? " new" : "") + (isRead(g.u) ? " rd" : "") + '" data-u="' + esc(g.u) + '"><span class="fzav" style="--h:' + fzHue(g.s) + '">' + esc(String(g.s).charAt(0).toUpperCase()) + '</span><div class="fzpb">' +
       '<div class="fzpt"><b>' + esc(g.s) + "</b>" + '<span class="mut">' + ago(g.ts) + "</span>" + (nw ? '<span class="pill ac">new</span>' : "") + "</div>" +
       (txt ? "<p>" + esc(txt.slice(0, 4000)) + "</p>" : "") + media + '<div class="fzpa">' + linkBtn(g.u, "Open on Telegram", 1) + laterBtn("m:" + g.u) + "</div></div></article>";
   }).join("") + (l.length > n ? fzMore("telegram", l.length - n) : !w && tgCanOlder() ? (tgOldBusy ? '<p class="mut sn fzmore">Loading older posts…</p>' : '<button class="fzmore" data-a="rdrolder">Load older posts</button>') : "") : '<div class="empty">Nothing matches.</div>') + "</div>";

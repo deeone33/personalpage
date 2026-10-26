@@ -2224,7 +2224,7 @@ body.foc.fznotop #fzShelf{margin-top:0}
 .fzav{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;background:hsl(var(--h,220) 45% 42%);font-size:13px;overflow:hidden}
 .fzfw{max-width:720px;margin:0 auto;padding:4px 16px 24px}
 .fzp{display:flex;gap:12px;padding:14px 4px;border-bottom:1px solid var(--line)}
-.fzp.rd{opacity:.8}
+.fzp.rd{opacity:1}   /* (a post read in the focus view stays as it is: it is read while you are on it) */
 .fzpb{min-width:0;flex:1}
 .fzpt{display:flex;gap:8px;align-items:center;font-size:13.5px}
 .fzp p{margin:5px 0 9px;white-space:pre-line;font-size:14.5px;line-height:1.5;overflow-wrap:anywhere}
