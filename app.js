@@ -1,4 +1,4 @@
-var VERSION = "0.35.5";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.6";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -7163,7 +7163,8 @@ function dockAdd(k, side) {
   var d = { kind: kind, id: id, uid: ++dockUid, side: side === "r" ? "r" : "l" };
   if (kind === "v") { d.cur = id; d.q = []; d.hist = [id]; d.pop = ""; }
   DOCK.push(d);
-  var src = kind === "t" ? twEmbedSrc(id) : ytSrc(id);
+  // docking is always your own click, so the stream starts with its sound (a muted one seemed to stop when you looked away)
+  var src = kind === "t" ? twEmbedSrc(id).replace("&muted=true", "&muted=false") : ytSrc(id).replace("&mute=1", "&mute=0");
   var w = document.createElement("div");
   w.className = "dk" + (kind === "v" ? " dkyt" : ""); w.id = "dk" + d.uid;
   // Twitch: just the player, with Chat and close in its top-right corner when the mouse is over it.
@@ -7180,6 +7181,7 @@ function dockAdd(k, side) {
     if (list) dkLoadList(d, list, false, id);
   }
   if (kind === "t" && P.dockChat) dockChat(d.uid);
+  fzDocked(kind);
   renderSide(); if (!FZ.dock) closeModal();   // (the docked panels on that side now follow the video's width)
 }
 function dockChat(uid) {
@@ -8803,7 +8805,7 @@ function openHelp() {
     h4("What each box becomes") +
     ul(["<b>News, Reddit, Stocks, Sports, TV shows and Podcasts</b>: a bigger list (with pictures and summaries for headlines and posts, and the currency after a stock&rsquo;s price). What you click opens beside it: the same window that opens anywhere else, so a game stays live and a stock has its chart and news. Point at a row for its card without opening it.",
       "<b>Telegram</b>: every post in full, with its picture or video in it, and your channels on the left to show or hide.",
-      "<b>Twitch</b>: the streams you follow in a row (point at one for its title and preview), a big player, and its chat beside it, under it or hidden. Dock and Pop out work as usual.",
+      "<b>Twitch</b>: the streams you follow in a row (point at one for its title and preview), a big player, and its chat beside it, under it or hidden. Dock and Pop out work as usual: a docked stream keeps playing, with its sound, while you switch between the boxes, and while one is in the dock the big player waits until you press <b>▶ Play here</b> or pick a stream.",
       "<b>YouTube</b>: a player with the videos of your channels beside it. <b>A web page box</b>: its page, as big as the view."]) +
     h4("On a computer") +
     ul(["Click a tile to switch boxes; ‹ › in the big box&rsquo;s top line and the ← → keys do the same. ↑ ↓ go through the list.",
@@ -12933,6 +12935,7 @@ function fzBuild() {
   var id = FZ.id, keep = FZ.dock && FZ.built === id;   // (built again for a changed setting: a docked window stays docked)
   if (FZ.dock) { $("modal").appendChild(MBOX); if (!keep) { FZ.dock = false; $("modal").classList.remove("fzdk"); closeModal(); } }
   FZ.built = id; FZ.sig = {}; FZ.ytOn = false;
+  FZ.twOn = !DOCK.some(function (d) { return d.kind === "t"; });   // (a stream in the dock: the big player waits for Play)
   $("fzStage").innerHTML ='<div class="fzh"><span class="fzic">' + fzIco(id, 16) + "</span><h2>" + esc(fzName(id)) + '</h2><span class="fzsub" id="fzSub"></span>' +
     '<div class="fztools"><span id="fzX" class="fzx">' + fzExtra(id) + '</span><span id="fzT" class="hc fzt0"></span></div>' +
     '<div class="fznav"><button class="ib" data-a="fznav" data-k="-1" title="Previous box (←)" aria-label="Previous box">‹</button><button class="ib" data-a="fznav" data-k="1" title="Next box (→)" aria-label="Next box">›</button></div></div>' +
@@ -13115,6 +13118,14 @@ function twAvatars(ls) {
     save("sp_twav", TWAV); twAvBusy = 0; render();
   }).catch(function () {});
 }
+// A stream or video was docked: the focus view's own player stops (one sound at a time), and the dock keeps playing while
+// you switch between the boxes. Coming back to Twitch with a stream in the dock, nothing plays until you press Play.
+function fzDocked(kind) {
+  if (!FZ.id) return;
+  if (kind === "t") FZ.twOn = false;
+  if (kind === "v") FZ.ytOn = false;
+  if (FZ.id === "twitch" || FZ.id === "youtube") render();
+}
 function fmtV(v) { v = +v || 0; return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k" : String(v); }
 function fzTw(nativeBody) {
   var list = fzTwList(), tm = $("fzTm"), x = $("fzX");
@@ -13131,10 +13142,13 @@ function fzTw(nativeBody) {
       '<span class="fzav" style="--h:' + fzHue(x.id) + '">' + (av ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(av) + '">' : esc(String(x.name || x.id).charAt(0).toUpperCase())) + "</span>" +
       "<span><b>" + esc(x.name || x.id) + "</b><small>" + esc(x.off ? (x.last ? "offline · " + ago(x.last) + " ago" : "offline") : (x.sub || "") + " · " + fmtV(x.v)) + "</small></span></button>";
   }).join(""));
-  var s = list.filter(function (x) { return x.id === FZ.tw; })[0], login = s.id, P0 = $("fzP");
-  if (P0.dataset.ch !== login || !P0.querySelector("iframe")) {
-    P0.dataset.ch = login; FZ.sig.fzP = "";
+  var s = list.filter(function (x) { return x.id === FZ.tw; })[0], login = s.id, P0 = $("fzP"), play = FZ.twOn !== false && !s.off, key = login + "|" + play;
+  // While a stream plays in the dock, the big player waits: it says so, and plays only when you press Play or pick a stream.
+  var docked = DOCK.filter(function (d) { return d.kind === "t"; }).map(function (d) { return d.id; });
+  if (P0.dataset.ch !== key) {
+    P0.dataset.ch = key; FZ.sig.fzP = ""; FZ.sig.fzPi = "";
     P0.innerHTML = '<div class="fzpbox"><div class="fzpl">' + (s.off ? '<div class="fzoff">' + fzIco("twitch", 34) + "<b>" + esc(s.name || login) + " is offline</b><span>" + (s.last ? "Last live " + ago(s.last) + " ago" : "") + "</span></div>" :
+      !play ? '<div class="fzoff">' + fzIco("twitch", 34) + "<b>" + esc(s.name || login) + "</b><span>" + (docked.length ? esc(docked.join(", ")) + " is playing in the dock" : "") + '</span><button class="btn pri" data-a="fztwp">▶ Play here</button></div>' :
       '<iframe title="Twitch player" allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc("https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=false&autoplay=true") + '"></iframe>') + '</div></div><div class="fzpi" id="fzPi"></div>';
   }
   fzPut("fzPi", '<span class="fzpt"><b>' + esc(s.name || login) + "</b>" + (s.title ? " · " + esc(s.title) : "") + (s.sub ? ' <span class="mut">· ' + esc(s.sub) + "</span>" : "") + "</span>" +
@@ -13441,7 +13455,8 @@ function fzAct(a, k) {
   if (a === "fznew") { FZ.onlyNew = !FZ.onlyNew; render(); return; }
   if (a === "fztg") { if (FZ.tgOff[k]) delete FZ.tgOff[k]; else FZ.tgOff[k] = 1; render(); return; }
   if (a === "fztgo") { openTG(k, true); return; }
-  if (a === "fztw") { FZ.tw = k; render(); return; }
+  if (a === "fztw") { FZ.tw = k; FZ.twOn = true; render(); return; }   // (picking a stream is pressing play)
+  if (a === "fztwp") { FZ.twOn = true; render(); return; }
   if (a === "fzchat") { if (layM()) fzSet("chatM", k === "off" ? "off" : undefined); else fzSet("chat", k === "right" ? undefined : k); var m = $("fzTm"); if (m) m.className = "fztwm " + fzChat(); $("fzX").innerHTML = fzExtra("twitch"); return; }
   if (a === "fzyt") { FZ.yt = k; FZ.ytOn = true; render(); var m2 = $("fzYm"); if (m2) m2.scrollTop = 0; return; }
   if (a === "fzytp") { FZ.ytOn = true; render(); return; }
