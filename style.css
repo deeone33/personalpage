@@ -2404,3 +2404,4 @@ body.foc #gridw:has(.menu){position:relative;z-index:35}
 .fzpl:fullscreen{width:100vw;height:100vh;max-width:none;aspect-ratio:auto;border-radius:0}
 .fzx:has(.fzcht){flex:none}
 .fzcht.on{background:var(--ac);border-color:var(--ac);color:var(--acfg)}
+#fzT .pill{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:.28em}   /* "6 new" stays one piece; the search field gives up the room */

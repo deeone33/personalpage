@@ -1,4 +1,4 @@
-var VERSION = "0.35.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -683,7 +683,7 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 var EMB_IDS = ["embed1", "embed2", "embed3"];
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv", "podcasts"].concat(EMB_IDS);
 // The focus view (one box big in the middle of the page): its state. The rest of it is further down ("---- Focus view").
-var FZ = { id: "", built: "", dock: false, want: 0, ev: null, sel: {}, q: {}, n: {}, src: {}, onlyNew: false, tgOff: {}, tw: "", yt: "", ytOn: false, sig: {}, y: 0, ign: 0, popAfter: false, reopen: false, last: "", shelf: "" };
+var FZ = { id: "", built: "", dock: false, want: 0, ev: null, sel: {}, q: {}, n: {}, src: {}, onlyNew: false, tgOff: {}, tw: "", yt: "", ytOn: false, sig: {}, y: 0, ign: 0, popAfter: false, reopen: false, last: "", shelf: "", arr: false };
 var FZ_IDS = ["news", "telegram", "stocks", "twitch", "youtube", "reddit", "sports", "tv", "podcasts"].concat(EMB_IDS);
 var FZN = {};   // the counts of the last redraw (new headlines, live streams…) for the tiles
 var MBOX = document.querySelector("#modal .mbox");
@@ -11612,7 +11612,7 @@ function fillOdds(root) {
     var p = k.split(":");
     setTimeout(function () {
       oddsGet(p[0], p[1]).then(function (o) {
-        want[k].forEach(function (el) { var x = o.by[el.dataset.od.split(":")[2]]; if (x && document.contains(el)) { el.textContent = oddsTxt(x); el.title = "Odds to win" + (o.prov ? " (" + o.prov + ")" : "") + (x.fav ? " · favorite" : ""); el.classList.toggle("odf", x.fav); } });
+        want[k].forEach(function (el) { var x = o.by[el.dataset.od.split(":")[2]]; if (x && document.contains(el)) { el.textContent = oddsTxt(x); el.title = "Odds to win" + (o.prov ? " (" + o.prov + ")" : "") + (x.fav ? " · favorite" : ""); el.classList.toggle("odf", !!x.fav); } });
       }).catch(function () {});
     }, i * 120);   // a card has a dozen fights: ask for them one after another, not all at once
   });
@@ -12863,7 +12863,7 @@ function fzShelf() {
   if (FZ.shelf !== sig) {
     FZ.shelf = sig;
     var icons = FZP().tiles === "icons" && !FZ.arr, ch = $("fzChips"), sl = ch ? ch.scrollLeft : 0;
-    sh.classList.toggle("arr", FZ.arr);
+    sh.classList.toggle("arr", !!FZ.arr);
     // Arranging (Edit in the cogwheel menu while the focus view is open): drag a tile to its place, ✕ takes it out of the row
     sh.innerHTML = (FZ.arr ? '<span class="fzarrh">Drag the tiles into your order</span>' : '<button class="fzall" data-a="fzexit" title="Back to all boxes (Esc)" aria-label="Back to all boxes">' + fzSvg(FZ_ICO.grid, 15) + "<span>All boxes</span></button>") +
       '<div class="fzchips" id="fzChips">' + ids.map(function (id) {
