@@ -1,4 +1,4 @@
-var VERSION = "0.35.12";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.13";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -214,7 +214,17 @@ function unent(s) {
   };
   return once(once(String(s)));
 }
-function unentAll(list, keys) { (list || []).forEach(function (x) { keys.forEach(function (k) { if (x[k]) x[k] = unent(x[k]); }); }); return list || []; }
+function unentAll(list, keys) { (list || []).forEach(function (x) { keys.forEach(function (k) { if (x[k]) x[k] = plainLetters(unent(x[k])); }); }); return list || []; }
+// Lookalike letters that some channels use to fake bold, italic or other styles (𝐁𝐨𝐥𝐝, 𝘐𝘵𝘢𝘭𝘪𝘤, 𝔉𝔯𝔞𝔨𝔱𝔲𝔯, 𝕯𝖔𝖚𝖇𝖑𝖊,
+// Ｆｕｌｌｗｉｄｔｈ, Ⓒⓘⓡⓒⓛⓔⓓ): back to plain letters, so they show in the page's own font and search, highlight and mute
+// words find them. Only those letters are changed (the browser's own NFKC conversion, letter by letter); everything
+// else in the text, such as ² or ™ or Chinese punctuation, stays as it is.
+var FANCY_RE = /[\u{1D400}-\u{1D7FF}０-９Ａ-Ｚａ-ｚⒶ-ⓩℊ-ℍℎℐ-ℓℕℙ-ℝℤℨℬℭℯ-ℱℳℴ]/gu;
+var FANCY_ANY = /[\u{1D400}-\u{1D7FF}０-９Ａ-Ｚａ-ｚⒶ-ⓩℊ-ℴ]/u;
+function plainLetters(s) {
+  if (!s || typeof s !== "string" || !FANCY_ANY.test(s) || !String.prototype.normalize) return s;
+  return s.replace(FANCY_RE, function (c) { var n = c.normalize("NFKC"); return n.length <= 2 ? n : c; });
+}
 // Links and images that come from feeds must be plain web addresses (never javascript: or data:)
 function safeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
 function linkBtn(u, label, plain) { u = safeUrl(u); return u ? '<a class="btn' + (plain ? " pl" : "") + '" target="_blank" rel="noopener noreferrer" href="' + esc(u) + '">' + label + "</a>" : ""; }
@@ -5649,7 +5659,7 @@ function loadRdComments(u) {
     if (!box || box.dataset.u !== u) { box = null; Array.prototype.forEach.call(document.querySelectorAll("#rdrL .rdcw"), function (b) { if (b.dataset.u === u) box = b; }); }
     if (!box) return;
     box.innerHTML = v.items.length ? "<h3>Top comments</h3>" + v.items.slice(0, rdComN()).map(function (c) {
-      return '<div class="rdc"><div class="mut"><b>' + esc(c.by) + "</b> · " + ago(c.ts) + ' ago</div><p class="nt">' + esc(unent(c.t)) + "</p></div>";
+      return '<div class="rdc"><div class="mut"><b>' + esc(c.by) + "</b> · " + ago(c.ts) + ' ago</div><p class="nt">' + esc(plainLetters(unent(c.t))) + "</p></div>";
     }).join("") : '<p class="mut sn">' + (v.err ? "Comments unavailable: " + esc(v.err) : "No comments yet.") + "</p>";
   };
   if ($("rdCom")) $("rdCom").dataset.u = u;
@@ -8899,6 +8909,7 @@ function openHelp() {
       "Point at a row for its picture and summary; click it to read it.",
       "<b>Highlight words</b> mark headlines and tell you when a new one appears; <b>mute words</b> hide every headline that contains them.",
       "With several channels, each Telegram post starts with its channel&rsquo;s name. <b>Channel names in Telegram posts</b> turns that off, and <b>Source names after headlines</b> does the same for News and Reddit.",
+      "Some channels write in lookalike letters to fake bold or italic (𝐥𝐢𝐤𝐞 𝐭𝐡𝐢𝐬). They are shown as normal letters, in the page&rsquo;s own font, so search and your highlight and mute words find them too.",
       "The news arrives within a few seconds. A source that is slow that day does not hold the rest up: the <b>!</b> window and the source list in Settings say it is <b>still loading</b>, and its headlines come with the next refresh."]) +
     h4("Search") +
     p("The ⌕ button at the top of News, Telegram and Reddit opens a search field.") +
