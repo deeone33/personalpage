@@ -1,4 +1,4 @@
-var VERSION = "0.35.11";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.12";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -819,7 +819,7 @@ function openSettingsAt(name) {
   var ix = -1;
   Array.prototype.forEach.call(document.querySelectorAll("#panel .setgrp"), function (g, n) { if (ix < 0 && g.dataset.sec.indexOf(name) === 0) ix = n; });
   closeModal(); $("panel").hidden = false;
-  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet();
+  renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); mailFormSoft();
   if (ix >= 0) setSec(ix);
 }
 function tile(id, title, body, click, hx) {
@@ -5740,7 +5740,8 @@ function fetchMail() {
     if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
     MAIL[i] = m; mailAlerts(i, m);
     // Settings → Mail says when the script needs its update, and why reading the inbox failed
-    if (!!(old && old.gsOld) !== !!(m && m.gsOld) || ((old && old.error) || "") !== ((m && m.error) || "")) loadMailForm();
+    // (also after the first answer, so "checking…" turns into "connected ✓")
+    if (!old || !!(old && old.gsOld) !== !!(m && m.gsOld) || ((old && old.error) || "") !== ((m && m.error) || "")) mailFormSoft();
   };
   var bad = function (msg) { return { error: msg || "no data" }; };
   var jobs = [];
@@ -5863,6 +5864,8 @@ function mailFixText(e) {
   if (/could not reach|failed to fetch|network/i.test(e)) return "The Gmail script could not be reached just now. Check that it is still deployed, then try again.";
   return "Reading this inbox failed. Check the steps in Help → Mail; Replace with the script's address and token often fixes it.";
 }
+// Settings → Mail drawn again for a new state, unless a Replace / Connect form is open (that would lose what is being typed)
+function mailFormSoft() { if (!MLUI[0] && !MLUI[1]) loadMailForm(); }
 function mailMsg(t) { var m = $("mailMsg"); if (m) m.textContent = t || ""; }
 // The update of an older Gmail script (version 1 read its token from the web address): the new code and three steps
 function mailUpdHelp() {
@@ -8232,7 +8235,7 @@ document.addEventListener("click", function (e) {
   if (a === "opensettingsloc") { $("panel").hidden = true; openLocationPicker(); return; }
   if (a === "locgo") { locGo(); return; }
   if (a === "locpick") { locPick(+k); return; }
-  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); return; }
+  if (a === "setpanel") { MENU_OPEN = ""; render(); $("panel").hidden = false; setSec(SETSEC); renderNfLog(); renderBmSet(); renderClkSet(); renderIcsSet(); renderStSet(); renderEmbSet(); renderTvSet(); renderPodSet(); renderTabSet(); mailFormSoft(); return; }
   if (/^(ckreset|wcgo|wcadd|wcdel|wcmv)$/.test(a)) { clkAct(a, k); return; }
   if (a.indexOf("bm") === 0 && /^bm(folder|add|addf|colreset|mv|del|pick|icon|colclr)$/.test(a)) { if (a === "bmfolder") e.stopPropagation(); bmAct(a, k); return; }
   if (a === "openhelp") { MENU_OPEN = ""; render(); openHelp(); return; }
