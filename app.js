@@ -1,4 +1,4 @@
-var VERSION = "0.35.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -12860,6 +12860,7 @@ function fzBadge(id) {
 function fzShelf() {
   var ids = fzList(), sig = ids.join(",") + "|" + (FZP().tiles || "") + "|" + ids.map(fzName).join(",") + "|" + FZ.arr;
   var sh = $("fzShelf");
+  if (FZ.drag) return;   // (a tile is being dragged: the row stays as it is until it is let go)
   if (FZ.shelf !== sig) {
     FZ.shelf = sig;
     var icons = FZP().tiles === "icons" && !FZ.arr, ch = $("fzChips"), sl = ch ? ch.scrollLeft : 0;
@@ -13367,29 +13368,43 @@ window.addEventListener("resize", function () { clearTimeout(fzFit.t); fzFit.t =
 // ← →; ✕ takes one out of the row; Done, Edit again or Esc ends it. The order follows your account (P.focus.order).
 function fzArrange(on) { FZ.arr = !!on; FZ.shelf = ""; hidePeek(); render(); if (on) { var c = document.querySelector("#fzChips .fzc"); if (c) try { c.focus({ preventScroll: true }); } catch (e) {} } }
 function fzOrderSave() { var row = $("fzChips"); if (row) fzSet("order", Array.prototype.map.call(row.querySelectorAll(".fzc"), function (k) { return k.dataset.k; })); }
+// The drag listens on the whole window (a tile that is moved to its new place in the row would lose a pointer capture,
+// and with it the rest of the drag). The row is not redrawn while a tile is held, and near its ends it scrolls by itself.
 document.addEventListener("pointerdown", function (e) {
-  if (!FZ.arr) return;
+  if (!FZ.arr || FZ.drag) return;
   var c = e.target.closest && e.target.closest("#fzChips .fzc");
   if (!c || e.target.closest(".fzhide") || e.button > 0) return;
   e.preventDefault();
-  var row = $("fzChips"), moved = false, x0 = e.clientX;
-  try { c.setPointerCapture(e.pointerId); } catch (x) {}
+  var row = $("fzChips"), moved = false, x0 = e.clientX, lastX = e.clientX, pid = e.pointerId, scr = 0;
+  FZ.drag = true;
   c.classList.add("drag");
-  function mv(ev) {
-    if (!moved && Math.abs(ev.clientX - x0) < 4) return;
-    moved = true;
+  function place(x) {
     var kids = Array.prototype.filter.call(row.children, function (k) { return k !== c; }), before = null;
-    for (var i = 0; i < kids.length; i++) { var r = kids[i].getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { before = kids[i]; break; } }
-    if (c.nextElementSibling !== before) row.insertBefore(c, before);
-    var rr = row.getBoundingClientRect();
-    if (ev.clientX < rr.left + 30) row.scrollLeft -= 14; else if (ev.clientX > rr.right - 30) row.scrollLeft += 14;
+    for (var i = 0; i < kids.length; i++) { var r = kids[i].getBoundingClientRect(); if (x < r.left + r.width / 2) { before = kids[i]; break; } }
+    if (c.nextElementSibling !== before && !(before === null && row.lastElementChild === c)) row.insertBefore(c, before);
   }
-  function up() {
-    c.removeEventListener("pointermove", mv); c.removeEventListener("pointerup", up); c.removeEventListener("pointercancel", up);
-    c.classList.remove("drag");
-    if (moved) fzOrderSave();
+  // held near an end of the row: it keeps scrolling that way, and the tile keeps finding its place
+  function edge() {
+    var rr = row.getBoundingClientRect(), d = lastX < rr.left + 36 ? -8 : lastX > rr.right - 36 ? 8 : 0;
+    if (d) { row.scrollLeft += d; place(lastX); }
+    scr = d ? setTimeout(edge, 16) : 0;
   }
-  c.addEventListener("pointermove", mv); c.addEventListener("pointerup", up); c.addEventListener("pointercancel", up);
+  function mv(ev) {
+    if (ev.pointerId !== pid) return;
+    lastX = ev.clientX;
+    if (!moved && Math.abs(ev.clientX - x0) < 5) return;
+    moved = true; ev.preventDefault();
+    place(ev.clientX);
+    if (!scr) edge();
+  }
+  function up(ev) {
+    if (ev.pointerId !== pid) return;
+    window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+    if (scr) clearTimeout(scr);
+    c.classList.remove("drag"); FZ.drag = false;
+    if (moved) { fzOrderSave(); FZ.shelf = ""; }
+  }
+  window.addEventListener("pointermove", mv, { passive: false }); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
 });
 function fzAct(a, k) {
   if (a === "fzarr") { fzArrange(false); return; }
