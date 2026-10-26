@@ -2407,3 +2407,9 @@ body.foc #gridw:has(.menu){position:relative;z-index:35}
 #fzT .pill{white-space:nowrap;flex:none;display:inline-flex;align-items:center;gap:.28em}   /* "6 new" stays one piece; the search field gives up the room */
 @media (max-width:820px){.fzarrh{display:none}}   /* (a phone needs the width for the tiles; Done says what mode this is) 
 #fzShelf.arr .fzchips{min-width:120px}
+/* a stream in a game window: ▶ docks it left, ⇥ beside it docks it right (one joined button) */
+.spws{display:inline-flex;align-items:stretch;margin:0 6px 6px 0}
+.mbox .tools .spws>button{margin:0}
+.spws>button:first-child:not(:last-child){border-top-right-radius:0;border-bottom-right-radius:0}
+.spws>button+button{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px!important;padding-left:10px;padding-right:10px}
+@media(max-width:820px){.dksd{display:none!important}.spws>button:first-child{border-radius:9px}}

@@ -1,4 +1,4 @@
-var VERSION = "0.35.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.5";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -7157,7 +7157,8 @@ function dockAdd(k, side) {
   // "t:login" a Twitch stream, "v:videoId" a YouTube video, "v:videoId|listId" a video of a playlist (the rest goes in Up next)
   var kind = k.charAt(0), id = k.slice(2), list = "";
   if (kind === "v" && id.indexOf("|") > 0) { list = id.split("|")[1]; id = id.split("|")[0]; }
-  if (DOCK.some(function (d) { return d.kind === kind && (d.id === id || d.cur === id); })) { closeModal(); return; }
+  // (in the focus view the window it came from stays open beside the list, so you do not lose your place)
+  if (DOCK.some(function (d) { return d.kind === kind && (d.id === id || d.cur === id); })) { if (!FZ.dock) closeModal(); return; }
   if (DOCK.length >= 3) { alert("The dock is full (3 players). Close one first."); return; }
   var d = { kind: kind, id: id, uid: ++dockUid, side: side === "r" ? "r" : "l" };
   if (kind === "v") { d.cur = id; d.q = []; d.hist = [id]; d.pop = ""; }
@@ -7169,7 +7170,7 @@ function dockAdd(k, side) {
   // YouTube: a thin bar above it (search, Up next, Autoplay, close) and a list that opens over the video.
   w.innerHTML = (kind === "v" ? dkBarHtml(d) + '<div class="dkpop" hidden></div>' : "") +
     '<div class="tw"><iframe allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="' + src + '"></iframe></div>' +
-    (kind === "t" ? '<div class="dkc"><button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button><button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>' : "");
+    (kind === "t" ? '<div class="dkc"><button data-a="dockchat" data-k="' + d.uid + '" title="Show or hide chat">Chat</button><button class="dksd" data-a="dockside" data-k="' + d.uid + '" title="Move it to the other side of the page" aria-label="Move to the other side">⇄</button><button data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>' : "");
   $(d.side === "r" ? "dockPR" : "dockP").appendChild(w);
   if (kind === "v") {
     var f = w.querySelector(".tw iframe");
@@ -7179,7 +7180,7 @@ function dockAdd(k, side) {
     if (list) dkLoadList(d, list, false, id);
   }
   if (kind === "t" && P.dockChat) dockChat(d.uid);
-  renderSide(); closeModal();   // (the docked panels on that side now follow the video's width)
+  renderSide(); if (!FZ.dock) closeModal();   // (the docked panels on that side now follow the video's width)
 }
 function dockChat(uid) {
   var w = $("dk" + uid), d = DOCK.filter(function (x) { return x.uid === +uid; })[0];
@@ -7226,6 +7227,15 @@ document.addEventListener("dblclick", function (e) {
   if (g.dataset.g === "h") delete P.chatH; else delete P.chatW;
   persist(); Array.prototype.forEach.call(document.querySelectorAll(".dkchat"), chatSize);
 });
+// ⇄ on a docked player: it moves to the other side of the page (the stream starts again there; a browser reloads a moved player)
+function dockSide(uid) {
+  var d = dkOf(uid), w = $("dk" + uid);
+  if (!d || !w) return;
+  d.side = d.side === "r" ? "l" : "r";
+  $(d.side === "r" ? "dockPR" : "dockP").appendChild(w);
+  if (d.kind === "v") { d.ready = false; ytHello(d); }
+  renderSide();
+}
 function undock(uid) {
   var d = dkOf(uid); if (d) clearInterval(d.hello);
   DOCK = DOCK.filter(function (d) { return d.uid !== +uid; });
@@ -7314,6 +7324,7 @@ function dkBarHtml(d) {
     '<input type="search" class="dkq" data-dk="' + d.uid + '" placeholder="' + (sb && USER ? "Search YouTube or paste a link…" : "Sign in to search") + '"' + (sb && USER ? "" : " disabled") + ' aria-label="Search YouTube" autocomplete="off">' +
     '<button class="ib sm dkqb' + (d.pop === "q" ? " on" : "") + '" data-a="dkq" data-k="' + d.uid + '" title="Up next" aria-label="Up next: ' + n + '">≡' + (n ? "<b>" + n + "</b>" : "") + "</button>" +
     '<button class="ib sm dka' + (on ? " on" : "") + '" data-a="dkauto" title="Autoplay ' + (on ? "on: the next video starts by itself" : "off") + '" aria-label="Autoplay ' + (on ? "on" : "off") + '">⟳</button>' +
+    '<button class="ib sm dksd" data-a="dockside" data-k="' + d.uid + '" title="Move it to the other side of the page" aria-label="Move to the other side">⇄</button>' +
     '<button class="ib sm" data-a="undock" data-k="' + d.uid + '" title="Close" aria-label="Close player">✕</button></div>';
 }
 // only the counter and the two switches change; the search field is left alone, so typing is never disturbed
@@ -8294,6 +8305,7 @@ document.addEventListener("click", function (e) {
   if (a === "dock") { dockAdd(k); return; }
   if (a === "dockr") { dockAdd(k, "r"); return; }
   if (a === "undock") { undock(k); return; }
+  if (a === "dockside") { dockSide(k); return; }
   if (a === "dockchat") { dockChat(k); return; }
   if (a === "mailread") { markRead(+k); return; }
   if (a === "mailall") { showAllMail(+k); return; }
@@ -9147,6 +9159,7 @@ function openHelp() {
       "On a phone there is one <b>Dock</b> button, and docked panels sit at the top of the page."]) +
     h4("Watching while you browse") +
     ul(["Open a Twitch stream or a YouTube video and press <b>Dock left</b> or <b>Dock right</b> (on a phone <b>Dock to top</b>). It keeps playing beside the page. Up to 3 at once; drag a strip&rsquo;s edge to resize it.",
+      "<b>⇄</b> on a docked player moves it to the other side of the page (a YouTube player has it in its bar, a Twitch player shows it when you point at it). In a game&rsquo;s window, ▶ docks a stream at the left and ⇥ beside it at the right; in the focus view the game stays open while it plays.",
       "Twitch: point at a docked player for its <b>Chat</b> and close buttons. Drag the bottom or right edge of the chat to resize it (double-click to reset). To open chat by itself when you dock, tick it in " + S("Twitch") + "."]) +
     h4("YouTube in the dock") +
     p("A docked YouTube video has one thin bar above it: a search field, <b>≡</b> Up next, <b>⟳</b> Autoplay and <b>✕</b> close. On a phone the field folds into a <b>⌕</b> button.") +
@@ -11073,7 +11086,7 @@ function openSport(id, back) {
     body = '<div class="spscore">' + team(e.home) + '<div class="spmid"><b class="big' + (e.state !== "pre" && (String(e.home.s) + String(e.away.s)).length > 6 ? " long" : "") + '">' + (e.state === "pre" ? "–" : esc(e.home.s) + " – " + esc(e.away.s)) + "</b>" + spWhen(e) + "</div>" + team(e.away) + "</div>" +
       (e.recap ? '<p class="mut sn sprecap">' + esc(e.recap) + "</p>" : "") +
       // esports: the Twitch channels showing this match; a click docks the stream at the side of the page
-      (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + "</button>"; }).join("") + "</p>" : "") + spEventsHtml(e, false) + '<div id="spLn">' + spLinesHtml(e) + '</div><div id="spSc"></div><div id="spStats">' + spStatsHtml(e) + '</div><div id="spLead">' + spLeadersHtml(e) + '</div><div id="spSum"></div>' +
+      (e.tw && e.tw.length && e.state !== "post" ? '<p class="tools spwatch">' + e.tw.map(function (l, i) { return '<span class="spws"><button class="' + (i ? "" : "pri") + '" data-a="dock" data-k="t:' + esc(l) + '" title="Dock this Twitch stream at the left side of the page">▶ ' + (i ? "" : "Watch · ") + esc(l) + '</button><button class="dkr' + (i ? "" : " pri") + '" data-a="dockr" data-k="t:' + esc(l) + '" title="Dock it at the right side instead" aria-label="Dock ' + esc(l) + ' at the right side">⇥</button></span>'; }).join("") + "</p>" : "") + spEventsHtml(e, false) + '<div id="spLn">' + spLinesHtml(e) + '</div><div id="spSc"></div><div id="spStats">' + spStatsHtml(e) + '</div><div id="spLead">' + spLeadersHtml(e) + '</div><div id="spSum"></div>' +
       (e.venue ? '<p class="mut sn">' + esc(e.venue) + (e.att ? " · " + e.att.toLocaleString("en-GB") + " spectators" : "") + "</p>" : "") + '<div id="spTab"></div>';
   }
   openModal(e.lg, '<div class="spwin" data-sp="' + esc(id) + '" data-sig="' + esc(spSig(id)) + '">' + spBackBtn() + body + spCalBtns(e) + (e.link ? '<p class="tools">' + linkBtn(e.link, e.id.indexOf("x/shl") === 0 ? "Schedule on shl.se" : e.id.indexOf("x/") === 0 ? "Details on bo3.gg" : "Details on ESPN") + "</p>" : "") + "</div>");
