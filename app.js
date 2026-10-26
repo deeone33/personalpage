@@ -1,4 +1,4 @@
-var VERSION = "0.33.6";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.34.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -682,6 +682,25 @@ function card(cls, title, body) { return '<div class="card ' + cls + '"><h3>' + 
 // embed1-3 are the web page boxes: off until you give one an address (Settings > Web page boxes)
 var EMB_IDS = ["embed1", "embed2", "embed3"];
 var ALL_IDS = ["weather", "mail", "live", "menu", "news", "telegram", "twitch", "youtube", "stocks", "reddit", "sports", "tv", "podcasts"].concat(EMB_IDS);
+// The focus view (one box big in the middle of the page): its state. The rest of it is further down ("---- Focus view").
+var FZ = { id: "", built: "", dock: false, want: 0, ev: null, sel: {}, q: {}, n: {}, src: {}, onlyNew: false, tgOff: {}, tw: "", yt: "", ytOn: false, sig: {}, y: 0, ign: 0, popAfter: false, reopen: false, last: "", shelf: "" };
+var FZ_IDS = ["news", "telegram", "stocks", "twitch", "youtube", "reddit", "sports", "tv", "podcasts"].concat(EMB_IDS);
+var FZN = {};   // the counts of the last redraw (new headlines, live streams…) for the tiles
+var MBOX = document.querySelector("#modal .mbox");
+var FZ_ICO = {
+  news: '<path d="M4 5h13v14H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v8a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5M8 17h3"/>',
+  telegram: '<path d="M21 4 3 11l6 2 2 6 3-4 5 4z"/><path d="m9 13 8-6"/>',
+  stocks: '<path d="M3 17l6-6 4 4 7-8"/><path d="M14 7h6v6"/>',
+  twitch: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M10 8v5l4-2.5z"/>',
+  youtube: '<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9v6l5-3z"/>',
+  reddit: '<path d="M21 12a8 8 0 0 1-12 7l-5 1 1-4.5A8 8 0 1 1 21 12z"/>',
+  sports: '<circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 5h-5L8 10z"/>',
+  tv: '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 3l4 4 4-4"/>',
+  podcasts: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  web: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'
+};
 var DEF_C = { weather: 3, mail: 3, live: 4, menu: 2, news: 6, telegram: 6, twitch: 4, youtube: 4, stocks: 4, reddit: 6, sports: 6, tv: 4, podcasts: 4, embed1: 6, embed2: 6, embed3: 6 };
 // The layout a new visitor or a new account starts with: sizes, text sizes, list lengths and order.
 // Top row of small boxes, News and Telegram side by side, then Stocks, Twitch, YouTube and (stacked) Reddit over Sports.
@@ -813,7 +832,8 @@ function tile(id, title, body, click, hx) {
   var h3 = "<h3>" + title + "</h3>";
   var rb = REFRESH[id] ? '<button class="ib sm rf" data-a="refresh" data-k="' + id + '" title="Reload this box" aria-label="Reload ' + id + '">' + (boxBusy(id) ? '<span class="spin">↻</span>' : "↻") + "</button>" : "";
   var errs = cp ? [] : boxErrs(id), eb = errs.length ? '<button class="ib sm errb" data-a="boxerr" data-k="' + id + '" title="' + esc(errs.length > 1 ? errs.length + " problems. Click for the details." : errs[0].what + ". Click for the details.") + '" aria-label="Problem in this box">!</button>' : "";
-  var head = cp ? "" : '<div class="th">' + h3 + (hx || rb || eb ? '<div class="hc">' + eb + (hx || "") + rb + "</div>" : "") + "</div>";
+  var fz = cp ? "" : fzBtn(id);
+  var head = cp ? "" : '<div class="th">' + h3 + (hx || rb || eb || fz ? '<div class="hc">' + eb + (hx || "") + rb + fz + "</div>" : "") + "</div>";
   return '<div class="card c' + c + (cp ? " compact" : "") + (id === "menu" && MENU_OPEN ? " menuopen" : "") + (click ? " click" : "") + '" data-id="' + id + '" style="--fs:' + fsOf(id).toFixed(2) + '"' + at + ">" + head + t + body + "</div>";
 }
 function opts(list, cur) { return list.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join(""); }
@@ -912,7 +932,8 @@ function render() {
   var twv = (tcat ? tw.filter(function (x) { return (x.sub || "?") === tcat; }) : tw.slice()).sort(function (a, b) {
     return favFirst(a, b) || (TS === "name" ? String(a.name || a.id).toLowerCase().localeCompare(String(b.name || b.id).toLowerCase()) : TS === "cat" ? String(a.sub || "").localeCompare(String(b.sub || "")) || b.v - a.v : b.v - a.v);
   });
-  var ctlT = '<select data-s="sort:twitch" aria-label="Sort streams">' + opts([["viewers", "Views"], ["name", "Name"], ["cat", "Cat."]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
+  // the sort is a small ⇅ button (its choices open as a normal list), so the category and the other buttons keep their room
+  var ctlT = '<select data-s="sort:twitch" class="selic" aria-label="Sort streams" title="Sort: ' + ({ viewers: "most viewers", name: "name", cat: "category" }[TS] || "most viewers") + '">' + opts([["viewers", "Sort: most viewers"], ["name", "Sort: name"], ["cat", "Sort: category"]], TS) + '</select><select data-s="tcat" aria-label="Filter by category"><option value="">All categories</option>' +
     Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || a.localeCompare(b); }).map(function (c) { return '<option value="' + esc(c) + '"' + (c === tcat ? " selected" : "") + ">" + esc(c) + " (" + cats[c] + ")</option>"; }).join("") + "</select>";
   // ★ streamers who are offline come after the live ones, dimmed, most recently live first
   var liveIds = {}; tw.forEach(function (x) { liveIds[x.id] = 1; });
@@ -958,6 +979,7 @@ function render() {
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
   }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : signingIn() ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR + (rp.length ? rdrBtn("rd") + fBtn("rd") : ""));
 
+  FZN = { news: nNew, telegram: tNew, reddit: rNew, twitch: tw.length, podcasts: boxOff("podcasts") ? 0 : podNewN(), sports: boxOff("sports") ? 0 : spEvents().filter(function (e) { return e.state === "in"; }).length };
   T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
   var st = stockRows();
@@ -1018,7 +1040,9 @@ function render() {
   fltNote();
   $("grid").querySelectorAll("input[id]").forEach(function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
   if (actId) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
-  $("grid").innerHTML = orderIds().map(function (id) { return id !== "live" && boxOff(id) ? "" : T[id] || ""; }).join("");
+  // (in the focus view only the top row stays in the grid; the box in focus is drawn by fzUpdate from the same html)
+  $("grid").innerHTML = orderIds().map(function (id) { return (id !== "live" && boxOff(id)) || (FZ.id && COMPACT.indexOf(id) < 0) ? "" : T[id] || ""; }).join("");
+  if (FZ.id) fzUpdate(T);
   $("grid").querySelectorAll(".list[data-list]").forEach(function (n) { if (scrolls[n.dataset.list]) n.scrollTop = scrolls[n.dataset.list]; });
   Object.keys(typed).forEach(function (id) { var n = $(id); if (n && n.value !== typed[id]) n.value = typed[id]; });
   if (actId) { var fn = $(actId); if (fn) { try { fn.focus({ preventScroll: true }); if (sel && sel[0] != null) fn.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
@@ -2617,7 +2641,7 @@ function mkCells(m, full) {
 // the small box under the mouse: your main markets, in the same columns as the window
 function mkPeek(el) {
   var main = mkMain(), rest = mkListed().length - main.length;
-  if (!main.length || EDIT || !$("modal").hidden) return;
+  if (!main.length || EDIT || modalUp()) return;
   $("peek").innerHTML = '<div class="mkpop"><div class="mkgrid">' + main.map(function (m) { return '<div class="mkline">' + mkCells(m, false) + "</div>"; }).join("") + '</div><small class="mkhint">' + (rest > 0 ? "+" + rest + " more · " : "") + "click for all</small></div>";
   // right under the button (above it when there is no room below), kept inside the window
   var p = $("peek");
@@ -3812,6 +3836,7 @@ function edEnd(keep) {
 }
 // Edit on and off, from the cogwheel menu and the E key
 function toggleEdit() {
+  if (FZ.id) fzLeave(false, true);   // boxes are moved on the whole page
   if (EDIT) { if (ED.on) edEnd(true); else { EDIT = false; document.body.classList.remove("editing"); render(); } return; }
   EDIT = true; document.body.classList.add("editing");
   edStart();
@@ -4085,6 +4110,7 @@ var KEYNAV = false, MOPEN = null;
 document.addEventListener("keydown", function (e) { if (e.key === "Tab" || e.key === "Enter" || e.key === " " || /^Arrow/.test(e.key)) KEYNAV = true; }, true);
 document.addEventListener("pointerdown", function () { KEYNAV = false; }, true);
 function openModal(title, html) {
+  fzRoute();   // in the focus view: docked into the page, or on top of it
   rdrOff();   // a reader that was open notes what was read, and gives up its button beside Close
   if ($("modal").hidden) {
     var el = document.activeElement, inWin = el && el.closest && (el.closest("#modal") || el.closest("#panel"));
@@ -4099,6 +4125,7 @@ function closeModal() {
   rdrOff();
   $("modal").hidden = true; $("mBody").innerHTML = "";
   MOPEN = null;
+  fzClosed(was);
   if (!was || !$("panel").hidden) return;
   var act = document.activeElement, typing = act && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName);
   if (o && o.key) {
@@ -8126,6 +8153,7 @@ document.addEventListener("click", function (e) {
   if (!b) return;
   var a = b.dataset.a, k = b.dataset.k;
   trackClick(a === "open" ? "open-" + String(k).charAt(0) : a, b);
+  if (a.indexOf("fz") === 0) { fzAct(a, k); return; }
   if (a === "filttoggle") { if (b.checked) delete P.hidden[k]; else P.hidden[k] = true; persist(); render(); return; }
   if (a === "clockmenu2") { e.stopPropagation(); audio(); MENU_OPEN = MENU_OPEN === "clock" ? "" : "clock"; render(); return; }
   if (a === "cogmenu2") { e.stopPropagation(); MENU_OPEN = MENU_OPEN === "cog" ? "" : "cog"; render(); return; }
@@ -8699,7 +8727,7 @@ var GS_CODE = '// Paste this whole file into your Apps Script project (replace w
 // on the help page (help.html), made from this; keep the two the same.
 function openHelp() {
   var groups = [
-    ["Getting started", [["start", "Account &amp; setup guide"], ["edit", "Arranging the page"], ["looks", "Colors &amp; wallpaper"], ["clock", "Date, time &amp; world clocks"]]],
+    ["Getting started", [["start", "Account &amp; setup guide"], ["edit", "Arranging the page"], ["focus", "Focus view"], ["looks", "Colors &amp; wallpaper"], ["clock", "Date, time &amp; world clocks"]]],
     ["Boxes", [["weather", "Weather"], ["news", "News &amp; Telegram"], ["reddit", "Reddit"], ["sports", "Sports"], ["stocks", "Stocks"], ["tv", "TV shows"], ["twitch", "Twitch"], ["youtube", "YouTube"], ["radio", "Radio"], ["pod", "Podcasts"], ["mail", "Mail (Gmail)"]]],
     ["Tools", [["notes", "Notes &amp; read later"], ["cal", "Calendar"], ["timers", "Timers &amp; calculator"], ["keys", "Search bar &amp; shortcuts"], ["bm", "Bookmarks bar"], ["embed", "Web page boxes"], ["dock", "Docking"]]],
     ["Alerts", [["ntf", "Notifications"], ["away", "While you are away"], ["summary", "Summary"]]],
@@ -8757,6 +8785,17 @@ function openHelp() {
       "Hidden boxes are the same on every device."]) +
     h4("Reloading and problems") +
     ul(["Every list box has a ↻ button to reload it.", "A small <b>!</b> in a box means something could not be loaded. Click it for what failed, why, since when, and what you can do."]);
+
+  html += h3("focus", "Focus view") +
+    p("Shows one box big in the middle of the page, with more room and more detail. Press <b>⤢</b> in the top right corner of a box (or the Z key).") +
+    ul(["The other boxes shrink into a row of small tiles under the top row (weather, mail, radio, menu). Each tile keeps its count: new headlines and posts, who is live, the biggest stock move. Click a tile to switch boxes; ‹ › in the big box&rsquo;s top line and the ← → keys do the same.",
+      "<b>News, Reddit, Stocks, Sports, TV shows and Podcasts</b>: a bigger list on the left (with pictures and summaries for headlines and posts), and what you click opens on the right, the same window that opens anywhere else, so a game stays live and a stock has its chart and news. ↑ ↓ go through the list.",
+      "<b>Telegram</b>: every post in full, with its picture or video in it, and your channels on the left to show or hide.",
+      "<b>Twitch</b>: a big player with its chat beside it, under it or hidden, and the streams you follow in a row above. Dock and Pop out work as usual.",
+      "<b>YouTube</b>: a player with the videos of your channels beside it. <b>A web page box</b>: its page, as big as the view.",
+      "The thin bar between two sides can be dragged to make one side bigger; each box keeps its own. Double-click it to put it back.",
+      "Back to all boxes: <b>Esc</b>, the <b>⊞</b> button at the start of the tile row, the browser&rsquo;s Back, or ⤢ / Z again. On a phone, Back first closes what is open on the right.",
+      "Everything about it is in " + S("Focus view") + ": switch it off (⤢ leaves the boxes), choose which boxes have it, how it moves (or not at all), the tiles, the height, pictures, Twitch chat and the keys."]);
 
   html += h3("looks", "Colors &amp; wallpaper") +
     h4("Appearance (" + S("Appearance") + ")") +
@@ -9773,19 +9812,19 @@ document.addEventListener("mouseover", function (e) {
   if (b && PEEK_X[b.dataset.a]) {
     if (k === peekKey) return;
     clearTimeout(peekT); peekKey = k;
-    peekT = setTimeout(function () { if (peekKey === k && document.contains(b) && $("modal").hidden) { if (k.slice(0, 3) === "tv:") showTvPeek(b, k.slice(3)); else showPodPeek(b, k); } }, 350);
+    peekT = setTimeout(function () { if (peekKey === k && document.contains(b) && !modalUp()) { if (k.slice(0, 3) === "tv:") showTvPeek(b, k.slice(3)); else showPodPeek(b, k); } }, 350);
     return;
   }
   // the Radio box: the song card shows while the mouse is on the box itself, not on its list and buttons
   if (rad && (e.target.closest("select, button, input, .dd") || MENU_OPEN)) { if (peekKey === "radio") hidePeek(); return; }
-  if (rad) { if (peekKey === "radio") return; clearTimeout(peekT); peekKey = "radio"; peekT = setTimeout(function () { if (peekKey === "radio" && document.contains(b) && $("modal").hidden) showRadioPeek(b); }, 350); return; }
+  if (rad) { if (peekKey === "radio") return; clearTimeout(peekT); peekKey = "radio"; peekT = setTimeout(function () { if (peekKey === "radio" && document.contains(b) && !modalUp()) showRadioPeek(b); }, 350); return; }
   if (!b || !(mail || ftr || /^[amrpts]:/.test(k))) return;
   if (k === peekKey) return;
   clearTimeout(peekT); peekKey = k;
   peekT = setTimeout(function () {
     if (peekKey !== k || !document.contains(b)) return;
     if (ftr) { showFighterPeek(b, b.dataset.k); return; }   // a fighter's name in a card or fight window
-    if (!$("modal").hidden) return;
+    if (modalUp()) return;
     if (mail) showMailPeek(b, +b.dataset.k); else if (k.charAt(0) === "s") showStockPeek(b, k.slice(2)); else if (k.charAt(0) === "p") showSportPeek(b, k.slice(2)); else if (k.charAt(0) === "t") showTwPeek(b, k.slice(2)); else showPeek(b, k);
   }, 350);
 });
@@ -12473,7 +12512,7 @@ function loadExtraForm() {
   $("rdComSel").value = String(rdComN()); $("twOffOn").checked = twOffOn(); $("devMailOn").checked = P.devMail !== false; $("pasteOn").checked = P.pasteNote !== false;
   $("sparkSel").value = sparkOn() ? sparkRange() : "off"; $("spCalOn").checked = P.spCal !== false;
   $("wxUnits").value = P.wxu === "m" || P.wxu === "i" ? P.wxu : "";
-  renderKeys();
+  renderKeys(); renderFzSet();
 }
 function setWords() { P.nwords = { mute: $("nwMute").value.trim(), hi: $("nwHi").value.trim() }; persist(); render(); }
 $("nwMute").onchange = setWords; $("nwHi").onchange = setWords;
@@ -12698,6 +12737,7 @@ var KEY_ACTS = [
   ["timer", "i", "New timer", function () { audio(); openClock("t"); }],
   ["stopwatch", "o", "Start a stopwatch", function () { audio(); startStopwatch(); }],
   ["undock", "u", "Close the docked players", function () { DOCK.slice().forEach(function (d) { undock(d.uid); }); }],
+  ["focus", "z", "Focus view (one box big) on and off", function () { fzKey(); }],
   ["settings", "s", "Settings", function () { $("panel").hidden = !$("panel").hidden; }],
   ["keys", "k", "Change these shortcuts", function () { openKeys(); }],
   ["theme", "t", "Light / dark", function () { P.theme = P.theme === "dark" ? "light" : "dark"; persist(); applyTheme(); }],
@@ -12750,12 +12790,607 @@ document.addEventListener("keydown", function (e) {
 document.addEventListener("keydown", function (e) {
   if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || !keysOn()) return;
   var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-  if (typing || !$("modal").hidden) return;
+  if (typing || modalUp()) return;
   var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   var act = KEY_ACTS.filter(function (x) { return keyOf(x[0]) === k; })[0];
   if (!act) return;
   e.preventDefault();
   act[3]();
+});
+
+// ---- Focus view: one box big in the middle of the page ----
+// ⤢ in a box's top line moves the other boxes out of the way: they shrink into a row of small tiles under the top row
+// (weather, mail, radio, menu), each still showing its count, and the box fills the page below them with more room and
+// more detail. News, Reddit, Stocks, Sports, TV shows and Podcasts list on the left, and what you click opens on the
+// right: the same window it opens anywhere else, docked into the page instead of on top of it, so everything in it works
+// the same (the window box itself, #modal .mbox, is moved into the page while it is docked). Telegram is one long
+// column with its pictures and videos; Twitch a big player with its chat; YouTube a player with your channels' videos;
+// a web page box its page. The bar between two sides can be dragged (double-click puts it back).
+// Esc, the ⊞ tile, Back or ⤢ again go back to all boxes. Everything about it is in Settings → Focus view (P.focus).
+function FZP() { return P.focus && typeof P.focus === "object" ? P.focus : {}; }
+function fzSet(k, v) { if (!P.focus || typeof P.focus !== "object") P.focus = {}; if (v === undefined) delete P.focus[k]; else P.focus[k] = v; persist(); }
+function fzOn() { return FZP().off !== true && !(layM() && FZP().phone === false); }
+function fzBoxOn(id) { return fzOn() && FZ_IDS.indexOf(id) >= 0 && !(FZP().boxes && FZP().boxes[id] === false); }
+function fzList() { return orderIds().filter(function (id) { return fzBoxOn(id) && !boxOff(id); }); }
+function fzAnim() { var a = FZP().anim; return a === "fade" || a === "off" ? a : "smooth"; }
+function fzDur() { return { f: 0.24, s: 0.55 }[FZP().speed] || 0.36; }
+function fzPics() { return FZP().pics !== false; }
+function fzChat() { var c = FZP().chat; return c === "below" || c === "off" ? c : "right"; }
+function fzName(id) { return isEmb(id) ? embName(id) : BOX_NAMES[id] || id; }
+function fzKind(id) { return isEmb(id) ? "emb" : id === "telegram" ? "tg" : id === "twitch" ? "tw" : id === "youtube" ? "yt" : "split"; }
+// a window open on top of the page (one docked into the focus view does not count)
+function modalUp() { return !$("modal").hidden && !FZ.dock; }
+function fzHue(s) { var h = 0; s = String(s || ""); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
+function fzSvg(d, s) { return '<svg viewBox="0 0 24 24" width="' + (s || 15) + '" height="' + (s || 15) + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>"; }
+function fzIco(id, s) { return fzSvg(FZ_ICO[isEmb(id) ? "web" : id] || FZ_ICO.web, s); }
+// the ⤢ in a box's top line (last, in the corner, where an "expand" button usually is)
+function fzBtn(id) { return fzBoxOn(id) && !EDIT ? '<button class="ib sm fzbtn" data-a="fzgo" data-k="' + id + '" title="Focus view: this box big, the others as small tiles" aria-label="Focus view of ' + esc(fzName(id)) + '">' + fzSvg(FZ_ICO.expand, 12) + "</button>" : ""; }
+
+// ---- The tiles of the other boxes ----
+function fzBadge(id) {
+  if (FZP().counts === false) return "";
+  if (id === "stocks") {
+    var s = stockRows().filter(function (x) { return x.c != null; }).sort(function (a, b) { return Math.abs(b.c) - Math.abs(a.c); })[0];
+    return s ? '<span class="fzbd ' + (s.c >= 0 ? "up" : "down") + '">' + esc(tk(s.id)) + " " + (s.c >= 0 ? "+" : "") + s.c.toFixed(1) + "%</span>" : "";
+  }
+  var n = FZN[id];
+  if (id === "twitch" || id === "sports") return n ? '<span class="fzbd lv"><i></i>' + n + " live</span>" : "";
+  return n ? '<span class="fzbd">' + n + "</span>" : "";
+}
+function fzShelf() {
+  var ids = fzList(), sig = ids.join(",") + "|" + (FZP().tiles || "") + "|" + ids.map(fzName).join(",");
+  var sh = $("fzShelf");
+  if (FZ.shelf !== sig) {
+    FZ.shelf = sig;
+    var icons = FZP().tiles === "icons", ch = $("fzChips"), sl = ch ? ch.scrollLeft : 0;
+    sh.innerHTML = '<button class="fzall" data-a="fzexit" title="Back to all boxes (Esc)" aria-label="Back to all boxes">' + fzSvg(FZ_ICO.grid, 15) + "<span>All boxes</span></button>" +
+      '<div class="fzchips" id="fzChips">' + ids.map(function (id) {
+        return '<button class="fzc" data-a="fzgo" data-k="' + id + '" title="' + esc(fzName(id)) + '" aria-label="' + esc(fzName(id)) + '">' + fzIco(id, 15) + (icons ? "" : '<span class="fzcn">' + esc(fzName(id)) + "</span>") + '<span class="fzbw"></span></button>';
+      }).join("") + "</div>";
+    if ($("fzChips")) $("fzChips").scrollLeft = sl;
+  }
+  Array.prototype.forEach.call(sh.querySelectorAll(".fzc"), function (c) {
+    var id = c.dataset.k, on = id === FZ.id, b = fzBadge(id), w = c.querySelector(".fzbw");
+    c.classList.toggle("on", on);
+    if (on) c.setAttribute("aria-current", "true"); else c.removeAttribute("aria-current");
+    if (w.innerHTML !== b) w.innerHTML = b;
+  });
+}
+// the active tile in view (only the row scrolls, never the page)
+function fzReveal(el, box, center) {
+  if (!el || !box) return;
+  var e = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (box.scrollWidth > box.clientWidth + 2 && (center || e.left < b.left || e.right > b.right)) box.scrollLeft += center ? e.left - b.left - (b.width - e.width) / 2 : e.left < b.left ? e.left - b.left : e.right - b.right;
+  if (box.scrollHeight > box.clientHeight + 2 && (center || e.top < b.top || e.bottom > b.bottom)) box.scrollTop += center ? e.top - b.top - (b.height - e.height) / 2 : e.top < b.top ? e.top - b.top : e.bottom - b.bottom;
+}
+
+// ---- The big box: its top line and its parts ----
+function fzSz(id, m) { var s = FZP().sz && FZP().sz[id]; return s && s.m === m && +s.v > 0 ? ' style="' + (m === "rpx" ? "--b" : "--a") + ":" + (+s.v) + (m === "pct" ? "%" : "px") + '"' : ""; }
+function fzGut(id, m) { return '<div class="fzgut" data-g="' + id + '" data-m="' + m + '" role="separator" aria-orientation="vertical" tabindex="0" title="Drag to make one side bigger · double-click puts it back" aria-label="Drag to make one side bigger. Double-click puts it back."></div>'; }
+function fzPh(id) {
+  var t = { news: "Pick a headline on the left. It opens here, with the full article where the site gives it.", reddit: "Pick a post on the left. It opens here, with its top comments.", stocks: "Pick a stock on the left for its chart and news.",
+    sports: "Pick a game on the left. Its score, story and stats open here and stay live.", tv: "Pick a show on the left for its episodes.", podcasts: "Pick a show on the left. An episode plays in the Radio box." }[id] || "";
+  return '<div class="fzph">' + fzIco(id, 30) + "<p>" + t + "</p></div>";
+}
+function fzSkel(id) {
+  var k = fzKind(id);
+  if (k === "split") return '<div class="fzsplit"' + fzSz(id, "pct") + '><div class="fzlist" id="fzL"></div>' + fzGut(id, "pct") + '<div class="fzdet" id="fzD">' + fzPh(id) + "</div></div>";
+  if (k === "tg") return '<div class="fztg"' + fzSz(id, "lpx") + '><div class="fzch" id="fzCh"></div>' + fzGut(id, "lpx") + '<div class="fzfeed" id="fzF"></div></div>';
+  if (k === "tw") return '<div class="fztw"><div class="fztws" id="fzTs"></div><div class="fztwm ' + fzChat() + '" id="fzTm"' + fzSz(id, "rpx") + '><div class="fzpw" id="fzP"></div>' + fzGut(id, "rpx") + '<div class="fzchat" id="fzC"></div></div></div>';
+  if (k === "yt") return '<div class="fzyt"' + fzSz(id, "rpx") + '><div class="fzytm" id="fzYm"></div>' + fzGut(id, "rpx") + '<div class="fzytl" id="fzYl"></div></div>';
+  return '<div class="fzemb" id="fzE"></div>';
+}
+// the focus view's own controls in the top line (the box's own buttons and lists come after them)
+function fzExtra(id) {
+  if (id === "news" || id === "telegram" || id === "reddit") return '<input type="search" class="fzq" id="fzQ" data-fz="' + id + '" placeholder="' + (id === "news" ? "Search headlines…" : "Search posts…") + '" aria-label="Search this box" value="' + esc(FZ.q[id] || "") + '" autocomplete="off">';
+  if (id === "twitch") {
+    var c = fzChat(), wide = window.innerWidth > 1100, opts = wide ? [["right", "Right"], ["below", "Below"], ["off", "Hidden"]] : [["below", "Shown"], ["off", "Hidden"]], cur = !wide && c === "right" ? "below" : c;
+    return '<span class="mut sn">Chat</span><span class="fzseg" role="group" aria-label="Chat">' + opts.map(function (o) { return '<button data-a="fzchat" data-k="' + o[0] + '" class="' + (o[0] === cur ? "on" : "") + '" aria-pressed="' + (o[0] === cur) + '">' + o[1] + "</button>"; }).join("") + "</span>";
+  }
+  return "";
+}
+function fzBuild() {
+  var id = FZ.id, keep = FZ.dock && FZ.built === id;   // (built again for a changed setting: a docked window stays docked)
+  if (FZ.dock) { $("modal").appendChild(MBOX); if (!keep) { FZ.dock = false; $("modal").classList.remove("fzdk"); closeModal(); } }
+  FZ.built = id; FZ.sig = {}; FZ.ytOn = false;
+  $("fzStage").innerHTML ='<div class="fzh"><span class="fzic">' + fzIco(id, 16) + "</span><h2>" + esc(fzName(id)) + '</h2><span class="fzsub" id="fzSub"></span>' +
+    '<div class="fztools"><span id="fzX" class="fzx">' + fzExtra(id) + '</span><span id="fzT" class="hc fzt0"></span></div>' +
+    '<div class="fznav"><button class="ib" data-a="fznav" data-k="-1" title="Previous box (←)" aria-label="Previous box">‹</button><button class="ib" data-a="fznav" data-k="1" title="Next box (→)" aria-label="Next box">›</button></div></div>' +
+    '<div class="fzbody" id="fzBody">' + fzSkel(id) + "</div>";
+  if (keep) {
+    var D = $("fzD");
+    if (D) { D.innerHTML = ""; D.appendChild(MBOX); D.parentElement.classList.add("show"); }
+    else { FZ.dock = false; $("modal").classList.remove("fzdk"); closeModal(); }
+  }
+}
+// The box's own top-line controls and list, as the page would draw the box: its counts, sorting, sources, Discover and ↻
+// work here as they do in the box. (A search of the box's own is left out where the focus view has a bigger one.)
+function fzNative(html) {
+  var out = { tools: "", body: "" };
+  if (!html) return out;
+  var t = document.createElement("template"); t.innerHTML = html;
+  var c = t.content.firstElementChild;
+  if (!c) return out;
+  var th = c.querySelector(".th"), hc = th && th.querySelector(".hc");
+  if (hc) { Array.prototype.forEach.call(hc.querySelectorAll('[data-a="fzgo"],[data-a="nfilt"],[data-a="bfilt"],[data-a="paird"]'), function (b) { b.remove(); }); out.tools = hc.innerHTML; }
+  if (th) th.remove();
+  out.body = c.innerHTML;
+  return out;
+}
+// Puts new html in a part only when it changed. Scrolling, and what is being typed in a field there, stay as they were.
+function fzPut(id, html) {
+  var el = $(id);
+  if (!el || FZ.sig[id] === html) return false;
+  FZ.sig[id] = html;
+  var st = el.scrollTop, sl = el.scrollLeft, act = document.activeElement, aid = act && act.id && el.contains(act) ? act.id : "", typed = {}, sel = null;
+  Array.prototype.forEach.call(el.querySelectorAll("input[id]"), function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
+  if (aid) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
+  el.innerHTML = html;
+  Object.keys(typed).forEach(function (k) { var n = $(k); if (n && el.contains(n) && n.value !== typed[k]) n.value = typed[k]; });
+  if (aid) { var f = $(aid); if (f) { try { f.focus({ preventScroll: true }); if (sel && sel[0] != null) f.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  el.scrollTop = st; el.scrollLeft = sl;
+  return true;
+}
+// called by render(), with the html the page drew for every box
+function fzUpdate(T) {
+  var id = FZ.id;
+  if (!id) return;
+  if (!fzBoxOn(id) || boxOff(id)) { setTimeout(function () { fzLeave(false, true); }, 0); return; }   // its box was switched off
+  fzShelf();
+  if (FZ.built !== id) fzBuild();
+  var nv = fzNative(T[id]), k = fzKind(id);
+  fzPut("fzT", nv.tools);
+  var sub = fzSub(id); if ($("fzSub") && $("fzSub").textContent !== sub) $("fzSub").textContent = sub;
+  if (k === "split") { fzPut("fzL", id === "news" ? fzNews() : id === "reddit" ? fzRd() : id === "stocks" ? fzSt() : '<div class="fznat">' + nv.body + "</div>"); fzMark(); }
+  else if (k === "tg") { var ch = fzTgCh(); fzPut("fzCh", ch); var tg = $("fzBody").querySelector(".fztg"); if (tg) tg.classList.toggle("one", !ch); if (!fzVidPlaying()) fzPut("fzF", fzTg()); }
+  else if (k === "tw") fzTw(nv.body);
+  else if (k === "yt") fzYt(nv.body);
+  else fzEmb(id);
+}
+function fzSub(id) {
+  var n = FZN[id];
+  if (id === "news") return NEWS.length ? newsShown().length + " stories" + (n ? " · " + n + " new" : "") : "";
+  if (id === "telegram") return TGP.length ? tgVisible().length + " posts" + (n ? " · " + n + " new" : "") : "";
+  if (id === "reddit") return RD.length ? RD.length + " posts" + (n ? " · " + n + " new" : "") : "";
+  if (id === "stocks") { var r = stockRows(), up = r.filter(function (x) { return x.c != null && x.c >= 0; }).length, dn = r.filter(function (x) { return x.c != null && x.c < 0; }).length; return r.length + " on your list · " + up + " up, " + dn + " down today"; }
+  if (id === "twitch") return TWC ? (n || 0) + " live" : "";
+  if (id === "sports") return n ? n + " live now" : "";
+  if (id === "podcasts") return n ? n + " new episodes" : "";
+  if (isEmb(id)) return bmHost(embUrl(id)) || "";
+  return "";
+}
+// the row that is open on the right is marked in the list
+function fzMark() {
+  var L = $("fzL"), s = FZ.sel[FZ.id];
+  if (!L) return;
+  Array.prototype.forEach.call(L.querySelectorAll(".fzon"), function (x) { x.classList.remove("fzon"); });
+  if (!s || !FZ.dock) return;
+  var el = fzFind(L, s);
+  if (el) (el.closest(".row, .fzi, .fzs") || el).classList.add("fzon");
+}
+function fzFind(L, s) {
+  var all = L.querySelectorAll('[data-a="' + s.a + '"]');
+  for (var i = 0; i < all.length; i++) if (all[i].getAttribute("data-k") === s.k) return all[i];
+  return null;
+}
+
+// ---- News, Reddit and Stocks: bigger lists than the boxes have, with pictures and summaries ----
+function fzWords(id) { var q = FZ.q[id]; return q ? sWords(q) : null; }
+function fzThumb(img, label, h) {
+  img = fzPics() ? safeUrl(img) : "";
+  if (!fzPics()) return "";
+  return '<span class="fzth" style="--h:' + h + '">' + (img ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '">' : "<i>" + esc(label) + "</i>") + "</span>";
+}
+function fzMore(id, left) { return left > 0 ? '<button class="fzmore" data-a="fzmore" data-k="' + id + '">Show ' + Math.min(left, 40) + " more</button>" : ""; }
+function fzNews() {
+  if (!NEWS.length) return '<div class="fznat">' + (signingIn() ? '<div class="empty">' + (nBusy || !NLAST ? "Loading…" : "No headlines yet.") + "</div>" : '<div class="empty">Sign in to load your news sources.</div>') + "</div>";
+  var w = fzWords("news"), src = FZ.src.news || "", gNew = function (g) { return g.every(function (x) { return isNewItem(x, "news") && !isRead(x.u); }); };
+  var gs = newsShown().filter(function (g) { return (!w || g.some(function (n) { return sHit(w, n.t + " " + n.s + " " + (n.d || "")); })) && (!src || g.some(function (n) { return n.s === src; })) && (!FZ.onlyNew || gNew(g)); });
+  var n = FZ.n.news || 60, nowN = Date.now(), last = "";
+  // the sources that have headlines here, in the order of your list
+  var have = {}, order = newsSrc().map(function (x) { return x.name; }), names = [];
+  newsShown().forEach(function (g) { g.forEach(function (y) { have[y.s] = 1; }); });
+  order.concat(Object.keys(have).sort()).forEach(function (nm) { if (have[nm] && names.indexOf(nm) < 0) names.push(nm); });
+  var chips = '<div class="fzf"><button class="fzfc' + (!src ? " on" : "") + '" data-a="fzsrc" data-k="">All sources</button>' + (names.length > 1 ? names.map(function (nm) { return '<button class="fzfc' + (src === nm ? " on" : "") + '" data-a="fzsrc" data-k="' + esc(nm) + '">' + esc(nm) + "</button>"; }).join("") : "") +
+    '<button class="fzfc' + (FZ.onlyNew ? " on" : "") + '" data-a="fznew" aria-pressed="' + FZ.onlyNew + '">Only new</button></div>';
+  return chips + (gs.length ? gs.slice(0, n).map(function (g) {
+    var x = g[0], srcs = g.src || g.map(function (y) { return y.s; }), t0 = g.t0 || x.ts, b = g.fav ? "★ Favorite sources" : bucket(t0), img = "";
+    g.forEach(function (y) { if (!img && y.img) img = y.img; });
+    var head = b !== last ? '<div class="fzbk">' + esc(b) + "</div>" : ""; last = b;
+    var nw = gNew(g), rd = !nw && g.some(function (y) { return isRead(y.u); }), hot = srcs.length >= 3 && nowN - x.ts < 10800000, d = "";
+    g.forEach(function (y) { if (!d && y.d) d = y.d; });
+    return head + '<div class="fzi' + (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + '" data-a="fzopen" data-k="' + esc("a:" + x.u) + '" role="button" tabindex="0">' + fzThumb(img, srcs[0].split(/\s+/).map(function (s) { return s.charAt(0); }).join("").slice(0, 3), fzHue(srcs[0])) +
+      '<span class="fzib"><b class="fzit">' + esc(x.t) + "</b>" + (d ? '<span class="fzid">' + esc(String(d).slice(0, 260)) + "</span>" : "") +
+      '<span class="fzim">' + (hot ? '<span class="pill hot">hot</span>' : "") + srcs.slice(0, 4).map(function (s) { return '<span class="pill">' + esc(s) + "</span>"; }).join("") + (srcs.length > 4 ? '<span class="pill">+' + (srcs.length - 4) + "</span>" : "") + "<span>" + ago(t0) + "</span></span></span></div>";
+  }).join("") + fzMore("news", gs.length - n) : '<div class="empty">' + (w || src || FZ.onlyNew ? "Nothing matches." : "All news sources hidden or muted.") + "</div>");
+}
+function fzRd() {
+  if (!RD.length) return '<div class="fznat"><div class="empty">' + (RDERR ? "Reddit could not be loaded. Press ! above for the details." : signingIn() ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div></div>";
+  var w = fzWords("reddit"), l = rdShown(true).filter(function (x) { return !w || sHit(w, x.t + " " + x.s + " " + (x.d || "")); }), n = FZ.n.reddit || 60;
+  return (l.length ? l.slice(0, n).map(function (x) {
+    var nw = isNewItem(x, "rd") && !isRead(x.u);
+    return '<div class="fzi' + (nw ? " new" : "") + (isRead(x.u) ? " rd" : "") + '" data-a="fzopen" data-k="' + esc("r:" + x.u) + '" role="button" tabindex="0">' + (x.img ? fzThumb(x.img, "r/", fzHue(x.s)) : "") +
+      '<span class="fzib"><b class="fzit">' + esc(x.t) + "</b>" + (x.d ? '<span class="fzid">' + esc(String(x.d).slice(0, 220)) + "</span>" : "") + '<span class="fzim"><span class="pill">r/' + esc(x.s) + "</span>" + (x.by ? "<span>" + esc(x.by) + "</span>" : "") + "<span>" + ago(x.ts) + "</span></span></span></div>";
+  }).join("") + fzMore("reddit", l.length - n) : '<div class="empty">Nothing matches.</div>');
+}
+function fzSt() {
+  var st = stockRows();
+  if (!st.length) return '<div class="fznat"><div class="empty">No stocks. Add some in Settings → Stocks.</div></div>';
+  return st.map(function (x) {
+    var c = x.c, up = c != null && c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[qk(x.id)], rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
+    return '<div class="fzs" data-a="fzopen" data-k="' + esc("s:" + x.id) + '" role="button" tabindex="0">' + ico(x.id, x.logo) + '<span class="fzsn"><b>' + esc(x.id) + "</b><small>" + esc(x.name || "") + "</small></span>" +
+      '<span class="fzsk">' + (sparkOn() && pts ? sparkSvg(pts, SPARKR === "d" && c != null && !PREVIEW ? up : rise) : "") + "</span>" +
+      '<span class="fzsp">' + (x.p != null ? x.p.toFixed(2) : "") + (c == null ? '<span class="mut">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "+" : "") + c.toFixed(2) + "%</span>") + "</span></div>";
+  }).join("");
+}
+
+// ---- Telegram: one long column, each post in full with its picture or video ----
+function fzTgCh() {
+  var all = tgSrc().filter(function (nm) { return shown("g:" + nm); });
+  if (all.length < 2) return "";
+  return '<div class="fzchh">Channels</div>' + all.map(function (nm) {
+    var off = !!FZ.tgOff[nm], n = TGP.filter(function (g) { return g.s === nm; }).length;
+    return '<button class="fztgc' + (off ? " off" : "") + '" data-a="fztg" data-k="' + esc(nm) + '" aria-pressed="' + !off + '" title="' + (off ? "Show" : "Hide") + ' this channel here"><span class="fzav" style="--h:' + fzHue(nm) + '">' + esc(nm.charAt(0).toUpperCase()) + "</span><span>" + esc(nm) + "</span><small>" + n + "</small></button>";
+  }).join("");
+}
+function fzVidPlaying() { var f = $("fzF"); return !!f && Array.prototype.some.call(f.querySelectorAll("video"), function (v) { return !v.paused && !v.ended; }); }
+function fzTg() {
+  if (!TGP.length) return '<div class="fznat"><div class="empty">' + (TGERR ? "The posts could not be loaded. Press ! above for the details." : signingIn() ? (tgSrc().length ? "Loading…" : "No channels yet. Add one in Settings → News, Telegram & Reddit.") : "Sign in to load your Telegram channels.") + "</div></div>";
+  var w = fzWords("telegram"), l = tgShown().filter(function (g) { return !FZ.tgOff[g.s] && (!w || sHit(w, g.s + " " + (g.tx || g.t))); }), n = FZ.n.telegram || 50;
+  return '<div class="fzfw">' + (l.length ? l.slice(0, n).map(function (g) {
+    var nw = isNewItem(g, "tg") && !isRead(g.u), vid = safeUrl(g.vid), th = safeUrl(g.th), img = safeUrl(g.img) || th, txt = String(g.tx || "").trim() || (vid || img ? "" : String(g.t || ""));
+    var media = vid ? '<video class="fzvid" controls playsinline preload="none"' + (th ? ' poster="' + esc(th) + '"' : "") + ' src="' + esc(vid) + '"></video>'
+      : img && fzPics() ? '<button class="fzimg" data-a="fztgo" data-k="' + esc(g.u) + '" title="Show it bigger" aria-label="Show the picture bigger"><img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(img) + '"></button>' : "";
+    return '<article class="fzp' + (nw ? " new" : "") + (isRead(g.u) ? " rd" : "") + '"><span class="fzav" style="--h:' + fzHue(g.s) + '">' + esc(String(g.s).charAt(0).toUpperCase()) + '</span><div class="fzpb">' +
+      '<div class="fzpt"><b>' + esc(g.s) + "</b>" + '<span class="mut">' + ago(g.ts) + "</span>" + (nw ? '<span class="pill ac">new</span>' : "") + "</div>" +
+      (txt ? "<p>" + esc(txt.slice(0, 4000)) + "</p>" : "") + media + '<div class="fzpa">' + linkBtn(g.u, "Open on Telegram", 1) + laterBtn("m:" + g.u) + "</div></div></article>";
+  }).join("") + (l.length > n ? fzMore("telegram", l.length - n) : !w && tgCanOlder() ? (tgOldBusy ? '<p class="mut sn fzmore">Loading older posts…</p>' : '<button class="fzmore" data-a="rdrolder">Load older posts</button>') : "") : '<div class="empty">Nothing matches.</div>') + "</div>";
+}
+
+// ---- Twitch: a big player with its chat beside or under it, and the streams you follow in a row above ----
+function fzTwList() {
+  var live = (TWC ? TW || [] : []).filter(function (x) { return x.live && shown("t:" + x.id); }).sort(function (a, b) { return (P.fav["t:" + b.id] ? 1 : 0) - (P.fav["t:" + a.id] ? 1 : 0) || b.v - a.v; });
+  var ids = {}; live.forEach(function (x) { ids[x.id] = 1; });
+  var off = TWC && twOffOn() ? twFavs().filter(function (l) { return !ids[l]; }).map(function (l) { var o = TWOFF[l] || {}; return { id: l, name: o.n || l, off: true, last: o.last }; }) : [];
+  return live.concat(off);
+}
+function fzTw(nativeBody) {
+  var list = fzTwList(), tm = $("fzTm"), x = $("fzX");
+  // nothing to play (Twitch not connected, nobody live): the box's own list and its Connect button, full width
+  if (tm) tm.classList.toggle("nat", !list.length);
+  if (x) x.hidden = !list.length;
+  if (!list.length) { fzPut("fzTs", ""); $("fzP").dataset.ch = ""; fzPut("fzP", '<div class="fznat">' + nativeBody + "</div>"); FZ.tw = ""; $("fzC").dataset.src = ""; $("fzC").innerHTML = ""; return; }
+  if (!FZ.tw || !list.some(function (x) { return x.id === FZ.tw; })) FZ.tw = (list.filter(function (x) { return !x.off; })[0] || list[0]).id;
+  fzPut("fzTs", list.map(function (x) {
+    var th = x.off ? "" : safeUrl(String(x.th || "").replace("{width}", "128").replace("{height}", "72"));
+    return '<button class="fztc' + (x.id === FZ.tw ? " on" : "") + (x.off ? " off" : "") + '" data-a="fztw" data-k="' + esc(x.id) + '" title="' + esc(x.off ? (x.name || x.id) + " is offline" : (x.title || x.name || x.id)) + '">' +
+      (th ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(th) + '">' : '<span class="fzav" style="--h:' + fzHue(x.id) + '">' + esc(String(x.name || x.id).charAt(0).toUpperCase()) + "</span>") +
+      "<span><b>" + esc(x.name || x.id) + "</b><small>" + esc(x.off ? (x.last ? "offline · live " + ago(x.last) + " ago" : "offline") : (x.sub || "") + " · " + (+x.v || 0).toLocaleString("en-GB")) + "</small></span></button>";
+  }).join(""));
+  var s = list.filter(function (x) { return x.id === FZ.tw; })[0], login = s.id, P0 = $("fzP");
+  if (P0.dataset.ch !== login || !P0.querySelector("iframe")) {
+    P0.dataset.ch = login; FZ.sig.fzP = "";
+    P0.innerHTML = '<div class="fzpbox"><div class="fzpl">' + (s.off ? '<div class="fzoff">' + fzIco("twitch", 34) + "<b>" + esc(s.name || login) + " is offline</b><span>" + (s.last ? "Last live " + ago(s.last) + " ago" : "") + "</span></div>" :
+      '<iframe title="Twitch player" allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc("https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=false&autoplay=true") + '"></iframe>') + '</div></div><div class="fzpi" id="fzPi"></div>';
+  }
+  fzPut("fzPi", '<span class="fzpt"><b>' + esc(s.name || login) + "</b>" + (s.title ? " · " + esc(s.title) : "") + (s.sub ? ' <span class="mut">· ' + esc(s.sub) + "</span>" : "") + "</span>" +
+    '<span class="fzpb2"><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="t:' + esc(login) + '">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + "</span>");
+  var C = $("fzC"), csrc = s.off ? "" : "https://www.twitch.tv/embed/" + encodeURIComponent(login) + "/chat?parent=" + location.hostname + (P.theme === "dark" ? "&darkpopout" : "");
+  if (C.dataset.src !== csrc) { C.dataset.src = csrc; C.innerHTML = csrc ? '<iframe title="Twitch chat" src="' + esc(csrc) + '"></iframe>' : ""; }
+}
+
+// ---- YouTube: a player, and the videos of your channels beside it ----
+function fzYtList() {
+  var now = Date.now();
+  return (YTV || []).filter(function (v) { return shown("y:" + v.n) && now - v.ts < 2592000000; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 80);
+}
+function fzYt(nativeBody) {
+  var l = fzYtList();
+  if (!l.length) { fzPut("fzYl", '<div class="fznat">' + nativeBody + "</div>"); fzPut("fzYm", ""); return; }
+  if (!FZ.yt || !l.some(function (v) { return v.id === FZ.yt; })) { FZ.yt = l[0].id; FZ.ytOn = false; }
+  fzPut("fzYl", '<div class="fzbk">From your channels</div>' + l.map(function (v) {
+    return '<div class="fzi fzyv' + (v.id === FZ.yt ? " fzon" : "") + (now48(v.ts) ? " new" : "") + '" data-a="fzyt" data-k="' + esc(v.id) + '" role="button" tabindex="0">' + fzThumb(PREVIEW ? "" : "https://i.ytimg.com/vi/" + encodeURIComponent(v.id) + "/mqdefault.jpg", "▶", fzHue(v.n)) +
+      '<span class="fzib"><b class="fzit">' + esc(v.t) + '</b><span class="fzim"><span>' + esc(v.n) + "</span><span>" + ago(v.ts) + "</span></span></span></div>";
+  }).join(""));
+  var v = l.filter(function (x) { return x.id === FZ.yt; })[0], M = $("fzYm"), key = v.id + "|" + FZ.ytOn;
+  if (M.dataset.k === key) return;
+  M.dataset.k = key; FZ.sig.fzYm = "";
+  M.innerHTML = '<div class="fzytp">' + (FZ.ytOn ? '<iframe title="YouTube player" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen src="' + esc(YTO + "/embed/" + encodeURIComponent(v.id) + "?autoplay=1&rel=0&origin=" + encodeURIComponent(location.origin)) + '"></iframe>' :
+    (PREVIEW ? "" : '<img alt="" referrerpolicy="no-referrer" data-rm="1" src="' + esc("https://i.ytimg.com/vi/" + encodeURIComponent(v.id) + "/hqdefault.jpg") + '">') + '<button class="fzplay" data-a="fzytp" title="Play" aria-label="Play">' + fzSvg('<path d="M7 4v16l13-8z" fill="currentColor"/>', 26) + "</button>") + "</div>" +
+    "<h2>" + esc(v.t) + '</h2><div class="mut sn">' + esc(v.n) + " · " + ago(v.ts) + ' ago</div><p class="tools"><button data-a="dock" data-k="v:' + esc(v.id) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="v:' + esc(v.id) + '">Dock right</button>' + laterBtn("v:" + v.id) + linkBtn("https://www.youtube.com/watch?v=" + encodeURIComponent(v.id), "Open on YouTube", 1) + "</p>";
+}
+function now48(ts) { return Date.now() - ts < 172800000; }
+
+// ---- A web page box: its page, as big as the view ----
+function fzEmb(id) {
+  var u = embUrl(id), E = $("fzE");
+  if (!E || E.dataset.u === u) return;
+  E.dataset.u = u;
+  E.innerHTML = u ? '<iframe title="' + esc(embName(id)) + '" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" src="' + esc(u) + '"></iframe>' : "";
+}
+
+// ---- Docking a window into the right side, and taking it out again ----
+// openModal() asks first: a click in the list (or in the docked window itself) opens there; anything else (the top
+// row, the menu, a keyboard shortcut) opens on top as usual, and the docked one comes back when that one closes.
+function fzRoute() {
+  if (!FZ.id) return;
+  var now = Date.now(), ev = FZ.ev && now - FZ.ev.t < 1500 ? FZ.ev : null;
+  var dock = FZ.want && now - FZ.want < 4000 ? true : ev ? ev.inD && FZ.dock : FZ.dock;
+  FZ.want = 0;
+  if (dock === FZ.dock) return;
+  if (!dock && FZ.sel[FZ.id]) FZ.reopen = true;
+  fzDock(dock);
+}
+function fzDock(on) {
+  var D = $("fzD");
+  if (on && !D) on = false;
+  if (on === FZ.dock) return;
+  FZ.dock = on;
+  if (on) { D.innerHTML = ""; D.appendChild(MBOX); D.scrollTop = 0; $("modal").classList.add("fzdk"); }
+  else { $("modal").appendChild(MBOX); $("modal").classList.remove("fzdk"); if (D) D.innerHTML = fzPh(FZ.id); }
+  var sp = $("fzBody") && $("fzBody").querySelector(".fzsplit");
+  if (sp) sp.classList.toggle("show", on);
+  fzMark();
+}
+// closeModal() tells us: a docked window was closed (Close on a phone, Esc), or one on top closed and the docked one returns
+function fzClosed(was) {
+  if (FZ.dock) { fzDock(false); if (FZ.id && !FZ.keepSel) delete FZ.sel[FZ.id]; return; }   // (switching boxes keeps it, for when you come back)
+  if (was && FZ.id && FZ.reopen) { FZ.reopen = false; setTimeout(fzReopen, 0); }
+}
+function fzReopen() {
+  var s = FZ.sel[FZ.id], L = $("fzL");
+  if (!s || !L || modalUp()) return;
+  var el = fzFind(L, s);
+  if (el) { FZ.want = Date.now(); el.click(); }
+}
+// where the last click or key press happened (openModal decides with it)
+["click", "keydown"].forEach(function (type) {
+  document.addEventListener(type, function (e) {
+    var t = e.target && e.target.closest ? e.target : document.body;
+    FZ.ev = { t: Date.now(), inD: !!t.closest("#fzD"), inL: !!t.closest("#fzL") };
+    if (!FZ.id) return;
+    if (type === "click") {
+      if (FZ.ev.inL) {
+        FZ.want = Date.now();
+        var b = t.closest("[data-a]");
+        if (b && /^(fzopen|open|tvopen|podshow|spteam|fighter)$/.test(b.dataset.a)) FZ.sel[FZ.id] = { a: b.dataset.a, k: b.getAttribute("data-k") || "" };
+      } else FZ.want = 0;
+    }
+  }, true);
+});
+
+// ---- Going in, switching, going back: the box grows into the middle and the others shrink into their tiles ----
+function fzNames(on) {
+  Array.prototype.forEach.call(document.querySelectorAll("#grid > .card[data-id], #fzShelf .fzc, #fzStage"), function (el) { el.style.viewTransitionName = ""; });
+  if (!on) return;
+  if (FZ.id) {
+    $("fzStage").style.viewTransitionName = "fz-" + FZ.id;
+    Array.prototype.forEach.call(document.querySelectorAll("#fzShelf .fzc"), function (c) { if (c.dataset.k !== FZ.id) c.style.viewTransitionName = "fz-" + c.dataset.k; });
+  } else Array.prototype.forEach.call(document.querySelectorAll("#grid > .card[data-id]"), function (c) { if (FZ_IDS.indexOf(c.dataset.id) >= 0) c.style.viewTransitionName = "fz-" + c.dataset.id; });
+}
+function fzMove(update) {
+  var a = fzAnim(), rm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (a === "off" || a === "fade" || rm || !document.startViewTransition) {
+    update();
+    if (a !== "off") { var el = FZ.id ? $("fzWrap") : $("gridw"); el.classList.remove("fzfade"); void el.offsetWidth; el.classList.add("fzfade"); }
+    return;
+  }
+  var h = document.documentElement;
+  h.style.setProperty("--fzd", fzDur() + "s"); h.classList.add("fzvt");
+  fzNames(true);
+  var t;
+  try { t = document.startViewTransition(function () { update(); fzNames(true); }); }
+  catch (e) { h.classList.remove("fzvt"); fzNames(false); update(); return; }
+  var done = function () { h.classList.remove("fzvt"); fzNames(false); };
+  t.finished.then(done, done);
+}
+function fzGo(id, instant) {
+  if (!fzBoxOn(id) || boxOff(id) || EDIT) return;
+  if (FZ.id === id) { fzLeave(); return; }
+  var first = !FZ.id;
+  if (first) { FZ.y = window.scrollY || 0; closeMenus(); hidePeek(); try { history.pushState({ foc: 1 }, ""); } catch (e) {} }
+  var go = function () {
+    if (FZ.dock) { FZ.keepSel = true; closeModal(); FZ.keepSel = false; }   // the window of the box before goes with it
+    FZ.id = id; FZ.last = id; FZ.built = "";
+    document.body.classList.add("foc"); document.body.classList.toggle("fznotop", FZP().top === false);
+    $("fzWrap").hidden = false;
+    render();
+    fzFit(first);
+    fzReveal(document.querySelector('#fzShelf .fzc[data-k="' + id + '"]'), $("fzChips"), true);
+    save("sp_fzat", id);   // (this device only: Settings → Focus view → open it again when the page opens)
+    // a stock opens by itself (it has nothing to mark as read), so the right side is not empty
+    if (id === "stocks" && !FZ.sel.stocks && !layM()) { var f = $("fzL") && $("fzL").querySelector('[data-a="fzopen"]'); if (f) { FZ.want = Date.now(); f.click(); } }
+    else if (FZ.sel[id]) setTimeout(fzReopen, 0);
+  };
+  if (instant) go(); else fzMove(go);
+}
+function fzLeave(fromPop, instant) {
+  if (!FZ.id) return;
+  if (!fromPop) {
+    var st = history.state || {};
+    if (st.omni) FZ.popAfter = true;
+    else if (st.foc) { FZ.ign++; HNAV_IGN++; try { history.back(); } catch (e) {} }
+  }
+  var y = FZ.y, go = function () {
+    if (FZ.dock) { FZ.keepSel = true; closeModal(); FZ.keepSel = false; }
+    FZ.id = ""; FZ.built = ""; FZ.sig = {}; FZ.shelf = "";
+    document.body.classList.remove("foc", "fznotop");
+    $("fzWrap").hidden = true; $("fzStage").innerHTML = ""; $("fzShelf").innerHTML = ""; $("fzStage").style.height = "";
+    save("sp_fzat", "");
+    render();
+    window.scrollTo(0, y);
+  };
+  if (instant) go(); else fzMove(go);
+}
+function fzStepBox(d) {
+  var ids = fzList(), i = ids.indexOf(FZ.id);
+  if (ids.length < 2) return;
+  fzGo(ids[(i + d + ids.length) % ids.length]);
+}
+// the shortcut (Z unless changed): the last box you looked at this way, or the first one
+function fzKey() { if (FZ.id) { fzLeave(); return; } var ids = fzList(); if (ids.length) fzGo(ids.indexOf(FZ.last) >= 0 ? FZ.last : ids[0]); }
+window.addEventListener("popstate", function () {
+  var st = history.state || {};
+  if (FZ.popAfter && st.foc) { FZ.popAfter = false; FZ.ign++; HNAV_IGN++; try { history.back(); } catch (e) {} return; }
+  if (FZ.ign) { FZ.ign--; return; }
+  if (FZ.id && !st.foc && !st.omni) fzLeave(true);
+});
+// The big box reaches down to the bottom of the screen (or the height chosen in Settings). On a phone the tiles go to the
+// top of the screen and the box fills the rest.
+function fzFit(scroll) {
+  if (!FZ.id) return;
+  var s = $("fzStage"), ph = layM(), H = window.innerHeight, m = FZP().h;
+  if (scroll) window.scrollTo(0, ph ? Math.max(0, $("fzWrap").getBoundingClientRect().top + (window.scrollY || 0) - 4) : 0);
+  var h = m === "80" ? H * 0.8 : m === "60" ? H * 0.6 : ph ? H - $("fzShelf").offsetHeight - 22 : H - (s.getBoundingClientRect().top + (window.scrollY || 0)) - 16;
+  s.style.height = Math.round(Math.max(ph ? 420 : 460, h)) + "px";
+}
+window.addEventListener("resize", function () { clearTimeout(fzFit.t); fzFit.t = setTimeout(function () { if (!FZ.id) return; fzFit(false); var x = $("fzX"); if (x && FZ.id === "twitch") x.innerHTML = fzExtra("twitch"); }, 120); });
+
+// ---- Clicks and keys of the focus view ----
+function fzAct(a, k) {
+  if (a === "fzgo") { fzGo(k); return; }
+  if (a === "fzexit") { fzLeave(); return; }
+  if (a === "fznav") { fzStepBox(+k); return; }
+  if (a === "fzszreset") { fzSet("sz"); renderFzSet(); if (FZ.id) { FZ.built = ""; render(); } return; }
+  if (!FZ.id) return;
+  if (a === "fzopen") {
+    var ch = k.charAt(0), v = k.slice(2);
+    FZ.want = Date.now(); FZ.sel[FZ.id] = { a: a, k: k };
+    if (ch === "a") openNews(v, true); else if (ch === "r") openReddit(v, true); else openStock(v);
+    fzMark();
+    return;
+  }
+  if (a === "fzmore") { FZ.n[k] = (FZ.n[k] || (k === "telegram" ? 50 : 60)) + 40; render(); return; }
+  if (a === "fzsrc") { FZ.src.news = k || ""; render(); return; }
+  if (a === "fznew") { FZ.onlyNew = !FZ.onlyNew; render(); return; }
+  if (a === "fztg") { if (FZ.tgOff[k]) delete FZ.tgOff[k]; else FZ.tgOff[k] = 1; render(); return; }
+  if (a === "fztgo") { openTG(k, true); return; }
+  if (a === "fztw") { FZ.tw = k; render(); return; }
+  if (a === "fzchat") { fzSet("chat", k === "right" ? undefined : k); var m = $("fzTm"); if (m) m.className = "fztwm " + fzChat(); $("fzX").innerHTML = fzExtra("twitch"); return; }
+  if (a === "fzyt") { FZ.yt = k; FZ.ytOn = true; render(); var m2 = $("fzYm"); if (m2) m2.scrollTop = 0; return; }
+  if (a === "fzytp") { FZ.ytOn = true; render(); return; }
+}
+document.addEventListener("input", function (e) {
+  var t = e.target;
+  if (!t || t.id !== "fzQ" || !FZ.id) return;
+  FZ.q[t.dataset.fz] = t.value; FZ.n[t.dataset.fz] = 0;
+  clearTimeout(fzAct.t); fzAct.t = setTimeout(render, 120);
+});
+// ↑ ↓ go through the list, opening each on the right; ← → go to the box before or after
+function fzStep(d) {
+  var L = $("fzL") || $("fzYl");
+  if (!L) return false;
+  var items = Array.prototype.filter.call(L.querySelectorAll('[data-a="fzopen"], [data-a="fzyt"], [data-a="open"], [data-a="tvopen"], [data-a="podshow"]'), function (x) { return x.offsetParent !== null; });
+  if (!items.length) return false;
+  var cur = L.querySelector(".fzon"), i = -1;
+  items.forEach(function (x, j) { if (i < 0 && cur && (cur === x || cur.contains(x))) i = j; });
+  var n = items[Math.max(0, Math.min(items.length - 1, i < 0 ? 0 : i + d))];
+  if (n && (i < 0 || n !== items[i])) { FZ.want = Date.now(); n.click(); fzReveal(n.closest(".row, .fzi, .fzs") || n, L); }
+  return true;
+}
+document.addEventListener("keydown", function (e) {
+  if (!FZ.id || KEYCAP || e.ctrlKey || e.metaKey || e.altKey) return;
+  var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|VIDEO|IFRAME)$/.test(t.tagName));
+  if (t && t.classList && t.classList.contains("fzgut")) return;   // the bar between the sides has its own ← →
+  var over = modalUp() || !$("panel").hidden || !$("welcome").hidden;
+  // Esc in the focus view's search: empties it first, then leaves the field (the window on the right stays open)
+  if (e.key === "Escape" && t && t.id === "fzQ") { e.preventDefault(); e.stopPropagation(); if (t.value) { t.value = ""; t.dispatchEvent(new Event("input", { bubbles: true })); } else t.blur(); return; }
+  if (e.key === "Escape") {
+    if (typing || over) return;
+    e.preventDefault(); e.stopPropagation(); closeMenus();
+    if (FZ.dock && layM()) closeModal(); else fzLeave();
+    return;
+  }
+  // (keys pressed while working in the window on the right belong to it: ↑ ↓ scroll it, ← → go through its tabs)
+  if (typing || over || FZP().keys === false || (t && t.closest && t.closest(".sptabw, .menu, .tabs, #fzD"))) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); fzStepBox(e.key === "ArrowLeft" ? -1 : 1); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (fzStep(e.key === "ArrowDown" ? 1 : -1)) { e.preventDefault(); e.stopPropagation(); } }
+}, true);
+
+// ---- The bars between two sides: drag, double-click to put back, or ← → when it has the focus ----
+function fzSzSet(g, v) {
+  var p = g.parentElement, m = g.dataset.m, r = p.getBoundingClientRect();
+  v = m === "pct" ? Math.max(25, Math.min(75, v)) : m === "lpx" ? Math.max(150, Math.min(Math.min(420, r.width - 360), v)) : Math.max(240, Math.min(r.width - 380, v));
+  v = Math.round(v * 10) / 10;
+  p.style.setProperty(m === "rpx" ? "--b" : "--a", v + (m === "pct" ? "%" : "px"));
+  return v;
+}
+function fzSzSave(g, v) { var sz = Object.assign({}, FZP().sz || {}); if (v == null) delete sz[g.dataset.g]; else sz[g.dataset.g] = { v: v, m: g.dataset.m }; fzSet("sz", Object.keys(sz).length ? sz : undefined); }
+function fzSzNow(g) { var m = g.dataset.m, r = g.parentElement.getBoundingClientRect(); return m === "pct" ? g.previousElementSibling.getBoundingClientRect().width / r.width * 100 : m === "lpx" ? g.previousElementSibling.getBoundingClientRect().width : g.nextElementSibling.getBoundingClientRect().width; }
+document.addEventListener("pointerdown", function (e) {
+  var g = e.target.closest && e.target.closest(".fzgut");
+  if (!g || e.button > 0) return;
+  e.preventDefault();
+  var v = null, m = g.dataset.m;
+  try { g.setPointerCapture(e.pointerId); } catch (x) {}
+  g.classList.add("drag"); document.body.classList.add("fzdrag");
+  function mv(ev) { var r = g.parentElement.getBoundingClientRect(); v = fzSzSet(g, m === "pct" ? (ev.clientX - r.left) / r.width * 100 : m === "lpx" ? ev.clientX - r.left : r.right - ev.clientX); }
+  function up() {
+    g.removeEventListener("pointermove", mv); g.removeEventListener("pointerup", up); g.removeEventListener("pointercancel", up);
+    g.classList.remove("drag"); document.body.classList.remove("fzdrag");
+    if (v != null) fzSzSave(g, v);
+  }
+  g.addEventListener("pointermove", mv); g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+});
+document.addEventListener("dblclick", function (e) {
+  var g = e.target.closest && e.target.closest(".fzgut");
+  if (!g) return;
+  g.parentElement.style.removeProperty(g.dataset.m === "rpx" ? "--b" : "--a");
+  fzSzSave(g, null);
+});
+document.addEventListener("keydown", function (e) {
+  var g = e.target;
+  if (!g || !g.classList || !g.classList.contains("fzgut") || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  e.preventDefault();
+  var m = g.dataset.m, st = m === "pct" ? 2 : 20, d = e.key === "ArrowRight" ? 1 : -1;
+  fzSzSave(g, fzSzSet(g, fzSzNow(g) + (m === "rpx" ? -d : d) * st));
+});
+
+// ---- Settings → Focus view ----
+var FZ_SET = [
+  ["Focus view", [["off", "chk", "Use the focus view (⤢ in the boxes)", true]]],
+  ["How it moves", [["anim", "sel", "Going in and out (the box grows into place, the others shrink into their tiles)", [["", "Grow and shrink"], ["fade", "A short fade"], ["off", "No movement"]]], ["speed", "sel", "Speed", [["f", "Fast"], ["", "Normal"], ["s", "Slow"]]]]],
+  ["The other boxes", [["tiles", "sel", "Their tiles show", [["", "Icon and name"], ["icons", "Icon only"]]], ["counts", "chk", "Counts on the tiles (new, live, the biggest stock move)", true], ["top", "chk", "Keep the top row (weather, mail, radio, menu) above the big box", true]]],
+  ["The big box", [["h", "sel", "Height", [["", "To the screen's bottom"], ["80", "80% of the screen"], ["60", "60% of the screen"]]], ["pics", "chk", "Pictures in the News, Reddit, Telegram and YouTube lists", true], ["chat", "sel", "Twitch chat", [["", "Beside the player"], ["below", "Under the player"], ["off", "Hidden"]]]]],
+  ["Keys and devices", [["keys", "chk", "← → switch boxes, ↑ ↓ go through the list", true], ["phone", "chk", "On a phone too", true], ["keep", "chk", "Open it again when the page opens (if it was open)", false]]]
+];
+function renderFzSet() {
+  var el = $("fzSet");
+  if (!el) return;
+  var f = FZP(), off = f.off === true;
+  el.innerHTML = FZ_SET.map(function (g, gi) {
+    return '<div class="sub"' + (gi && off ? ' style="opacity:.5"' : "") + "><b>" + g[0] + "</b>" + g[1].map(function (o) {
+      var k = o[0], cur = f[k];
+      if (o[1] === "chk") { var on = k === "off" ? cur !== true : o[3] ? cur !== false : !!cur; return "<label>" + o[2] + ' <input type="checkbox" data-fzs="' + k + '"' + (on ? " checked" : "") + (gi && off ? " disabled" : "") + "></label>"; }
+      return "<label>" + o[2] + ' <select data-fzs="' + k + '"' + (gi && off ? " disabled" : "") + ">" + o[3].map(function (x) { return '<option value="' + x[0] + '"' + (String(cur || "") === x[0] ? " selected" : "") + ">" + x[1] + "</option>"; }).join("") + "</select></label>";
+    }).join("") + (gi === 0 ? "" : "") + "</div>";
+  }).join("") +
+    '<div class="sub"' + (off ? ' style="opacity:.5"' : "") + '><b>Boxes with ⤢</b><div class="mut sn">Untick a box to leave its ⤢ out (and its tile in the row).</div><div class="cktick">' + FZ_IDS.filter(function (id) { return !isEmb(id) || embOn(id); }).map(function (id) {
+      return '<label><input type="checkbox" data-fzb="' + id + '"' + (!(f.boxes && f.boxes[id] === false) ? " checked" : "") + (off ? " disabled" : "") + "> " + esc(fzName(id)) + "</label>";
+    }).join("") + "</div></div>" +
+    '<div class="sub"><b>The bars between two sides</b><div class="mut sn">Drag one to make a side bigger; each box keeps its own. Double-click a bar to put it back.</div><span><button data-a="fzszreset"' + (f.sz ? "" : " disabled") + ">Put all bars back</button></span></div>";
+}
+document.addEventListener("change", function (e) {
+  var t = e.target;
+  if (!t || !t.dataset) return;
+  if (t.dataset.fzs) {
+    var k = t.dataset.fzs, o = null;
+    FZ_SET.forEach(function (g) { g[1].forEach(function (x) { if (x[0] === k) o = x; }); });
+    if (!o) return;
+    if (o[1] === "chk") fzSet(k, k === "off" ? (t.checked ? undefined : true) : t.checked === !!o[3] ? undefined : t.checked);
+    else fzSet(k, t.value || undefined);
+    if (k === "off" && !fzOn() && FZ.id) fzLeave(false, true);
+    if (FZ.id) { FZ.built = ""; FZ.shelf = ""; document.body.classList.toggle("fznotop", FZP().top === false); }
+    renderFzSet(); render(); if (FZ.id) fzFit(false);
+    return;
+  }
+  if (t.dataset.fzb) {
+    var b = Object.assign({}, FZP().boxes || {});
+    if (t.checked) delete b[t.dataset.fzb]; else b[t.dataset.fzb] = false;
+    fzSet("boxes", Object.keys(b).length ? b : undefined);
+    if (FZ.id === t.dataset.fzb && !t.checked) fzLeave(false, true);
+    renderFzSet(); render();
+  }
 });
 
 // ---- Refreshing: every box on its own timer while the tab is in view. In the background everything is refreshed together,
@@ -12786,6 +13421,10 @@ $("ver").textContent = VERSION;
 applyTheme(); applyWall(); tick(); render(); initAuth(); fetchWeather(); fetchClockTz(); findAutoCity(); fetchRates(); fetchIcs(); fetchTv(); fetchPod();
 $("twBtn").onclick = function () { if (twToken()) twDisconnect(); else if (window.TWITCH_CLIENT_ID) twConnect(); };
 fetchTwitch(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); buildSetNav();
+// the focus view that was open when the page was closed, when Settings → Focus view says to open it again
+(function () {
+  try { if (history.state && history.state.foc) history.replaceState(null, ""); } catch (e) {}   // (reloaded while it was open: that step is not ours any more)
+  var at = load("sp_fzat", ""); if (FZP().keep && at && fzBoxOn(at) && !boxOff(at)) fzGo(at, true); })();
 every(900000, fetchWeather, function () { var n = NTF(); return !!(n.desktop || n.email); }); every(300000, fetchRates);
 // With desktop notifications on, the things that can notify keep updating while the tab is in the background
 function bg(kind) { return function () { var n = NTF(); return !!(n.desktop || n.email) && n[kind] !== false; }; }
