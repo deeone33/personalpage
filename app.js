@@ -1,4 +1,4 @@
-var VERSION = "0.33.4";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.33.5";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -71,6 +71,9 @@ var DATA = {
 // ---- Preview for visitors who are not signed in: made-up content shown through the real boxes ----
 // (The sources and headlines are invented, so nothing false is attributed to a real publisher.)
 var PREVIEW = false;
+// signed in, or a sign-in is kept in this browser and still loading: boxes say "Loading…" instead of showing samples
+function signingIn() { return !!USER || (!PREVIEW && SAVEDIN); }
+var SAVEDIN = false;
 function loadSamples() {
   if (USER) return;
   PREVIEW = true;
@@ -758,9 +761,13 @@ function boxErrs(id) {
       add("The source “" + name + "” delivered no headlines", errPlain(why),
         "The other sources are not affected. If it stays like this for hours, the feed address may have changed: remove the source in Settings and add it again with its current feed address.");
     });
-    if (NERR && !NERRK.length) add("The news could not be loaded", errPlain(NERR), later);
+    if (NERR && !NERRK.length) add("The news could not be loaded", errPlain(NERR), "It is tried again in 30 seconds. The ↻ button tries again now.");
+    NWAIT.forEach(function (name) {
+      add("The source “" + name + "” is still loading", "It is slower than the others today, so the box did not wait for it.",
+        "Nothing to do: it keeps loading, and its headlines come with the next refresh.");
+    });
   }
-  if (id === "telegram" && NERR && !NERRK.length && !TGP.length) add("The Telegram posts could not be loaded", errPlain(NERR), later);
+  if (id === "telegram" && TGERR && !TGP.length) add("The Telegram posts could not be loaded", errPlain(TGERR), "It is tried again in 30 seconds. The ↻ button tries again now.");
   if (id === "stocks" && QERR) add("The prices could not be loaded", errPlain(QERR), "The list shows the last prices it had. " + later);
   if (id === "youtube") {
     if (YTERR) add("The videos could not be loaded", errPlain(YTERR), later);
@@ -868,6 +875,9 @@ function render() {
       var cls = (nw ? " new" : "") + (rd ? " rd" : "") + (g.hi ? " hi" : "") + (bk ? " bk" : "");
       return row("n:" + n.s, esc(n.t), P.hideSrc ? "" : srcs.join(" · "), (hot ? '<span class="pill hot" title="Many sources in the last 3 hours">hot</span>' : "") + (srcs.length > 1 ? '<span class="pill ac" title="' + esc(srcs.join(", ")) + '">' + srcs.length + "</span>" : "") + '<span class="mut">' + ago(t0) + "</span>", "a:" + n.u, cls, bk);   // the time is always the last thing on the row
     }).join("") + (vis.length > cntOf("news") ? moreBtn("news", "Show 20 more") : "") + nNote, 6) : '<div class="empty">' + (NQ ? "No headline matches that search." : "All news sources hidden or muted. Use the funnel (Sources) at the top to bring one back.") + "</div>");
+  } else if (signingIn()) {
+    // signed in (or about to be): the real headlines are on their way, so no samples
+    nb = '<div class="empty">' + (NERR && !NERRK.length ? "The news could not be loaded. Press ! above for the details." : nBusy || !NLAST || NWAIT.length ? "Loading…" : "No headlines yet.") + "</div>";
   } else {
     nb = lst("news", D.news.map(function (x) {
       return '<div class="row"><span>' + esc(x.t) + '</span><span class="pill ' + (x.n > 3 ? "ac" : "") + '">×' + x.n + "</span></div>";
@@ -894,7 +904,7 @@ function render() {
     var txt = String(g.tx || "").replace(/\s+/g, " ").trim(), media = g.vid ? "▶ Video" : g.img || g.th ? "📷 Photo" : "";
     var badge = media && txt.length < 30 ? '<span class="tgmd">' + media + "</span> " : "";
     return row("g:" + g.s, '<span class="clamp">' + (tgMulti ? "<small>" + esc(g.s) + "</small> " : "") + badge + esc((txt || (media ? "" : String(g.t))).slice(0, 400)) + "</span>", "", '<span class="mut">' + ago(g.ts) + "</span>", "m:" + g.u, cls + " tg");
-  }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : NERR ? "The posts could not be loaded. Press ! above for the details." : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + ctlG + (tp.length ? rdrBtn("tg") + fBtn("tg") : ""));
+  }).join("") + (FQ.tg ? (tq.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : "") + tNote : PREVIEW ? "" : tgOldBusy ? '<div class="more mut">Loading older posts…</div>' : tp.length > cntOf("tg") ? moreBtn("tg", "Show 20 more") : tgCanOlder() ? moreBtn("tg", "Load 20 older posts") : ""), 6) : '<div class="empty">' + (FQ.tg ? "No post matches that search." : signingIn() ? (TGERR ? "The posts could not be loaded. Press ! above for the details." : !tgSrc().length ? "No channels yet. Add one in Settings → News." : TGLAST ? "No posts yet." : "Loading…") : "Sign in to load your Telegram channels (Clash Report).") + "</div>"), 0, newBtn(tNew, "tg") + ctlG + (tp.length ? rdrBtn("tg") + fBtn("tg") : ""));
 
   var TS = (P.sort && P.sort.twitch) || "viewers", cats = {};
   tw.forEach(function (x) { cats[x.sub || "?"] = (cats[x.sub || "?"] || 0) + 1; });
@@ -927,7 +937,7 @@ function render() {
     vids.sort(function (a, b) { return ((P.fav[b.key] && b.isNew) ? 1 : 0) - ((P.fav[a.key] && a.isNew) ? 1 : 0) || b.ts - a.ts; });
     yb = (vids.length ? lst("youtube", vids.map(function (v) {
       return row(v.key, esc(v.t), v.n, (P.fav[v.key] && v.isNew ? '<span class="pill ac">new</span>' : "") + '<span class="mut">' + ago(v.ts) + "</span>", PREVIEW ? 0 : "v:" + v.id);
-    }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : USER ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
+    }).join("")) : '<div class="empty">' + (YTV.length ? "All channels hidden. Restore them in Settings." : YTDOWN ? "YouTube's upload feed is not answering right now. This is on YouTube's side; the videos come back by themselves when it does." : signingIn() ? "Loading videos…" : "Sign in to load your videos.") + "</div>");
   } else {
     var yt = D.youtube.map(function (v) { v.key = "y:" + v.ch; return v; }).filter(function (v) { return shown(v.key); }).sort(favFirst);
     yb = lst("youtube", yt.map(function (v) { return row(v.key, esc(v.t), v.ch, '<span class="mut">' + v.age + "</span>"); }).join("")) +
@@ -946,7 +956,7 @@ function render() {
   T.reddit = tile("reddit", "Reddit", (RDERR && !rp.length ? '<div class="empty">Reddit could not be loaded. Press ! above for the details.</div>' : "") + (FON.rd || FQ.rd ? '<input type="search" id="rdQ" class="flt" placeholder="Search posts…" aria-label="Search the Reddit posts">' : "") + (rq.length || rNote ? lst("reddit", rq.slice(0, 60).map(function (x) {
     var cls = (RS === "new" && isNewItem(x, "rd") && !isRead(x.u) ? " new" : "") + (isRead(x.u) ? " rd" : "");
     return row("r:" + x.s.toLowerCase(), esc(x.t), P.hideSrc ? "" : "r/" + x.s, '<span class="mut">' + ago(x.ts) + "</span>", "r:" + x.u, cls);
-  }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : USER ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR + (rp.length ? rdrBtn("rd") + fBtn("rd") : ""));
+  }).join("") + rNote, 6) : RDERR && !FQ.rd ? "" : '<div class="empty">' + (FQ.rd ? "No post matches that search." : !rSubs.length ? "No subreddits. Add some in Settings." : signingIn() ? "Loading Reddit…" : "Sign in to load Reddit.") + "</div>"), 0, newBtn(rNew, "rd") + ctlR + (rp.length ? rdrBtn("rd") + fBtn("rd") : ""));
 
   T.sports = tile("sports", "Sports", sportsBody(), 0, '<select data-s="spsport" aria-label="Sport">' + opts(spSports(), spSport()) + '</select><select data-s="spview" aria-label="Which games">' + opts(spViews(), spView()) + '</select><button class="ib sm' + (SPFIND || SPQ ? " on" : "") + '" data-a="spfilt" title="Search the sports box" aria-label="Search the sports box">⌕</button>');
 
@@ -1552,15 +1562,17 @@ function fetchTv(force) {
   // four at a time, so a long list stays well inside what the service allows
   var next = function () {
     var s = todo.shift();
-    if (!s) { if (!--tvBusy) { save("sp_tvc", TVC); render(); } return; }
+    if (!s) { if (!--tvBusy) { save("sp_tvc", TVC); render(); if (TVAGAIN) { TVAGAIN = false; fetchTv(); } } return; }
     tvGet("shows/" + s.id + "?embed[]=nextepisode&embed[]=previousepisode").then(function (j) {
       var em = j._embedded || {};
       TVC[s.id] = { t: Date.now(), n: String(j.name || s.n || "").slice(0, 80), img: tvImg(j), net: tvNet(j), st: String(j.status || ""), next: tvEp(em.nextepisode), prev: tvEp(em.previousepisode) };
       TVERR = "";
     }).catch(function (e) { TVERR = String((e && e.message) || e); if (TVC[s.id]) TVC[s.id].t = Date.now() - 20700000; }).then(next);   // a failed one is tried again in five minutes
   };
-  if (todo.length && !tvBusy) { for (var i = 0; i < 4; i++) { tvBusy++; next(); } }
+  if (todo.length && tvBusy) TVAGAIN = true;   // asked while a round is running (your synced shows just arrived): one more round after it
+  else if (todo.length) { for (var i = 0; i < 4; i++) { tvBusy++; next(); } }
 }
+var TVAGAIN = false;
 // What airs on one day (0 today, 1 tomorrow…) in the chosen country, on television and on streaming services (Discover).
 // Today's list is also kept in TVSCH, where the small card of a show looks for tonight's episode.
 var TVDAY = {};
@@ -4814,17 +4826,19 @@ function loadOlderTG() {
 }
 // fetch older posts until the box has as many as it is set to show (or the channels have no more)
 function tgTopUp() { if (!tgOldBusy && tgVisible().length < cntOf("tg") && tgCanOlder()) loadOlderTG(); }
-// Telegram on its own, every minute: it is one light request, so posts show up quickly between the full news refreshes
-var tgBusy = false;
+// Telegram on its own request, every minute and at sign-in: it is light and never waits for the news (which can take
+// longer), so the posts show up at once. A failed request is tried again after 30 seconds.
+var tgBusy = false, TGERR = "", TGLAST = 0, tgRetry = 0;
 function fetchTG() {
-  if (!sb || !USER || tgBusy || nBusy || !tgSrc().length) return;
-  tgBusy = true;
+  if (!sb || !USER || tgBusy || !tgSrc().length) return;
+  tgBusy = true; clearTimeout(tgRetry);
+  var fail = function (e) { tgBusy = false; TGERR = e; render(); tgRetry = setTimeout(fetchTG, 30000); };
   sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { tg: tgSrc() } }).then(function (r) {
-    tgBusy = false;
-    if (r.error || !r.data || !r.data.tg || nBusy) return;
+    if (r.error || !r.data || r.data._err || !r.data.tg) return fail((r.error && r.error.message) || (r.data && r.data._err) || "no data");
+    tgBusy = false; TGERR = ""; TGLAST = Date.now();
     var tops = tgTops(), fresh = unentAll(r.data.tg, ["t", "tx"]); stampFirst(fresh, "tg"); TGP = tgMerge(fresh);
     newsAlerts(); render(); tgTopUp(); tgFillGaps(tops);
-  }).catch(function () { tgBusy = false; });
+  }).catch(function (e) { fail(String((e && e.message) || e)); });
 }
 // A refresh brings each source's newest 30-40 headlines. A busy source can publish more than that while you are away,
 // so headlines the box already had stay (for two days, and only while their source is still on your list) instead of
@@ -4836,26 +4850,32 @@ function newsMerge(fresh) {
   var keep = NEWSALL.filter(function (x) { if (!x.u || have[x.u] || !names[x.s] || !(x.ts > old)) return false; have[x.u] = 1; return true; });
   return fresh.concat(keep).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 1200);
 }
+// The server answers within about 12 seconds with every source that has loaded by then. A slower source is listed
+// in news_wait: it keeps loading on the server, and its headlines come with the next refresh (sooner while some are waiting).
+// A failed request is tried again after 30 seconds.
+var NWAIT = [], nRetry = 0, nWaitN = 0;
 function fetchNews() {
   if (!sb || !USER || nBusy) return;
-  nBusy = true; render();
-  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: newsSrc().map(function (x) { return { id: x.name, urls: x.urls }; }), tg: tgSrc() } }).then(function (r) {
+  nBusy = true; clearTimeout(nRetry); render();
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { news: newsSrc().map(function (x) { return { id: x.name, urls: x.urls }; }) } }).then(function (r) {
     nBusy = false;
-    if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; }
+    if (r.error || !r.data || r.data._err) { NERR = (r.error && r.error.message) || (r.data && r.data._err) || "no data"; NERRK = []; NWAIT = []; nRetry = setTimeout(fetchNews, 30000); }
     else {
-      var tops = tgTops(), freshN = cleanLinks(unentAll(r.data.news, ["t", "d"])), freshT = unentAll(r.data.tg, ["t", "tx"]);
+      var freshN = cleanLinks(unentAll(r.data.news, ["t", "d"]));
       NEWSALL = newsMerge(freshN); NEWS = langFilter(NEWSALL.slice()); NEWSV++; NLAST = Date.now();
-      stampFirst(NEWS, "news"); stampFirst(freshT, "tg"); TGP = tgMerge(freshT);
-      setTimeout(tgTopUp, 0); setTimeout(function () { tgFillGaps(tops); }, 0);
+      stampFirst(NEWS, "news");
       var ne = r.data.news_err || {};
       NVIA = r.data.news_via || {}; NWHY = r.data.news_why || {}; FNVER = r.data.ver || 0;
       NERRK = Object.keys(ne);
       NERR = NERRK.map(function (k) { return k + " (" + ne[k] + ")"; }).join(" | ");
+      NWAIT = Array.isArray(r.data.news_wait) ? r.data.news_wait.map(String) : [];
+      nWaitN = NWAIT.length ? nWaitN + 1 : 0;
+      if (NWAIT.length && nWaitN <= 3) nRetry = setTimeout(fetchNews, 30000);   // the slow ones are usually ready on the server by then (at most 3 early tries)
       newsAlerts(); bigNews();
       setTimeout(maybeBrief, 2500);
     }
     renderSources(); renderLangs(); render();
-  }).catch(function (e) { nBusy = false; NERR = String((e && e.message) || e); render(); });
+  }).catch(function (e) { nBusy = false; NERR = String((e && e.message) || e); NWAIT = []; nRetry = setTimeout(fetchNews, 30000); render(); });
 }
 
 // ---- What's new since you last looked, what you've opened, and word filters ----
@@ -5611,14 +5631,15 @@ function loadRdComments(u) {
     show({ items: v.items || [], err: v.err || "" });
   }).catch(function (e) { show({ items: [], err: String((e && e.message) || e) }); });
 }
-function srcChanged() { persist(); NEWS = []; TGP = []; TGX = []; TGEND = {}; NEWSV++; NERR = ""; renderSources(); render(); fetchNews(); }
+function srcChanged() { persist(); NEWS = []; TGP = []; TGX = []; TGEND = {}; NEWSV++; NERR = ""; NWAIT = []; renderSources(); render(); fetchNews(); fetchTG(); }
 function lastAge(name) {
   var t = 0; NEWS.forEach(function (n) { if (n.s === name && n.ts > t) t = n.ts; });
   return t ? "latest " + ago(t) + " ago" + (NVIA[name] ? " · via " + NVIA[name].replace(/api\.|www\./g, "") : "") : "";
 }
 function renderSources() {
   $("srcNews").innerHTML = newsSrc().map(function (x, i) {
-    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc(lastAge(x.name)) + '</small>' + (NWHY[x.name] ? '<div class="mut sn">Skipped: ' + esc(NWHY[x.name].slice(0, 300)) + "</div>" : "") + '</span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
+    var wait = NWAIT.indexOf(x.name) >= 0 ? "still loading · its headlines come with the next refresh" : "";
+    return '<div class="row"><span>' + esc(x.name) + ' <small class="mut">' + esc([lastAge(x.name), wait].filter(Boolean).join(" · ")) + '</small>' + (NWHY[x.name] ? '<div class="mut sn">Skipped: ' + esc(NWHY[x.name].slice(0, 300)) + "</div>" : "") + '</span><button data-a="srcdel" data-k="n:' + i + '" aria-label="Remove ' + esc(x.name) + '">✕</button></div>';
   }).join("") + (NEWS.length && isAdmin() ? '<div class="mut sn">Feeds function: ' + (FNVER ? "version " + FNVER : "old version, redeploy it") + "</div>" : "") || '<div class="mut">No news sources.</div>';
   $("srcTg").innerHTML = tgSrc().map(function (x, i) {
     return '<div class="row"><span>' + esc(x) + '</span><button data-a="srcdel" data-k="g:' + i + '" aria-label="Remove ' + esc(x) + '">✕</button></div>';
@@ -8520,7 +8541,7 @@ function onUser(u) {
     if (resume) setTimeout(function () { openWizard(resume); }, 300);
     else if (isNew && !P.onboarded) setTimeout(function () { openWizard(); }, 600);
     checkDevice(); checkAdmin();
-    fetchQuotes(); fetchTwitch(); fetchYT(); fetchNews(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz(); fetchIcs();
+    fetchTG(); fetchNews(); fetchQuotes(); fetchTwitch(); fetchYT(); fetchPod(); fetchTv(); fetchMail(); fetchReddit(); fetchSports(); loadMailForm(); loadExtraForm(); renderSources(); renderClocks(); renderSide(); fetchWeather(); fetchClockTz(); fetchIcs();
   });
 }
 function auth(fn) {
@@ -8663,7 +8684,9 @@ function initAuth() {
   setTimeout(logVisit, 3000);   // after the sign-in state is known, so a signed-in visit carries its account
   renderAccount();
   if (!sb) { loadSamples(); return; }
-  setTimeout(function () { if (!USER && !PREVIEW) loadSamples(); }, 1500);
+  // with a sign-in kept in this browser, wait for it (it can take a few seconds on a slow line) instead of showing samples
+  SAVEDIN = savedSignIn();
+  setTimeout(function () { if (!USER && !PREVIEW) loadSamples(); }, SAVEDIN ? 15000 : 1500);
   sb.auth.onAuthStateChange(function (ev, session) {
     var u = session ? session.user : null;
     if (!u && !USER && !PREVIEW) loadSamples();   // nobody is signed in: show the preview
@@ -12652,7 +12675,7 @@ $("bkFile").onchange = function (e) {
 };
 
 // ---- Keyboard shortcuts (when you are not typing in a box) ----
-function refreshAll(force) { fetchNews(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); fetchPod(force); fetchTv(); fetchIcs(); }
+function refreshAll(force) { fetchNews(); fetchTG(); fetchQuotes(force); fetchTwitch(); fetchYT(); fetchMail(); fetchReddit(); fetchSports(force); fetchWeather(); fetchRates(); fetchPod(force); fetchTv(); fetchIcs(); }
 // Every shortcut: [name, standard key, what it does, the action]. Your own keys are in P.keys (name -> key, "" = no key);
 // change them in Settings > Keyboard shortcuts.
 var KEY_ACTS = [
