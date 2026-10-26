@@ -2123,10 +2123,6 @@ body.square .dot,body.square .dot::after,body.square .ic,body.square .mkd,body.s
 .admcl b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* ---- Focus view: one box big in the middle (app.js: FZ, fzGo) ---- */
-/* the ⤢ in a box's top line: last, quiet until the box is pointed at */
-#grid .th .hc .ib.sm.fzbtn{border-color:transparent;background:none;color:var(--mut)}
-#grid .th .hc .ib.sm.fzbtn:hover,#grid .th .hc .ib.sm.fzbtn:focus-visible{color:var(--ac);border-color:var(--line)}
-@media (hover:hover){#grid .card:not(:hover):not(:focus-within) .fzbtn{opacity:.55}}
 /* a list in a top line that only needs its choices when opened: a small ⇅ button (Twitch's sort) */
 select.selic{width:24px!important;min-width:24px!important;max-width:24px!important;padding:0!important;color:transparent!important;-webkit-appearance:none;appearance:none;flex:none!important;cursor:pointer;
   background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c93a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4'/%3E%3C/svg%3E") center/13px no-repeat}
