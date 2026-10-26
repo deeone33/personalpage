@@ -1,4 +1,4 @@
-var VERSION = "0.35.8";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.9";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -5847,7 +5847,9 @@ function loadMailForm() {
 function mailFixText(e) {
   e = String(e || "");
   if (/wrong token/i.test(e)) return "The token does not match this script. Press Replace and paste the script's token again. Lost it? In the script editor run resetToken, then open the script's address in a browser for a new one.";
-  if (/sign-in|permission|not set to Anyone|authoriz/i.test(e)) return "Google asks for a sign-in or permission instead of answering. In the script editor: Deploy → Manage deployments → ✎ → Who has access: Anyone → Deploy. If Google asks you to allow Gmail access, run the script once in the editor and allow it.";
+  if (/sign-in|permission|not set to Anyone|authori[sz]|autori[sz]|berechtigung|anmelden/i.test(e)) return "Google asks for a sign-in or permission instead of answering. Usually the script has not been allowed to read Gmail yet: in the script editor pick the function read at the top, press Run, then Review permissions → choose the account → Advanced → Go to the project → Allow. Also check Deploy → Manage deployments → ✎ → Execute as: Me, Who has access: Anyone → Deploy.";
+  // Google's own error page from script.google.com (titled "Error", "Fehler"…): the script stopped with an error
+  if (/script\.google\.com/i.test(e) && /^Page:/i.test(e)) return "The Gmail script stopped with an error before it could answer (the message is below). Most often it has not been allowed to read Gmail yet: in the script editor pick the function read, press Run and allow it. If the message names a line of code, paste the newest code from Help → Mail and deploy a New version.";
   if (/function not found|doPost|unknown request/i.test(e)) return "The script's code is out of date. Paste the newest code from Help → Mail and deploy it as a New version (the address and token stay the same).";
   if (/took too long|timed? ?out/i.test(e)) return "The Gmail script took too long to answer. That is on Google's side and usually works on the next try.";
   if (/\/exec|not a Google Apps Script/i.test(e)) return "That is not the web app address. In the script editor: Deploy → Manage deployments → copy the Web app URL (it ends in /exec), then Replace.";
