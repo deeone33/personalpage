@@ -1,4 +1,4 @@
-var VERSION = "0.35.7";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.8";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -866,7 +866,7 @@ function render() {
     var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
     if (!mailOn(cfg)) { val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>'; click = PREVIEW; }
     else if (!m) val = '<span class="mut">Loading...</span>';
-    else if (m.error) { val = '<span class="mut" title="' + esc(m.error) + '">Error</span>'; click = true; }
+    else if (m.error) { val = '<span class="mut" title="' + esc(mailFixText(m.error) + " Click for the details.") + '">Error</span>'; click = true; }   // (the click opens Settings → Mail, which says why)
     else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
     return '<div class="mailcell"' + (click ? ' data-a="mail" data-k="' + i + '" tabindex="0" role="button"' : "") + '><span class="mrn">' + esc(nm) + "</span>" + val + "</div>";
   }).join("") + "</div>");
@@ -5733,7 +5733,8 @@ function fetchMail() {
     // one failed check (a slow Gmail script, usually) keeps the last good numbers instead of showing "Error"
     if (m && m.error && old && !old.error && (old.fails || 0) < 3) { old.fails = (old.fails || 0) + 1; return; }
     MAIL[i] = m; mailAlerts(i, m);
-    if (!!(old && old.gsOld) !== !!(m && m.gsOld)) loadMailForm();   // Settings → Mail says when the script needs its update
+    // Settings → Mail says when the script needs its update, and why reading the inbox failed
+    if (!!(old && old.gsOld) !== !!(m && m.gsOld) || ((old && old.error) || "") !== ((m && m.error) || "")) loadMailForm();
   };
   var bad = function (msg) { return { error: msg || "no data" }; };
   var jobs = [];
@@ -5827,8 +5828,11 @@ function loadMailForm() {
   el.innerHTML = [0, 1].map(function (i) {
     var c = M[i] || {}, form = MLUI[i], ex = i ? "Work" : "Personal", h = '<div class="sub"><b>' + (i ? "Second inbox" : "First inbox") + "</b>";
     if (mailOn(c) && !form) {
+      // "connected" only when the inbox was read; saved but failing says why, and what to do about it
+      var er = MAIL[i] && MAIL[i].error, fx = er ? mailFixText(er) : "";
       h += '<label>Name <input type="text" class="mlnm" data-k="' + i + '" value="' + esc(c.name || "") + '" placeholder="' + ex + '"></label>' +
-        '<div class="mlst"><span>Gmail · <span class="mlok">connected ✓</span></span><span class="mlb"><button data-a="mlnew" data-k="' + i + '">Replace</button><button data-a="mldel" data-k="' + i + '">Remove</button></span></div>' +
+        '<div class="mlst"><span>Gmail · ' + (er ? '<span class="mlbad">saved, but not working</span>' : MAIL[i] ? '<span class="mlok">connected ✓</span>' : '<span class="mut">saved · checking…</span>') + '</span><span class="mlb"><button data-a="mlnew" data-k="' + i + '">Replace</button><button data-a="mldel" data-k="' + i + '">Remove</button></span></div>' +
+        (er ? '<div class="mlerr"><p class="mlfx">' + esc(fx) + '</p><p class="mut sn">What Google answered: ' + esc(String(er).slice(0, 300)) + '</p><span><button data-a="mlretry">Try again</button> <button class="lnk2" data-a="helpjump2" data-k="mail">Help → Mail</button></span></div>' : "") +
         (MAIL[i] && MAIL[i].gsOld ? '<div class="mlupd"><span><b>Update this Gmail script.</b> The newer version keeps its token out of web addresses (and so out of logs). It takes 2 minutes; the address and token stay the same.</span><button data-a="mlupd">Show how</button></div>' : "");
     } else if (!form) {
       h += '<div class="mlst"><span class="mut">Not connected</span><span class="mlb"><button data-a="mlpick" data-k="' + i + '">Connect Gmail</button></span></div>';
@@ -5838,6 +5842,18 @@ function loadMailForm() {
     }
     return h + "</div>";
   }).join("");
+}
+// The usual reasons a Gmail script cannot be read, in plain words with the fix
+function mailFixText(e) {
+  e = String(e || "");
+  if (/wrong token/i.test(e)) return "The token does not match this script. Press Replace and paste the script's token again. Lost it? In the script editor run resetToken, then open the script's address in a browser for a new one.";
+  if (/sign-in|permission|not set to Anyone|authoriz/i.test(e)) return "Google asks for a sign-in or permission instead of answering. In the script editor: Deploy → Manage deployments → ✎ → Who has access: Anyone → Deploy. If Google asks you to allow Gmail access, run the script once in the editor and allow it.";
+  if (/function not found|doPost|unknown request/i.test(e)) return "The script's code is out of date. Paste the newest code from Help → Mail and deploy it as a New version (the address and token stay the same).";
+  if (/took too long|timed? ?out/i.test(e)) return "The Gmail script took too long to answer. That is on Google's side and usually works on the next try.";
+  if (/\/exec|not a Google Apps Script/i.test(e)) return "That is not the web app address. In the script editor: Deploy → Manage deployments → copy the Web app URL (it ends in /exec), then Replace.";
+  if (/not connected any more/i.test(e)) return "This inbox is not connected any more. Press Replace and connect it again.";
+  if (/could not reach|failed to fetch|network/i.test(e)) return "The Gmail script could not be reached just now. Check that it is still deployed, then try again.";
+  return "Reading this inbox failed. Check the steps in Help → Mail; Replace with the script's address and token often fixes it.";
 }
 function mailMsg(t) { var m = $("mailMsg"); if (m) m.textContent = t || ""; }
 // The update of an older Gmail script (version 1 read its token from the web address): the new code and three steps
@@ -8324,6 +8340,9 @@ document.addEventListener("click", function (e) {
   if (/^dk(auto|srch|q|clear|play|add|del|up|down)$/.test(a)) { dkAct(a, k); return; }
   if (/^ml(pick|new|cancel|del|save)$/.test(a)) { mlAct(a, k); return; }
   if (a === "mlupd") { mailUpdHelp(); return; }
+  // Settings → Mail: read the failing inbox again now (after fixing the script), and Help opened at Mail
+  if (a === "mlretry") { MAIL.forEach(function (m, i) { if (m && m.error) MAIL[i] = null; }); loadMailForm(); mBusy = false; fetchMail(); render(); return; }
+  if (a === "helpjump2") { $("panel").hidden = true; openHelp(); setTimeout(function () { var s = $("help-" + k); if (s) s.scrollIntoView({ block: "start" }); }, 50); return; }
   if (/^site(more|clear|cal|sec)$/.test(a)) { siteAct(a, k); return; }
   if (a === "rdropen") { openReader(k, "", true); return; }
   if (a === "rdrflip") { rdrFlip(); return; }
@@ -9080,6 +9099,7 @@ function openHelp() {
     h4("Using it") +
     ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only), and clears that inbox's new-mail notifications from the bell, on all your devices.",
       "In " + S("Mail") + " each inbox shows its name (change it right there), what it is, and <b>Replace</b> and <b>Remove</b>. The address and token cannot be shown again once saved, like a password: to change them, press Replace.",
+      "The box says <b>Error</b> when an inbox is saved but cannot be read. Click it: " + S("Mail") + " then says why (a wrong token, a script not set to Anyone or not allowed to read Gmail yet, old script code, a slow answer from Google) and what to do, with <b>Try again</b> once you have fixed it.",
       "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same. The current version takes its token only in the body of each request, never in a web address; while an inbox still uses an older one, Settings " + A + " Mail says so and shows how to update."]);
 
   // ---- Tools ----

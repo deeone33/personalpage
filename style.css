@@ -2413,3 +2413,8 @@ body.foc #gridw:has(.menu){position:relative;z-index:35}
 .spws>button:first-child:not(:last-child){border-top-right-radius:0;border-bottom-right-radius:0}
 .spws>button+button{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px!important;padding-left:10px;padding-right:10px}
 @media(max-width:820px){.dksd{display:none!important}.spws>button:first-child{border-radius:9px}}
+/* Settings → Mail: an inbox that is saved but cannot be read says why, and how to fix it */
+.mlbad{color:var(--down);font-weight:600}
+.mlerr{margin-top:8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--down) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--down) 8%,transparent)}
+.mlerr p{margin:0 0 6px}
+.mlerr .mlfx{font-weight:600;color:var(--fg);font-size:13.5px;line-height:1.45;text-transform:none;letter-spacing:0}
