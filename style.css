@@ -2390,3 +2390,17 @@ body.foc #gridw:has(.menu){position:relative;z-index:35}
 #fzStage{position:relative}.fzdet.fzinl #mBody>.mh:first-child{display:none}   /* (the row just above already says it) */
 @media (max-width:820px){.fzpa .laterb,.fzpa .btn{font-size:12px;padding:4px 10px}.fzp{padding:12px 2px}}
 .fztc b{font-size:12.5px;line-height:1.25}.fztc small{font-size:11px;line-height:1.25}.fztws{padding:6px 10px;gap:6px}
+/* Twitch in the focus view on a phone: the buttons for a computer stay out of the way, Full screen turns the stream sideways,
+   and with the chat off your streams fill the space under the player */
+@media (min-width:821px){.fzfsb{display:none}}
+@media (max-width:820px){
+  .fzpb2 [data-a=dock],.fzpb2 .dkr,.fzpb2 [data-a=twpop],.fzpb2 [data-a=twchat]{display:none}
+  .fzpi{padding-top:6px;gap:6px}
+  .fzpi .fzpt{flex:1 1 100%;font-size:12.5px}
+  .fztw:has(.fztwm.off) .fztwm{order:1;flex:none}
+  .fztw:has(.fztwm.off) .fztws{order:2;flex:1;min-height:0;flex-direction:column;overflow-x:hidden;overflow-y:auto;border-bottom:0;border-top:1px solid var(--line);padding:8px}
+  .fztw:has(.fztwm.off) .fztc{max-width:none;width:100%;border-radius:12px;padding:5px 10px 5px 5px}
+}
+.fzpl:fullscreen{width:100vw;height:100vh;max-width:none;aspect-ratio:auto;border-radius:0}
+.fzx:has(.fzcht){flex:none}
+.fzcht.on{background:var(--ac);border-color:var(--ac);color:var(--acfg)}

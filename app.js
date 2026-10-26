@@ -1,4 +1,4 @@
-var VERSION = "0.35.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -8800,6 +8800,7 @@ function openHelp() {
     h4("On a phone") +
     ul(["<b>Swipe left or right</b> on the big box for the next or previous box, or tap a tile.",
       "Tap a row and it opens right under itself, in the list: scroll on for the next ones. Tap it again (or Close, or Back) to fold it away; tapping another row opens that one instead.",
+      "<b>Twitch</b>: the chat button turns the chat under the player on or off (off: your streams are listed there instead), and <b>Full screen</b> shows the stream on the whole screen, turned sideways.",
       "Back with nothing open returns to all boxes."]) +
     h4("Arranging the tiles") +
     ul(["With the focus view open, choose <b>Edit</b> in the cogwheel menu (or press E). Drag the tiles into your order, or give one the focus and use ← →. ✕ takes a tile out of the row. <b>Done</b>, Edit again or Esc ends it. The order follows your account."]) +
@@ -12833,7 +12834,8 @@ function fzList() {
 function fzAnim() { var a = FZP().anim; return a === "fade" || a === "off" ? a : "smooth"; }
 function fzDur() { return { f: 0.24, s: 0.55 }[FZP().speed] || 0.36; }
 function fzPics() { return FZP().pics !== false; }
-function fzChat() { var c = FZP().chat; return c === "below" || c === "off" ? c : "right"; }
+// Twitch chat: beside, under or hidden on a computer (Settings); a phone has its own on / off (chat under the player)
+function fzChat() { if (layM()) return FZP().chatM === "off" ? "off" : "below"; var c = FZP().chat; return c === "below" || c === "off" ? c : "right"; }
 function fzName(id) { return isEmb(id) ? embName(id) : BOX_NAMES[id] || id; }
 function fzKind(id) { return isEmb(id) ? "emb" : id === "telegram" ? "tg" : id === "twitch" ? "tw" : id === "youtube" ? "yt" : "split"; }
 // a window open on top of the page (one docked into the focus view does not count)
@@ -12906,6 +12908,8 @@ function fzSkel(id) {
 function fzExtra(id) {
   if (id === "news" || id === "telegram" || id === "reddit") return '<input type="search" class="fzq" id="fzQ" data-fz="' + id + '" placeholder="' + (id === "news" ? "Search headlines…" : "Search posts…") + '" aria-label="Search this box" value="' + esc(FZ.q[id] || "") + '" autocomplete="off">';
   if (id === "twitch") {
+    // a phone: one small chat button among the box's other buttons (on: chat under the player; off: your streams there instead)
+    if (layM()) { var con = fzChat() !== "off"; return '<button class="ib sm fzcht' + (con ? " on" : "") + '" data-a="fzchat" data-k="' + (con ? "off" : "below") + '" aria-pressed="' + con + '" title="' + (con ? "Hide the chat" : "Show the chat") + '" aria-label="Chat">' + fzSvg('<path d="M21 12a8 8 0 0 1-12 7l-5 1 1-4.5A8 8 0 1 1 21 12z"/>', 13) + "</button>"; }
     var c = fzChat(), wide = window.innerWidth > 1100, opts = wide ? [["right", "Right"], ["below", "Below"], ["off", "Hidden"]] : [["below", "Shown"], ["off", "Hidden"]], cur = !wide && c === "right" ? "below" : c;
     return '<span class="mut sn">Chat</span><span class="fzseg" role="group" aria-label="Chat">' + opts.map(function (o) { return '<button data-a="fzchat" data-k="' + o[0] + '" class="' + (o[0] === cur ? "on" : "") + '" aria-pressed="' + (o[0] === cur) + '">' + o[1] + "</button>"; }).join("") + "</span>";
   }
@@ -13120,7 +13124,7 @@ function fzTw(nativeBody) {
       '<iframe title="Twitch player" allow="autoplay; fullscreen; storage-access" allowfullscreen src="' + esc("https://player.twitch.tv/?channel=" + encodeURIComponent(login) + "&parent=" + location.hostname + "&muted=false&autoplay=true") + '"></iframe>') + '</div></div><div class="fzpi" id="fzPi"></div>';
   }
   fzPut("fzPi", '<span class="fzpt"><b>' + esc(s.name || login) + "</b>" + (s.title ? " · " + esc(s.title) : "") + (s.sub ? ' <span class="mut">· ' + esc(s.sub) + "</span>" : "") + "</span>" +
-    '<span class="fzpb2"><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="t:' + esc(login) + '">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + "</span>");
+    '<span class="fzpb2"><button class="fzfsb" data-a="fzfs" title="The stream on the whole screen (turned sideways on a phone)">⛶ Full screen</button><button data-a="dock" data-k="t:' + esc(login) + '" title="Keep it playing while you use the rest of the page">' + DOCK_LAB + '</button><button class="dkr" data-a="dockr" data-k="t:' + esc(login) + '">Dock right</button><button data-a="twpop" data-k="' + esc(login) + '" title="Opens on twitch.tv, so Turbo / your sub is recognised (no ads)">Pop out</button><button data-a="twchat" data-k="' + esc(login) + '">Pop out chat</button>' + linkBtn("https://www.twitch.tv/" + encodeURIComponent(login), "Open on Twitch", 1) + "</span>");
   var C = $("fzC"), csrc = s.off ? "" : "https://www.twitch.tv/embed/" + encodeURIComponent(login) + "/chat?parent=" + location.hostname + (P.theme === "dark" ? "&darkpopout" : "");
   if (C.dataset.src !== csrc) { C.dataset.src = csrc; C.innerHTML = csrc ? '<iframe title="Twitch chat" src="' + esc(csrc) + '"></iframe>' : ""; }
 }
@@ -13410,9 +13414,16 @@ function fzAct(a, k) {
   if (a === "fztg") { if (FZ.tgOff[k]) delete FZ.tgOff[k]; else FZ.tgOff[k] = 1; render(); return; }
   if (a === "fztgo") { openTG(k, true); return; }
   if (a === "fztw") { FZ.tw = k; render(); return; }
-  if (a === "fzchat") { fzSet("chat", k === "right" ? undefined : k); var m = $("fzTm"); if (m) m.className = "fztwm " + fzChat(); $("fzX").innerHTML = fzExtra("twitch"); return; }
+  if (a === "fzchat") { if (layM()) fzSet("chatM", k === "off" ? "off" : undefined); else fzSet("chat", k === "right" ? undefined : k); var m = $("fzTm"); if (m) m.className = "fztwm " + fzChat(); $("fzX").innerHTML = fzExtra("twitch"); return; }
   if (a === "fzyt") { FZ.yt = k; FZ.ytOn = true; render(); var m2 = $("fzYm"); if (m2) m2.scrollTop = 0; return; }
   if (a === "fzytp") { FZ.ytOn = true; render(); return; }
+  // the player on the whole screen; a phone turns it sideways (where the browser allows that), and back when you leave it
+  if (a === "fzfs") {
+    var pl = document.querySelector("#fzP .fzpl");
+    if (!pl || !pl.requestFullscreen) return;
+    pl.requestFullscreen().then(function () { try { screen.orientation.lock("landscape").catch(function () {}); } catch (e) {} }).catch(function () {});
+    return;
+  }
 }
 document.addEventListener("input", function (e) {
   var t = e.target;
@@ -13506,7 +13517,7 @@ var FZ_SET = [
   ["Focus view", [["off", "chk", "Use the focus view (⤢ in the boxes)", true]]],
   ["How it moves", [["anim", "sel", "Going in and out (the box grows into place, the others shrink into their tiles)", [["", "Grow and shrink"], ["fade", "A short fade"], ["off", "No movement"]]], ["speed", "sel", "Speed", [["f", "Fast"], ["", "Normal"], ["s", "Slow"]]]]],
   ["The other boxes", [["tiles", "sel", "Their tiles show", [["", "Icon and name"], ["icons", "Icon only"]]], ["counts", "chk", "Counts on the tiles (new, live, the biggest stock move)", true], ["top", "chk", "Keep the top row (weather, mail, radio, menu) above the big box", true]]],
-  ["The big box", [["h", "sel", "Height", [["", "To the screen's bottom"], ["80", "80% of the screen"], ["60", "60% of the screen"]]], ["pics", "chk", "Pictures in the News, Reddit, Telegram and YouTube lists", true], ["chat", "sel", "Twitch chat", [["", "Beside the player"], ["below", "Under the player"], ["off", "Hidden"]]]]],
+  ["The big box", [["h", "sel", "Height", [["", "To the screen's bottom"], ["80", "80% of the screen"], ["60", "60% of the screen"]]], ["pics", "chk", "Pictures in the News, Reddit, Telegram and YouTube lists", true], ["chat", "sel", "Twitch chat on a computer (a phone has a chat button)", [["", "Beside the player"], ["below", "Under the player"], ["off", "Hidden"]]]]],
   ["Keys and devices", [["keys", "chk", "← → switch boxes, ↑ ↓ go through the list", true], ["phone", "chk", "On a phone too", true], ["keep", "chk", "Open it again when the page opens (if it was open)", false]]]
 ];
 function renderFzSet() {
