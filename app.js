@@ -1,4 +1,4 @@
-var VERSION = "0.35.9";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.11";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -862,9 +862,15 @@ function render() {
   var note = WX ? wxText(WX.current.weather_code) + " · feels " + wxDeg(WX.current.apparent_temperature) + "°" : D.weather.note;
   var wWarn = WX ? wxWarn(WX) : [];
   T.weather = tile("weather", "", '<div class="mrow"><span class="mrn">' + esc(homeCity().name) + "</span>" + (WX ? '<span class="wi">' + wxIcon(WX.current.weather_code, WX.current.is_day, 22) + "</span>" : "") + '<b class="big">' + t + "°</b>" + (wWarn.length ? '<span class="warn" title="' + esc(wxWarnText(wWarn)) + '" aria-label="Weather warning">!</span>' : "") + '<span class="mut">' + esc(note) + "</span></div>", 1);
-  T.mail = tile("mail", "", '<div class="mailgrid">' + [0, 1].map(function (i) {
-    var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || D.inbox[i].name, val, click = false;
-    if (!mailOn(cfg)) { val = PREVIEW ? "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>' : '<span class="mut">Not connected</span>'; click = PREVIEW; }
+  // One inbox connected: it has the whole box (no divider). Both connected, or the preview: side by side. None: one cell.
+  var mOn = [0, 1].filter(function (i) { return mailOn(P.mail && P.mail[i]); }), mIdx = PREVIEW || mOn.length === 2 ? [0, 1] : mOn.length ? mOn : [0];
+  T.mail = tile("mail", "", '<div class="mailgrid' + (mIdx.length === 1 ? " one" : "") + '">' + mIdx.map(function (i) {
+    var cfg = P.mail && P.mail[i], m = MAIL[i], nm = (cfg && cfg.name) || (!PREVIEW && !mOn.length ? "Mail" : D.inbox[i].name), val, click = false;
+    if (!mailOn(cfg)) {
+      if (PREVIEW) { val = "<b>" + D.inbox[i].n + '</b><span class="mut">new</span>'; click = true; }
+      // nothing connected yet: a click goes straight to Settings → Mail
+      else return '<div class="mailcell" data-a="setgo" data-k="Mail" tabindex="0" role="button" title="Connect a Gmail inbox"><span class="mrn">' + esc(nm) + '</span><span class="mut">Not connected</span></div>';
+    }
     else if (!m) val = '<span class="mut">Loading...</span>';
     else if (m.error) { val = '<span class="mut" title="' + esc(mailFixText(m.error) + " Click for the details.") + '">Error</span>'; click = true; }   // (the click opens Settings → Mail, which says why)
     else { var n = mailN(i); val = "<b>" + n.txt + '</b><span class="mut">' + n.lab + "</span>" + (n.n > 0 ? '<button data-a="mailread" data-k="' + i + '" title="Mark read (only on this site)" aria-label="Mark read">✓</button>' : ""); click = true; }
@@ -5849,8 +5855,8 @@ function mailFixText(e) {
   if (/wrong token/i.test(e)) return "The token does not match this script. Press Replace and paste the script's token again. Lost it? In the script editor run resetToken, then open the script's address in a browser for a new one.";
   if (/sign-in|permission|not set to Anyone|authori[sz]|autori[sz]|berechtigung|anmelden/i.test(e)) return "Google asks for a sign-in or permission instead of answering. Usually the script has not been allowed to read Gmail yet: in the script editor pick the function read at the top, press Run, then Review permissions → choose the account → Advanced → Go to the project → Allow. Also check Deploy → Manage deployments → ✎ → Execute as: Me, Who has access: Anyone → Deploy.";
   // Google's own error page from script.google.com (titled "Error", "Fehler"…): the script stopped with an error
-  if (/script\.google\.com/i.test(e) && /^Page:/i.test(e)) return "The Gmail script stopped with an error before it could answer (the message is below). Most often it has not been allowed to read Gmail yet: in the script editor pick the function read, press Run and allow it. If the message names a line of code, paste the newest code from Help → Mail and deploy a New version.";
-  if (/function not found|doPost|unknown request/i.test(e)) return "The script's code is out of date. Paste the newest code from Help → Mail and deploy it as a New version (the address and token stay the same).";
+  if (/script\.google\.com/i.test(e) && /^Page:/i.test(e) && !/function not found|doGet|doPost/i.test(e)) return "The Gmail script stopped with an error before it could answer (the message is below). Most often it has not been allowed to read Gmail yet: in the script editor pick the function read, press Run and allow it. If the message names a line of code, paste the newest code from Help → Mail and deploy a New version.";
+  if (/function not found|doPost|doGet|unknown request/i.test(e)) return "The deployed script does not have this site's code (Google runs the version a deployment was made with). Paste the code from Help → Mail, press Save, then Deploy → Manage deployments → ✎ → Version: New version → Deploy. Open the script's address once more for its token, and Replace here with the address and token.";
   if (/took too long|timed? ?out/i.test(e)) return "The Gmail script took too long to answer. That is on Google's side and usually works on the next try.";
   if (/\/exec|not a Google Apps Script/i.test(e)) return "That is not the web app address. In the script editor: Deploy → Manage deployments → copy the Web app URL (it ends in /exec), then Replace.";
   if (/not connected any more/i.test(e)) return "This inbox is not connected any more. Press Replace and connect it again.";
@@ -9099,7 +9105,8 @@ function openHelp() {
       "Within a minute your unread count appears."], 5) +
     p("For a second Gmail inbox, repeat the steps while signed in to that Gmail account.") +
     h4("Using it") +
-    ul(["Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only), and clears that inbox's new-mail notifications from the bell, on all your devices.",
+    ul(["With one inbox connected it has the whole box; connect a second in " + S("Mail") + " and the box shows the two side by side.",
+      "Point at a mailbox for the latest unread subjects; click it for the list.", "<b>Mark read</b> counts only mail that arrives from now on (on this site only), and clears that inbox's new-mail notifications from the bell, on all your devices.",
       "In " + S("Mail") + " each inbox shows its name (change it right there), what it is, and <b>Replace</b> and <b>Remove</b>. The address and token cannot be shown again once saved, like a password: to change them, press Replace.",
       "The box says <b>Error</b> when an inbox is saved but cannot be read. Click it: " + S("Mail") + " then says why (a wrong token, a script not set to Anyone or not allowed to read Gmail yet, old script code, a slow answer from Google) and what to do, with <b>Try again</b> once you have fixed it.",
       "Emails from this page (notifications by email, and the &ldquo;new device signed in&rdquo; warning) are sent by your Gmail script to its own address. Set the script up a while ago? Replace its code with the code above and deploy again (<b>Deploy " + A + " Manage deployments " + A + " pencil " + A + " Version: New version " + A + " Deploy</b>); the address and token stay the same. The current version takes its token only in the body of each request, never in a web address; while an inbox still uses an older one, Settings " + A + " Mail says so and shows how to update."]);

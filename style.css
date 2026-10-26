@@ -2418,3 +2418,5 @@ body.foc #gridw:has(.menu){position:relative;z-index:35}
 .mlerr{margin-top:8px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--down) 45%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--down) 8%,transparent)}
 .mlerr p{margin:0 0 6px}
 .mlerr .mlfx{font-weight:600;color:var(--fg);font-size:13.5px;line-height:1.45;text-transform:none;letter-spacing:0}
+.mailgrid.one{grid-template-columns:1fr}   /* one inbox connected: it gets the whole box, and there is no divider */
+.mailgrid.one .mailcell{padding:0 10px}
