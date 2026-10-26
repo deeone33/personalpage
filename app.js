@@ -1,4 +1,4 @@
-var VERSION = "0.34.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.0";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -995,7 +995,7 @@ function render() {
     '<div class="dd"><button data-a="bellmenu" class="ib" aria-label="Notifications" title="Notifications" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "bell") + '"><svg ' + IC + '><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0"/></svg>' + (missed() ? "<span>" + missed() + "</span>" : "") + "</button>" +
       (MENU_OPEN === "bell" ? bellHtml() : "") + "</div>" +
     '<div class="dd"><button data-a="cogmenu2" class="ib' + (EDIT ? " on" : "") + '" aria-label="Edit and settings" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "cog") + '"><svg ' + IC + '><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
-      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT ? "Done" : "Edit") + '</button><button role="menuitem" data-a="openbrief">Summary</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openfb">Feedback</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
+      (MENU_OPEN === "cog" ? '<div class="menu" role="menu"><button role="menuitem" data-a="editmode">' + (EDIT || FZ.arr ? "Done" : "Edit") + '</button><button role="menuitem" data-a="openbrief">Summary</button><button role="menuitem" data-a="setpanel">Settings</button><button role="menuitem" data-a="openfb">Feedback</button><button role="menuitem" data-a="openhelp">Help</button></div>' : "") + "</div>" +
     '<div class="dd"><button data-a="acctmenu2" class="ib" aria-label="Account" aria-haspopup="menu" aria-expanded="' + (MENU_OPEN === "acct") + '" title="' + (USER ? esc(USER.email) : "Account") + '"><svg ' + IC + '><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></button>' +
       (MENU_OPEN === "acct" ? acctHtml() : "") + "</div>" +
     "</div>");
@@ -3836,7 +3836,7 @@ function edEnd(keep) {
 }
 // Edit on and off, from the cogwheel menu and the E key
 function toggleEdit() {
-  if (FZ.id) fzLeave(false, true);   // boxes are moved on the whole page
+  if (FZ.id) { MENU_OPEN = ""; fzArrange(!FZ.arr); return; }   // in the focus view, Edit arranges its row of tiles
   if (EDIT) { if (ED.on) edEnd(true); else { EDIT = false; document.body.classList.remove("editing"); render(); } return; }
   EDIT = true; document.body.classList.add("editing");
   edStart();
@@ -8787,15 +8787,24 @@ function openHelp() {
     ul(["Every list box has a ↻ button to reload it.", "A small <b>!</b> in a box means something could not be loaded. Click it for what failed, why, since when, and what you can do."]);
 
   html += h3("focus", "Focus view") +
-    p("Shows one box big in the middle of the page, with more room and more detail. Press <b>⤢</b> in the top right corner of a box (or the Z key).") +
-    ul(["The other boxes shrink into a row of small tiles under the top row (weather, mail, radio, menu). Each tile keeps its count: new headlines and posts, who is live, the biggest stock move. Click a tile to switch boxes; ‹ › in the big box&rsquo;s top line and the ← → keys do the same.",
-      "<b>News, Reddit, Stocks, Sports, TV shows and Podcasts</b>: a bigger list on the left (with pictures and summaries for headlines and posts), and what you click opens on the right, the same window that opens anywhere else, so a game stays live and a stock has its chart and news. ↑ ↓ go through the list.",
+    p("Shows one box big, with more room and more detail. Press <b>⤢</b> in the top right corner of a box (or the Z key). The other boxes shrink into a row of small tiles under the top row (weather, mail, radio, menu); each tile keeps its count: new headlines and posts, who is live, the biggest stock move.") +
+    h4("What each box becomes") +
+    ul(["<b>News, Reddit, Stocks, Sports, TV shows and Podcasts</b>: a bigger list (with pictures and summaries for headlines and posts, and the currency after a stock&rsquo;s price). What you click opens beside it: the same window that opens anywhere else, so a game stays live and a stock has its chart and news. Point at a row for its card without opening it.",
       "<b>Telegram</b>: every post in full, with its picture or video in it, and your channels on the left to show or hide.",
-      "<b>Twitch</b>: a big player with its chat beside it, under it or hidden, and the streams you follow in a row above. Dock and Pop out work as usual.",
-      "<b>YouTube</b>: a player with the videos of your channels beside it. <b>A web page box</b>: its page, as big as the view.",
-      "The thin bar between two sides can be dragged to make one side bigger; each box keeps its own. Double-click it to put it back.",
-      "Back to all boxes: <b>Esc</b>, the <b>⊞</b> button at the start of the tile row, the browser&rsquo;s Back, or ⤢ / Z again. On a phone, Back first closes what is open on the right.",
-      "Everything about it is in " + S("Focus view") + ": switch it off (⤢ leaves the boxes), choose which boxes have it, how it moves (or not at all), the tiles, the height, pictures, Twitch chat and the keys."]);
+      "<b>Twitch</b>: the streams you follow in a row (point at one for its title and preview), a big player, and its chat beside it, under it or hidden. Dock and Pop out work as usual.",
+      "<b>YouTube</b>: a player with the videos of your channels beside it. <b>A web page box</b>: its page, as big as the view."]) +
+    h4("On a computer") +
+    ul(["Click a tile to switch boxes; ‹ › in the big box&rsquo;s top line and the ← → keys do the same. ↑ ↓ go through the list.",
+      "The thin bar between the two sides can be dragged to make one side bigger; each box keeps its own. Double-click it to put it back.",
+      "Back to all boxes: <b>Esc</b>, the <b>⊞</b> button at the start of the tile row, the browser&rsquo;s Back, or ⤢ / Z again."]) +
+    h4("On a phone") +
+    ul(["<b>Swipe left or right</b> on the big box for the next or previous box, or tap a tile.",
+      "Tap a row and it opens right under itself, in the list: scroll on for the next ones. Tap it again (or Close, or Back) to fold it away; tapping another row opens that one instead.",
+      "Back with nothing open returns to all boxes."]) +
+    h4("Arranging the tiles") +
+    ul(["With the focus view open, choose <b>Edit</b> in the cogwheel menu (or press E). Drag the tiles into your order, or give one the focus and use ← →. ✕ takes a tile out of the row. <b>Done</b>, Edit again or Esc ends it. The order follows your account."]) +
+    h4("Settings (" + S("Focus view") + ")") +
+    ul(["Switch it off (⤢ leaves the boxes), choose which boxes have it, how it moves (grow and shrink, a short fade, or not at all) and how fast, the tiles (icon and name, or icon only, with or without counts), whether the top row stays, the height, pictures, Twitch chat, the keys, the phone, and whether it opens again when the page opens."]);
 
   html += h3("looks", "Colors &amp; wallpaper") +
     h4("Appearance (" + S("Appearance") + ")") +
@@ -8844,7 +8853,8 @@ function openHelp() {
       "The same story from several outlets is one row with a count, also when one report is in Swedish and another in English. Three or more outlets within 3 hours make it <b>hot</b>. A story stays where it was first reported; another source joining does not mark it new again.",
       "Point at a row for its picture and summary; click it to read it.",
       "<b>Highlight words</b> mark headlines and tell you when a new one appears; <b>mute words</b> hide every headline that contains them.",
-      "With several channels, each Telegram post starts with its channel&rsquo;s name. <b>Channel names in Telegram posts</b> turns that off, and <b>Source names after headlines</b> does the same for News and Reddit."]) +
+      "With several channels, each Telegram post starts with its channel&rsquo;s name. <b>Channel names in Telegram posts</b> turns that off, and <b>Source names after headlines</b> does the same for News and Reddit.",
+      "The news arrives within a few seconds. A source that is slow that day does not hold the rest up: the <b>!</b> window and the source list in Settings say it is <b>still loading</b>, and its headlines come with the next refresh."]) +
     h4("Search") +
     p("The ⌕ button at the top of News, Telegram and Reddit opens a search field.") +
     ul(["It looks through everything the box has loaded: the text and the source name. Every word must be there, in any order; capitals and accents do not matter.",
@@ -9728,7 +9738,7 @@ function showPeek(el, k) {
 function placePeek(el, below) {
   var p = $("peek");
   p.hidden = false;
-  var r = el.getBoundingClientRect(), c = (el.closest(".card") || el).getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight, x = c.right + 8, y = r.top - 12;
+  var r = el.getBoundingClientRect(), c = (el.closest(".card, .fzlist") || el).getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight, x = c.right + 8, y = r.top - 12;
   if (x + w > innerWidth - 8) x = c.left - w - 8;
   if (below || x < 8) { x = Math.max(8, Math.min(r.left, innerWidth - w - 8)); y = (below ? c.bottom : r.bottom) + 6; if (y + h > innerHeight - 8) y = r.top - h - 6; }
   p.style.left = Math.round(x) + "px"; p.style.top = Math.round(Math.max(8, Math.min(y, innerHeight - h - 8))) + "px";
@@ -9787,15 +9797,17 @@ function showMailPeek(el, i) {
   placePeek(el, true);
 }
 function hidePeek() { clearTimeout(peekT); peekKey = ""; $("peek").hidden = true; $("peek").classList.remove("fpk"); }
-var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"], #grid [data-a="radinfo"], #grid [data-a="podplay"], #grid [data-a="podshow"], #grid [data-a="tvopen"]';
+// (the focus view's lists get the same cards: its rows, the streams above the Twitch player)
+var PEEKSEL = '#grid [data-a="open"], #grid .mailcell[data-a="mail"], [data-a="fighter"], #grid [data-a="radinfo"], #grid [data-a="podplay"], #grid [data-a="podshow"], #grid [data-a="tvopen"], ' +
+  '#fzL [data-a="fzopen"], #fzL [data-a="open"], #fzL [data-a="podplay"], #fzL [data-a="podshow"], #fzL [data-a="tvopen"], #fzTs [data-a="fztw"]';
 // what a hover card belongs to: the element itself, or for a stock the whole row (its price and change too, not only the symbol)
 function peekEl(t) {
   var b = t.closest && t.closest(PEEKSEL);
   if (b) return b;
-  var r = t.closest && t.closest("#grid .row");
+  var r = t.closest && t.closest("#grid .row, #fzL .row");
   return r ? r.querySelector('[data-a="open"][data-k^="s:"]') : null;
 }
-function peekArea(b) { return b && /^s:/.test(b.dataset.k || "") ? b.closest(".row") || b : b; }
+function peekArea(b) { return b && /^s:/.test(b.dataset.k || "") ? b.closest(".row, .fzs") || b : b; }
 // A stock: its full name, the price with its currency and today's change (the box shows only the symbol and a short price)
 function showStockPeek(el, id) {
   if (EDIT) return;
@@ -9803,12 +9815,13 @@ function showStockPeek(el, id) {
   $("peek").innerHTML = '<div class="pk"><b>' + esc(name || tk(id)) + "</b>" +
     (q && q.p != null ? "<p>" + q.p.toFixed(2) + (q.cur ? " " + esc(q.cur) : "") + (q.c != null ? ' · <span class="' + (q.c >= 0 ? "up" : "down") + '">' + (q.c >= 0 ? "+" : "") + q.c.toFixed(2) + "% today</span>" : "") + "</p>" : "") +
     "<small>" + esc(id) + " · click for the chart and news</small></div>";
-  placePeek(el.closest(".row") || el);
+  placePeek(el.closest(".row, .fzs") || el);
 }
 // podcasts and TV shows: a card about the episode or the show
 var PEEK_X = { podplay: "pe:", podshow: "ps:", tvopen: "tv:" };
 document.addEventListener("mouseover", function (e) {
-  var b = peekEl(e.target), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", rad = b && b.dataset.a === "radinfo", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : rad ? "radio" : PEEK_X[b.dataset.a] ? PEEK_X[b.dataset.a] + b.dataset.k : b.dataset.k);
+  if (FZ.arr || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents)) return;   // (no cards while the tiles are arranged, or from a tap)
+  var b = peekEl(e.target), mail = b && b.dataset.a === "mail", ftr = b && b.dataset.a === "fighter", rad = b && b.dataset.a === "radinfo", k = b && (mail ? "mail:" + b.dataset.k : ftr ? "f:" + b.dataset.k : rad ? "radio" : PEEK_X[b.dataset.a] ? PEEK_X[b.dataset.a] + b.dataset.k : b.dataset.a === "fztw" ? "t:" + b.dataset.k : b.dataset.k);
   if (b && PEEK_X[b.dataset.a]) {
     if (k === peekKey) return;
     clearTimeout(peekT); peekKey = k;
@@ -12811,7 +12824,12 @@ function FZP() { return P.focus && typeof P.focus === "object" ? P.focus : {}; }
 function fzSet(k, v) { if (!P.focus || typeof P.focus !== "object") P.focus = {}; if (v === undefined) delete P.focus[k]; else P.focus[k] = v; persist(); }
 function fzOn() { return FZP().off !== true && !(layM() && FZP().phone === false); }
 function fzBoxOn(id) { return fzOn() && FZ_IDS.indexOf(id) >= 0 && !(FZP().boxes && FZP().boxes[id] === false); }
-function fzList() { return orderIds().filter(function (id) { return fzBoxOn(id) && !boxOff(id); }); }
+// the tiles in the order you gave them (Edit while the focus view is open), the rest after them in the page's order
+function fzList() {
+  var o = Array.isArray(FZP().order) ? FZP().order : [], all = orderIds();
+  return o.filter(function (id, i) { return all.indexOf(id) >= 0 && o.indexOf(id) === i; }).concat(all.filter(function (id) { return o.indexOf(id) < 0; }))
+    .filter(function (id) { return fzBoxOn(id) && !boxOff(id); });
+}
 function fzAnim() { var a = FZP().anim; return a === "fade" || a === "off" ? a : "smooth"; }
 function fzDur() { return { f: 0.24, s: 0.55 }[FZP().speed] || 0.36; }
 function fzPics() { return FZP().pics !== false; }
@@ -12838,17 +12856,21 @@ function fzBadge(id) {
   return n ? '<span class="fzbd">' + n + "</span>" : "";
 }
 function fzShelf() {
-  var ids = fzList(), sig = ids.join(",") + "|" + (FZP().tiles || "") + "|" + ids.map(fzName).join(",");
+  var ids = fzList(), sig = ids.join(",") + "|" + (FZP().tiles || "") + "|" + ids.map(fzName).join(",") + "|" + FZ.arr;
   var sh = $("fzShelf");
   if (FZ.shelf !== sig) {
     FZ.shelf = sig;
-    var icons = FZP().tiles === "icons", ch = $("fzChips"), sl = ch ? ch.scrollLeft : 0;
-    sh.innerHTML = '<button class="fzall" data-a="fzexit" title="Back to all boxes (Esc)" aria-label="Back to all boxes">' + fzSvg(FZ_ICO.grid, 15) + "<span>All boxes</span></button>" +
+    var icons = FZP().tiles === "icons" && !FZ.arr, ch = $("fzChips"), sl = ch ? ch.scrollLeft : 0;
+    sh.classList.toggle("arr", FZ.arr);
+    // Arranging (Edit in the cogwheel menu while the focus view is open): drag a tile to its place, ✕ takes it out of the row
+    sh.innerHTML = (FZ.arr ? '<span class="fzarrh">Drag the tiles into your order</span>' : '<button class="fzall" data-a="fzexit" title="Back to all boxes (Esc)" aria-label="Back to all boxes">' + fzSvg(FZ_ICO.grid, 15) + "<span>All boxes</span></button>") +
       '<div class="fzchips" id="fzChips">' + ids.map(function (id) {
-        return '<button class="fzc" data-a="fzgo" data-k="' + id + '" title="' + esc(fzName(id)) + '" aria-label="' + esc(fzName(id)) + '">' + fzIco(id, 15) + (icons ? "" : '<span class="fzcn">' + esc(fzName(id)) + "</span>") + '<span class="fzbw"></span></button>';
-      }).join("") + "</div>";
+        return '<button class="fzc" data-a="fzgo" data-k="' + id + '" title="' + esc(FZ.arr ? "Drag to move " + fzName(id) : fzName(id)) + '" aria-label="' + esc(fzName(id)) + '">' + (FZ.arr ? '<i class="fzgrip" aria-hidden="true">⠿</i>' : "") + fzIco(id, 15) + (icons ? "" : '<span class="fzcn">' + esc(fzName(id)) + "</span>") +
+          (FZ.arr ? '<span class="fzhide" data-a="fzhide" data-k="' + id + '" role="button" tabindex="0" title="Take ' + esc(fzName(id)) + ' out of the row (Settings → Focus view brings it back)" aria-label="Take ' + esc(fzName(id)) + ' out of the row">✕</span>' : '<span class="fzbw"></span>') + "</button>";
+      }).join("") + "</div>" + (FZ.arr ? '<button class="fzall fzdone" data-a="fzarr">Done</button>' : "");
     if ($("fzChips")) $("fzChips").scrollLeft = sl;
   }
+  if (FZ.arr) return;
   Array.prototype.forEach.call(sh.querySelectorAll(".fzc"), function (c) {
     var id = c.dataset.k, on = id === FZ.id, b = fzBadge(id), w = c.querySelector(".fzbw");
     c.classList.toggle("on", on);
@@ -12899,7 +12921,7 @@ function fzBuild() {
     '<div class="fzbody" id="fzBody">' + fzSkel(id) + "</div>";
   if (keep) {
     var D = $("fzD");
-    if (D) { D.innerHTML = ""; D.appendChild(MBOX); D.parentElement.classList.add("show"); }
+    if (D) { D.innerHTML = ""; D.appendChild(MBOX); }
     else { FZ.dock = false; $("modal").classList.remove("fzdk"); closeModal(); }
   }
 }
@@ -12922,12 +12944,16 @@ function fzPut(id, html) {
   var el = $(id);
   if (!el || FZ.sig[id] === html) return false;
   FZ.sig[id] = html;
+  // (a window opened inside the list, on a phone, is lifted out first, and put back under its row afterwards)
+  var D = id === "fzL" && $("fzD"), inl = D && el.contains(D);
+  if (inl) el.parentNode.appendChild(D);
   var st = el.scrollTop, sl = el.scrollLeft, act = document.activeElement, aid = act && act.id && el.contains(act) ? act.id : "", typed = {}, sel = null;
   Array.prototype.forEach.call(el.querySelectorAll("input[id]"), function (n) { if (n.type !== "checkbox") typed[n.id] = n.value; });
   if (aid) { try { sel = [act.selectionStart, act.selectionEnd]; } catch (e) {} }
   el.innerHTML = html;
   Object.keys(typed).forEach(function (k) { var n = $(k); if (n && el.contains(n) && n.value !== typed[k]) n.value = typed[k]; });
   if (aid) { var f = $(aid); if (f) { try { f.focus({ preventScroll: true }); if (sel && sel[0] != null) f.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  if (inl) { var row = fzRow(); if (row) row.parentNode.insertBefore(D, row.nextSibling); D.classList.toggle("fzinl", !!row); }
   el.scrollTop = st; el.scrollLeft = sl;
   return true;
 }
@@ -12941,7 +12967,7 @@ function fzUpdate(T) {
   var nv = fzNative(T[id]), k = fzKind(id);
   fzPut("fzT", nv.tools);
   var sub = fzSub(id); if ($("fzSub") && $("fzSub").textContent !== sub) $("fzSub").textContent = sub;
-  if (k === "split") { fzPut("fzL", id === "news" ? fzNews() : id === "reddit" ? fzRd() : id === "stocks" ? fzSt() : '<div class="fznat">' + nv.body + "</div>"); fzMark(); }
+  if (k === "split") { fzPut("fzL", id === "news" ? fzNews() : id === "reddit" ? fzRd() : id === "stocks" ? fzSt() : '<div class="fznat">' + nv.body + "</div>"); fzMark(); fzInline(); }
   else if (k === "tg") { var ch = fzTgCh(); fzPut("fzCh", ch); var tg = $("fzBody").querySelector(".fztg"); if (tg) tg.classList.toggle("one", !ch); if (!fzVidPlaying()) fzPut("fzF", fzTg()); }
   else if (k === "tw") fzTw(nv.body);
   else if (k === "yt") fzYt(nv.body);
@@ -12970,7 +12996,7 @@ function fzMark() {
 }
 function fzFind(L, s) {
   var all = L.querySelectorAll('[data-a="' + s.a + '"]');
-  for (var i = 0; i < all.length; i++) if (all[i].getAttribute("data-k") === s.k) return all[i];
+  for (var i = 0; i < all.length; i++) if (all[i].getAttribute("data-k") === s.k && !all[i].closest("#fzD")) return all[i];   // (not inside a window opened in the list)
   return null;
 }
 
@@ -13017,10 +13043,10 @@ function fzSt() {
   var st = stockRows();
   if (!st.length) return '<div class="fznat"><div class="empty">No stocks. Add some in Settings → Stocks.</div></div>';
   return st.map(function (x) {
-    var c = x.c, up = c != null && c >= 0, pts = PREVIEW ? sparkFake(x.id, c) : SPARK[qk(x.id)], rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
+    var c = x.c, up = c != null && c >= 0, q = QUOTES[qk(x.id)], cur = q && q.cur ? String(q.cur).slice(0, 5) : "", pts = PREVIEW ? sparkFake(x.id, c) : SPARK[qk(x.id)], rise = pts && pts.length > 1 ? pts[pts.length - 1] >= pts[0] : up;
     return '<div class="fzs" data-a="fzopen" data-k="' + esc("s:" + x.id) + '" role="button" tabindex="0">' + ico(x.id, x.logo) + '<span class="fzsn"><b>' + esc(x.id) + "</b><small>" + esc(x.name || "") + "</small></span>" +
       '<span class="fzsk">' + (sparkOn() && pts ? sparkSvg(pts, SPARKR === "d" && c != null && !PREVIEW ? up : rise) : "") + "</span>" +
-      '<span class="fzsp">' + (x.p != null ? x.p.toFixed(2) : "") + (c == null ? '<span class="mut">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "+" : "") + c.toFixed(2) + "%</span>") + "</span></div>";
+      '<span class="fzsp">' + (x.p != null ? x.p.toFixed(2) + (cur ? ' <i class="fzcur">' + esc(cur) + "</i>" : "") : "") + (c == null ? '<span class="mut">n/a</span>' : '<span class="' + (up ? "up" : "down") + '">' + (up ? "+" : "") + c.toFixed(2) + "%</span>") + "</span></div>";
   }).join("");
 }
 
@@ -13054,6 +13080,24 @@ function fzTwList() {
   var off = TWC && twOffOn() ? twFavs().filter(function (l) { return !ids[l]; }).map(function (l) { var o = TWOFF[l] || {}; return { id: l, name: o.n || l, off: true, last: o.last }; }) : [];
   return live.concat(off);
 }
+// The channels' own pictures (their Twitch profile images): asked once for the ones not known yet, kept a week on this device
+var TWAV = load("sp_twav", {}), twAvBusy = 0;
+function twAvatar(l) { var a = TWAV[l]; return a && a.u ? safeUrl(a.u) : ""; }
+function twAvatars(ls) {
+  var tok = twToken(), now = Date.now();
+  if (!tok || !window.TWITCH_CLIENT_ID || now - twAvBusy < 60000) return;
+  var need = ls.filter(function (l) { var a = TWAV[l]; return /^[a-z0-9_]{2,25}$/i.test(l) && !(a && now - a.t < 604800000); }).slice(0, 100);
+  if (!need.length) return;
+  twAvBusy = now;
+  twGet("users?" + need.map(function (l) { return "login=" + encodeURIComponent(l); }).join("&"), tok).then(function (j) {
+    need.forEach(function (l) { TWAV[l] = { u: "", t: now }; });
+    (j.data || []).forEach(function (u) { TWAV[String(u.login || "").toLowerCase()] = { u: String(u.profile_image_url || "").slice(0, 300), t: now }; });
+    var k = Object.keys(TWAV);
+    if (k.length > 300) k.sort(function (a, b) { return TWAV[a].t - TWAV[b].t; }).slice(0, k.length - 300).forEach(function (x) { delete TWAV[x]; });
+    save("sp_twav", TWAV); twAvBusy = 0; render();
+  }).catch(function () {});
+}
+function fmtV(v) { v = +v || 0; return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k" : String(v); }
 function fzTw(nativeBody) {
   var list = fzTwList(), tm = $("fzTm"), x = $("fzX");
   // nothing to play (Twitch not connected, nobody live): the box's own list and its Connect button, full width
@@ -13061,11 +13105,13 @@ function fzTw(nativeBody) {
   if (x) x.hidden = !list.length;
   if (!list.length) { fzPut("fzTs", ""); $("fzP").dataset.ch = ""; fzPut("fzP", '<div class="fznat">' + nativeBody + "</div>"); FZ.tw = ""; $("fzC").dataset.src = ""; $("fzC").innerHTML = ""; return; }
   if (!FZ.tw || !list.some(function (x) { return x.id === FZ.tw; })) FZ.tw = (list.filter(function (x) { return !x.off; })[0] || list[0]).id;
+  twAvatars(list.map(function (x) { return x.id; }));
+  // each stream: the channel's own picture, its name, and the game and viewers (pointing at one shows its title and preview)
   fzPut("fzTs", list.map(function (x) {
-    var th = x.off ? "" : safeUrl(String(x.th || "").replace("{width}", "128").replace("{height}", "72"));
-    return '<button class="fztc' + (x.id === FZ.tw ? " on" : "") + (x.off ? " off" : "") + '" data-a="fztw" data-k="' + esc(x.id) + '" title="' + esc(x.off ? (x.name || x.id) + " is offline" : (x.title || x.name || x.id)) + '">' +
-      (th ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(th) + '">' : '<span class="fzav" style="--h:' + fzHue(x.id) + '">' + esc(String(x.name || x.id).charAt(0).toUpperCase()) + "</span>") +
-      "<span><b>" + esc(x.name || x.id) + "</b><small>" + esc(x.off ? (x.last ? "offline · live " + ago(x.last) + " ago" : "offline") : (x.sub || "") + " · " + (+x.v || 0).toLocaleString("en-GB")) + "</small></span></button>";
+    var av = twAvatar(x.id);
+    return '<button class="fztc' + (x.id === FZ.tw ? " on" : "") + (x.off ? " off" : "") + '" data-a="fztw" data-k="' + esc(x.id) + '" aria-label="' + esc((x.name || x.id) + (x.off ? ", offline" : "")) + '">' +
+      '<span class="fzav" style="--h:' + fzHue(x.id) + '">' + (av ? '<img alt="" loading="lazy" referrerpolicy="no-referrer" data-rm="1" src="' + esc(av) + '">' : esc(String(x.name || x.id).charAt(0).toUpperCase())) + "</span>" +
+      "<span><b>" + esc(x.name || x.id) + "</b><small>" + esc(x.off ? (x.last ? "offline · " + ago(x.last) + " ago" : "offline") : (x.sub || "") + " · " + fmtV(x.v)) + "</small></span></button>";
   }).join(""));
   var s = list.filter(function (x) { return x.id === FZ.tw; })[0], login = s.id, P0 = $("fzP");
   if (P0.dataset.ch !== login || !P0.querySelector("iframe")) {
@@ -13117,7 +13163,7 @@ function fzRoute() {
   var now = Date.now(), ev = FZ.ev && now - FZ.ev.t < 1500 ? FZ.ev : null;
   var dock = FZ.want && now - FZ.want < 4000 ? true : ev ? ev.inD && FZ.dock : FZ.dock;
   FZ.want = 0;
-  if (dock === FZ.dock) return;
+  if (dock === FZ.dock) { if (dock) { fzMark(); fzInline(); } return; }   // (another row opened: on a phone the window moves under it)
   if (!dock && FZ.sel[FZ.id]) FZ.reopen = true;
   fzDock(dock);
 }
@@ -13128,9 +13174,25 @@ function fzDock(on) {
   FZ.dock = on;
   if (on) { D.innerHTML = ""; D.appendChild(MBOX); D.scrollTop = 0; $("modal").classList.add("fzdk"); }
   else { $("modal").appendChild(MBOX); $("modal").classList.remove("fzdk"); if (D) D.innerHTML = fzPh(FZ.id); }
-  var sp = $("fzBody") && $("fzBody").querySelector(".fzsplit");
-  if (sp) sp.classList.toggle("show", on);
   fzMark();
+  fzInline();
+}
+// On a phone there is no room for two sides: what you tap opens right under its row, in the list, and the list goes on
+// under it (scroll on to the next ones, tap another to open that one instead; Close or Back folds it away again).
+function fzInline() {
+  var D = $("fzD"), L = $("fzL"), sp = $("fzBody") && $("fzBody").querySelector(".fzsplit");
+  if (!D || !L || !sp) return;
+  var row = FZ.dock && layM() ? fzRow() : null;
+  if (!row) { if (D.parentNode !== sp) sp.appendChild(D); D.classList.remove("fzinl"); return; }
+  D.classList.add("fzinl");
+  if (row.nextElementSibling === D) return;
+  row.parentNode.insertBefore(D, row.nextSibling);
+  var stick = L.querySelector(".fzf");   // (under the filters that stay at the top of the list)
+  L.scrollTop += row.getBoundingClientRect().top - L.getBoundingClientRect().top - 4 - (stick ? stick.offsetHeight : 0);   // the row at the top, what it opened under it
+}
+function fzRow() {
+  var L = $("fzL"), s = FZ.sel[FZ.id], el = s && L ? fzFind(L, s) : null;
+  return el ? el.closest(".fzi, .fzs, .sprow, .row") || el : null;
 }
 // closeModal() tells us: a docked window was closed (Close on a phone, Esc), or one on top closed and the docked one returns
 function fzClosed(was) {
@@ -13147,13 +13209,18 @@ function fzReopen() {
 ["click", "keydown"].forEach(function (type) {
   document.addEventListener(type, function (e) {
     var t = e.target && e.target.closest ? e.target : document.body;
-    FZ.ev = { t: Date.now(), inD: !!t.closest("#fzD"), inL: !!t.closest("#fzL") };
+    FZ.ev = { t: Date.now(), inD: !!t.closest("#fzD"), inL: !!t.closest("#fzL") && !t.closest("#fzD") };
     if (!FZ.id) return;
     if (type === "click") {
       if (FZ.ev.inL) {
         FZ.want = Date.now();
         var b = t.closest("[data-a]");
-        if (b && /^(fzopen|open|tvopen|podshow|spteam|fighter)$/.test(b.dataset.a)) FZ.sel[FZ.id] = { a: b.dataset.a, k: b.getAttribute("data-k") || "" };
+        if (b && /^(fzopen|open|tvopen|podshow|spteam|fighter)$/.test(b.dataset.a)) {
+          var s0 = FZ.sel[FZ.id], same = s0 && s0.a === b.dataset.a && s0.k === (b.getAttribute("data-k") || "");
+          // on a phone, tapping the row that is open folds it away again
+          if (same && FZ.dock && layM()) { e.preventDefault(); e.stopPropagation(); FZ.want = 0; closeModal(); return; }
+          FZ.sel[FZ.id] = { a: b.dataset.a, k: b.getAttribute("data-k") || "" };
+        }
       } else FZ.want = 0;
     }
   }, true);
@@ -13168,24 +13235,28 @@ function fzNames(on) {
     Array.prototype.forEach.call(document.querySelectorAll("#fzShelf .fzc"), function (c) { if (c.dataset.k !== FZ.id) c.style.viewTransitionName = "fz-" + c.dataset.k; });
   } else Array.prototype.forEach.call(document.querySelectorAll("#grid > .card[data-id]"), function (c) { if (FZ_IDS.indexOf(c.dataset.id) >= 0) c.style.viewTransitionName = "fz-" + c.dataset.id; });
 }
+// "Grow and shrink": each box and its tile share a name, and the browser moves one into the other. The pictures are
+// not stretched while they move (a small tile would otherwise be blown up to the size of the page for a moment); each
+// side is shown at its own size and cut to the moving frame. "A short fade": the old page fades into the new one.
+// A new move while one is still running finishes the running one first, so going back and forth quickly stays clean.
+var FZT = null;
 function fzMove(update) {
-  var a = fzAnim(), rm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (a === "off" || a === "fade" || rm || !document.startViewTransition) {
-    update();
-    if (a !== "off") { var el = FZ.id ? $("fzWrap") : $("gridw"); el.classList.remove("fzfade"); void el.offsetWidth; el.classList.add("fzfade"); }
-    return;
-  }
-  var h = document.documentElement;
-  h.style.setProperty("--fzd", fzDur() + "s"); h.classList.add("fzvt");
-  fzNames(true);
+  var a = fzAnim(), rm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches, h = document.documentElement;
+  if (FZT) { try { FZT.skipTransition(); } catch (e) {} FZT = null; }
+  if (a === "off" || rm) { update(); return; }
+  if (!document.startViewTransition) { update(); var el = FZ.id ? $("fzWrap") : $("gridw"); el.classList.remove("fzfade"); void el.offsetWidth; el.classList.add("fzfade"); return; }
+  h.style.setProperty("--fzd", (a === "fade" ? Math.max(0.24, fzDur() * 0.8) : fzDur()) + "s");
+  h.classList.add("fzvt"); h.classList.toggle("fzfv", a === "fade");
+  if (a !== "fade") fzNames(true);
   var t;
-  try { t = document.startViewTransition(function () { update(); fzNames(true); }); }
-  catch (e) { h.classList.remove("fzvt"); fzNames(false); update(); return; }
-  var done = function () { h.classList.remove("fzvt"); fzNames(false); };
+  try { t = document.startViewTransition(function () { update(); if (a !== "fade") fzNames(true); }); }
+  catch (e) { h.classList.remove("fzvt", "fzfv"); fzNames(false); update(); return; }
+  FZT = t;
+  var done = function () { if (FZT !== t) return; FZT = null; h.classList.remove("fzvt", "fzfv"); fzNames(false); };
   t.finished.then(done, done);
 }
-function fzGo(id, instant) {
-  if (!fzBoxOn(id) || boxOff(id) || EDIT) return;
+function fzGo(id, instant, dir) {
+  if (!fzBoxOn(id) || boxOff(id) || EDIT || FZ.arr) return;
   if (FZ.id === id) { fzLeave(); return; }
   var first = !FZ.id;
   if (first) { FZ.y = window.scrollY || 0; closeMenus(); hidePeek(); try { history.pushState({ foc: 1 }, ""); } catch (e) {} }
@@ -13200,7 +13271,15 @@ function fzGo(id, instant) {
     save("sp_fzat", id);   // (this device only: Settings → Focus view → open it again when the page opens)
     // a stock opens by itself (it has nothing to mark as read), so the right side is not empty
     if (id === "stocks" && !FZ.sel.stocks && !layM()) { var f = $("fzL") && $("fzL").querySelector('[data-a="fzopen"]'); if (f) { FZ.want = Date.now(); f.click(); } }
-    else if (FZ.sel[id]) setTimeout(fzReopen, 0);
+    else if (FZ.sel[id] && !layM()) setTimeout(fzReopen, 0);   // (a phone starts with the list)
+    // a swipe: the new box slides in from the side it came from
+    if (dir) { var b = $("fzBody"); if (b) { b.style.setProperty("--fzx", dir * 40 + "px"); b.classList.add("fzsl"); } }
+    // the first time on a phone: how to get to the other boxes
+    if (layM() && fzList().length > 1 && !load("sp_fzsw", 0)) {
+      save("sp_fzsw", 1);
+      var hint = document.createElement("div"); hint.className = "fzhint"; hint.textContent = "Swipe left or right for your other boxes";
+      $("fzStage").appendChild(hint); setTimeout(function () { hint.remove(); }, 4200);
+    }
   };
   if (instant) go(); else fzMove(go);
 }
@@ -13213,7 +13292,7 @@ function fzLeave(fromPop, instant) {
   }
   var y = FZ.y, go = function () {
     if (FZ.dock) { FZ.keepSel = true; closeModal(); FZ.keepSel = false; }
-    FZ.id = ""; FZ.built = ""; FZ.sig = {}; FZ.shelf = "";
+    FZ.id = ""; FZ.built = ""; FZ.sig = {}; FZ.shelf = ""; FZ.arr = false;
     document.body.classList.remove("foc", "fznotop");
     $("fzWrap").hidden = true; $("fzStage").innerHTML = ""; $("fzShelf").innerHTML = ""; $("fzStage").style.height = "";
     save("sp_fzat", "");
@@ -13222,10 +13301,43 @@ function fzLeave(fromPop, instant) {
   };
   if (instant) go(); else fzMove(go);
 }
-function fzStepBox(d) {
+// ---- Phone (and any touch screen): swipe the big box left or right for the next or previous box ----
+// The box follows the finger a little; a clear sideways swipe of 60px or more switches. Swipes that start on something
+// that scrolls sideways itself (the tile row, the streams, a table), in a field, a video or a player are left alone.
+(function () {
+  var sx = 0, sy = 0, on = false, dir = 0, body = null;
+  function scrollsX(el) {
+    for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 2) { var o = getComputedStyle(el).overflowX; if (o === "auto" || o === "scroll") return true; }
+    return false;
+  }
+  document.addEventListener("touchstart", function (e) {
+    on = false; dir = 0;
+    if (!FZ.id || FZ.arr || e.touches.length !== 1 || modalUp()) return;
+    var t = e.target;
+    if (!t.closest || !t.closest("#fzBody") || t.closest("input, textarea, select, video, iframe, .fzgut, .tv, .tradingview-widget-container") || scrollsX(t)) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; on = true; body = $("fzBody");
+  }, { passive: true });
+  document.addEventListener("touchmove", function (e) {
+    if (!on) return;
+    var dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+    if (!dir) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; dir = Math.abs(dx) > Math.abs(dy) * 1.4 ? 1 : -1; }
+    if (dir < 0) { on = false; return; }   // up or down: the list scrolls as usual
+    e.preventDefault();
+    body.style.transform = "translateX(" + Math.round(dx * 0.35) + "px)"; body.style.opacity = String(1 - Math.min(0.45, Math.abs(dx) / 500));
+  }, { passive: false });
+  document.addEventListener("touchend", function (e) {
+    if (!on) return;
+    on = false;
+    var dx = ((e.changedTouches[0] || {}).clientX || sx) - sx, b = body;
+    b.style.transition = "transform .18s, opacity .18s"; b.style.transform = ""; b.style.opacity = "";
+    setTimeout(function () { b.style.transition = ""; }, 200);
+    if (dir > 0 && Math.abs(dx) > 60) fzStepBox(dx < 0 ? 1 : -1, true);
+  });
+})();
+function fzStepBox(d, swipe) {
   var ids = fzList(), i = ids.indexOf(FZ.id);
   if (ids.length < 2) return;
-  fzGo(ids[(i + d + ids.length) % ids.length]);
+  fzGo(ids[(i + d + ids.length) % ids.length], !!swipe, swipe ? d : 0);
 }
 // the shortcut (Z unless changed): the last box you looked at this way, or the first one
 function fzKey() { if (FZ.id) { fzLeave(); return; } var ids = fzList(); if (ids.length) fzGo(ids.indexOf(FZ.last) >= 0 ? FZ.last : ids[0]); }
@@ -13247,10 +13359,42 @@ function fzFit(scroll) {
 window.addEventListener("resize", function () { clearTimeout(fzFit.t); fzFit.t = setTimeout(function () { if (!FZ.id) return; fzFit(false); var x = $("fzX"); if (x && FZ.id === "twitch") x.innerHTML = fzExtra("twitch"); }, 120); });
 
 // ---- Clicks and keys of the focus view ----
+// Arranging the tiles: Edit (cogwheel menu, or E) while the focus view is open. Drag a tile, or give it the focus and use
+// ← →; ✕ takes one out of the row; Done, Edit again or Esc ends it. The order follows your account (P.focus.order).
+function fzArrange(on) { FZ.arr = !!on; FZ.shelf = ""; hidePeek(); render(); if (on) { var c = document.querySelector("#fzChips .fzc"); if (c) try { c.focus({ preventScroll: true }); } catch (e) {} } }
+function fzOrderSave() { var row = $("fzChips"); if (row) fzSet("order", Array.prototype.map.call(row.querySelectorAll(".fzc"), function (k) { return k.dataset.k; })); }
+document.addEventListener("pointerdown", function (e) {
+  if (!FZ.arr) return;
+  var c = e.target.closest && e.target.closest("#fzChips .fzc");
+  if (!c || e.target.closest(".fzhide") || e.button > 0) return;
+  e.preventDefault();
+  var row = $("fzChips"), moved = false, x0 = e.clientX;
+  try { c.setPointerCapture(e.pointerId); } catch (x) {}
+  c.classList.add("drag");
+  function mv(ev) {
+    if (!moved && Math.abs(ev.clientX - x0) < 4) return;
+    moved = true;
+    var kids = Array.prototype.filter.call(row.children, function (k) { return k !== c; }), before = null;
+    for (var i = 0; i < kids.length; i++) { var r = kids[i].getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { before = kids[i]; break; } }
+    if (c.nextElementSibling !== before) row.insertBefore(c, before);
+    var rr = row.getBoundingClientRect();
+    if (ev.clientX < rr.left + 30) row.scrollLeft -= 14; else if (ev.clientX > rr.right - 30) row.scrollLeft += 14;
+  }
+  function up() {
+    c.removeEventListener("pointermove", mv); c.removeEventListener("pointerup", up); c.removeEventListener("pointercancel", up);
+    c.classList.remove("drag");
+    if (moved) fzOrderSave();
+  }
+  c.addEventListener("pointermove", mv); c.addEventListener("pointerup", up); c.addEventListener("pointercancel", up);
+});
 function fzAct(a, k) {
+  if (a === "fzarr") { fzArrange(false); return; }
+  if (a === "fzhide") { var bx = Object.assign({}, FZP().boxes || {}); bx[k] = false; fzSet("boxes", bx); renderFzSet(); if (FZ.id === k) { var nx = fzList()[0]; if (nx) fzGo(nx, true); else { fzArrange(false); fzLeave(false, true); } } else render(); return; }
+  if (FZ.arr && a === "fzgo") return;   // (while arranging, a tile is dragged, not opened)
   if (a === "fzgo") { fzGo(k); return; }
   if (a === "fzexit") { fzLeave(); return; }
   if (a === "fznav") { fzStepBox(+k); return; }
+  if (a === "fzorderreset") { fzSet("order"); renderFzSet(); FZ.shelf = ""; render(); return; }
   if (a === "fzszreset") { fzSet("sz"); renderFzSet(); if (FZ.id) { FZ.built = ""; render(); } return; }
   if (!FZ.id) return;
   if (a === "fzopen") {
@@ -13280,7 +13424,7 @@ document.addEventListener("input", function (e) {
 function fzStep(d) {
   var L = $("fzL") || $("fzYl");
   if (!L) return false;
-  var items = Array.prototype.filter.call(L.querySelectorAll('[data-a="fzopen"], [data-a="fzyt"], [data-a="open"], [data-a="tvopen"], [data-a="podshow"]'), function (x) { return x.offsetParent !== null; });
+  var items = Array.prototype.filter.call(L.querySelectorAll('[data-a="fzopen"], [data-a="fzyt"], [data-a="open"], [data-a="tvopen"], [data-a="podshow"]'), function (x) { return x.offsetParent !== null && !x.closest("#fzD"); });
   if (!items.length) return false;
   var cur = L.querySelector(".fzon"), i = -1;
   items.forEach(function (x, j) { if (i < 0 && cur && (cur === x || cur.contains(x))) i = j; });
@@ -13291,6 +13435,17 @@ function fzStep(d) {
 document.addEventListener("keydown", function (e) {
   if (!FZ.id || KEYCAP || e.ctrlKey || e.metaKey || e.altKey) return;
   var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|VIDEO|IFRAME)$/.test(t.tagName));
+  // arranging the tiles: ← → move the tile that has the focus, Esc ends it
+  if (FZ.arr && !typing && !modalUp() && $("panel").hidden) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fzArrange(false); return; }
+    var c = t && t.closest && t.closest("#fzChips .fzc");
+    if (c && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault(); e.stopPropagation();
+      var row = c.parentNode, s = e.key === "ArrowLeft" ? c.previousElementSibling : c.nextElementSibling;
+      if (s) { if (e.key === "ArrowLeft") row.insertBefore(c, s); else row.insertBefore(s, c); fzOrderSave(); c.focus(); fzReveal(c, row); }
+    }
+    if (/^Arrow/.test(e.key)) return;
+  }
   if (t && t.classList && t.classList.contains("fzgut")) return;   // the bar between the sides has its own ← →
   var over = modalUp() || !$("panel").hidden || !$("welcome").hidden;
   // Esc in the focus view's search: empties it first, then leaves the field (the window on the right stays open)
@@ -13365,6 +13520,7 @@ function renderFzSet() {
       return "<label>" + o[2] + ' <select data-fzs="' + k + '"' + (gi && off ? " disabled" : "") + ">" + o[3].map(function (x) { return '<option value="' + x[0] + '"' + (String(cur || "") === x[0] ? " selected" : "") + ">" + x[1] + "</option>"; }).join("") + "</select></label>";
     }).join("") + (gi === 0 ? "" : "") + "</div>";
   }).join("") +
+    '<div class="sub"' + (off ? ' style="opacity:.5"' : "") + '><b>The row of tiles</b><div class="mut sn">To change the order, open the focus view and choose Edit in the cogwheel menu (or press E), then drag the tiles. ✕ there takes a tile out of the row.</div><span><button data-a="fzorderreset"' + (f.order ? "" : " disabled") + ">Back to the page’s order</button></span></div>" +
     '<div class="sub"' + (off ? ' style="opacity:.5"' : "") + '><b>Boxes with ⤢</b><div class="mut sn">Untick a box to leave its ⤢ out (and its tile in the row).</div><div class="cktick">' + FZ_IDS.filter(function (id) { return !isEmb(id) || embOn(id); }).map(function (id) {
       return '<label><input type="checkbox" data-fzb="' + id + '"' + (!(f.boxes && f.boxes[id] === false) ? " checked" : "") + (off ? " disabled" : "") + "> " + esc(fzName(id)) + "</label>";
     }).join("") + "</div></div>" +
