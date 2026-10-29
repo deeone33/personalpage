@@ -1,4 +1,4 @@
-var VERSION = "0.35.14";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.36.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -770,7 +770,7 @@ var REFRESH = {
   sports: function () { fetchSports(true); }
 };
 var SPIN = {};
-function boxBusy(id) { return (SPIN[id] && Date.now() - SPIN[id] < 1200) || (id === "news" && nBusy) || (id === "reddit" && rBusy); }
+function boxBusy(id) { return (SPIN[id] && Date.now() - SPIN[id] < 1200) || (id === "news" && nBusy) || (id === "reddit" && rBusy) || (id === "telegram" && tgBusy) || (id === "youtube" && ytBusy) || (id === "stocks" && qBusy); }
 function refreshBox(id) {
   if (!REFRESH[id]) return;
   SPIN[id] = Date.now();
@@ -1881,7 +1881,7 @@ function podFlag(k) { return podO(k, true) !== false; }   // line, time, jump: s
 function podMode() { return P.pod && P.pod.mode === "pod" && (podCur() || !boxOff("podcasts")) ? "pod" : "radio"; }
 // the switch in the Radio box is only there for people who use podcasts, so the box stays as it was for everyone else
 function podInUse() { return !boxOff("podcasts") || !!podCur(); }
-function podGet(path) { return fetch(PODAPI + path).then(function (r) { if (!r.ok) throw new Error("Apple answered " + r.status); return r.json(); }); }
+function podGet(path, fresh) { return fetch(PODAPI + path, fresh ? { cache: "no-store" } : undefined).then(function (r) { if (!r.ok) throw new Error("Apple answered " + r.status); return r.json(); }); }
 function podTxt(h) { var d = document.createElement("div"); d.innerHTML = String(h || "").replace(/<(br|\/p|\/li)[^>]*>/gi, "\n").replace(/<[^>]+>/g, " "); return (d.textContent || "").replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim(); }
 function podImg(x) { return safeUrl(String(x.artworkUrl160 || x.artworkUrl100 || x.artworkUrl600 || "").replace(/^http:/, "https:")); }
 // one episode from Apple's answer, kept small: the notes are cut short (and kept whole only in memory, for the player)
@@ -1910,7 +1910,9 @@ function fetchPod(force) {
   var next = function () {
     var ch = chunks.shift();
     if (!ch) { podBusy = false; podSaveC(); podNotify(); render(); if (PODAGAIN) { PODAGAIN = false; fetchPod(); } return; }
-    podGet("lookup?id=" + ch.map(function (s) { return s.id; }).join(",") + "&entity=podcastEpisode&limit=6").then(function (j) {
+    // Apple tells browsers to keep this answer for a whole day: without these two, new episodes only showed after a hard reload.
+    // The added t (changes every 10 minutes) also gets past a copy kept further along the way.
+    podGet("lookup?id=" + ch.map(function (s) { return s.id; }).join(",") + "&entity=podcastEpisode&limit=6&t=" + Math.floor(Date.now() / 600000), true).then(function (j) {
       var by = {}, meta = {};
       (j.results || []).forEach(function (x) {
         if (x.kind === "podcast-episode" || x.wrapperType === "podcastEpisode") { var e = podEp(x); if (e.id && e.u) (by[e.s] = by[e.s] || []).push(e); }
@@ -2013,7 +2015,7 @@ function podSearch() {
 }
 // a show's own page (in Discover): its latest episodes, 20 more each time you ask, up to the 200 Apple gives
 function fetchPodShow(id, n) {
-  podGet("lookup?id=" + id + "&entity=podcastEpisode&limit=" + n).then(function (j) {
+  podGet("lookup?id=" + id + "&entity=podcastEpisode&limit=" + n + "&t=" + Math.floor(Date.now() / 600000), true).then(function (j) {   // (fresh, as in the box)
     var eps = [], meta = null;
     (j.results || []).forEach(function (x) { if (x.kind === "podcast-episode" || x.wrapperType === "podcastEpisode") { var e = podEp(x); if (e.id && e.u) eps.push(e); } else if (x.kind === "podcast") meta = x; });
     var s = podKnow({ id: String(id), n: String((meta && meta.collectionName) || (PODKNOWN[id] || {}).n || "").slice(0, 100), a: String((meta && meta.artistName) || (PODKNOWN[id] || {}).a || "").slice(0, 80), img: (meta && podImg(meta)) || (PODKNOWN[id] || {}).img || "", g: String((meta && meta.primaryGenreName) || "") });
@@ -2279,15 +2281,65 @@ function podPlayerHtml() {
     '<button class="ib" data-a="podfwd" title="Forward ' + podFwd() + ' seconds" aria-label="Forward ' + podFwd() + ' seconds">' + POD_IC.fwd + "<span>" + podFwd() + "</span></button>" +
     '<select id="podSpeed" aria-label="Speed">' + POD_SPEEDS.map(function (v) { return '<option value="' + v + '"' + (v === podSpeed() ? " selected" : "") + ">" + v + "×</option>"; }).join("") + "</select>" +
     '<label class="pdvol" title="Volume"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.500v5h3.500l4.500 4v-13l-4.500 4z" fill="currentColor"/><path d="M15.500 9a4 4 0 0 1 0 6"/></svg><input type="range" min="0" max="100" value="' + radioVol() + '" id="podVol" aria-label="Volume"></label></div>' +
-    '<p class="tools"><button class="btn pl" data-a="poddone" data-k="' + esc(c.id) + '">' + (podDone(c.id) ? "Mark as not played" : "Mark as played") + "</button>" + (c.w ? linkBtn(c.w, "Open on Apple Podcasts", true) : "") + "</p></div></div>" +
+    '<p class="tools"><button class="btn pl" data-a="poddone" data-k="' + esc(c.id) + '">' + (podDone(c.id) ? "Mark as not played" : "Mark as played") + "</button>" + (c.w ? linkBtn(c.w, "Open on Apple Podcasts", true) : "") + "</p>" + podYtHtml(c) + "</div></div>" +
     (notes ? '<h3>About this episode</h3><div class="pdnotes' + (open ? " open" : "") + '">' + notes.split(/\n\n+/).map(function (x) { return "<p>" + esc(x) + "</p>"; }).join("") + "</div>" + (notes.length > 240 ? '<button class="lnk2" data-a="podmore" data-k="' + esc("n:" + c.id) + '">' + (open ? "Less" : "More") + "</button>" : "") : "") +
     (up.length ? "<h3>Up next</h3>" + up.map(function (x) {
       var pp = podPos(x.id), sn = (podShow(x.s) || {}).n || "";
       return '<div class="row rnph pdun"><span><button class="lnk" data-a="podplay" data-k="' + esc(x.id) + '">' + esc(x.t) + "</button>" + (sn ? ' <small class="mut">' + esc(sn) + "</small>" : "") + '</span><span class="r mut">' + (pp && x.len ? Math.max(1, Math.round((x.len - pp) / 60)) + "m left" : "new" + (x.len ? " · " + podMins(x.len) : "")) + "</span></div>";
     }).join("") : "");
 }
-function openPodPlayer() { openModal(POD_T, podPlayerHtml()); }
-function podPlayerRefresh() { if (podPlayerOpen()) { var sc = document.querySelector("#modal .mbox"), t = sc ? sc.scrollTop : 0; $("mBody").innerHTML = podPlayerHtml(); if (sc) sc.scrollTop = t; } }
+function openPodPlayer() { openModal(POD_T, podPlayerHtml()); podYtCheck(); }
+// ---- The same episode on YouTube (signed in): our function finds the show's own channel once (kept with the show you follow,
+// s.yc; "-" = it has none) and the episode on it (super-function podYt). PODYT = { episode id: [video id or "", when asked] },
+// kept in this browser: an episode not found yet is asked again after an hour, a show without a channel after a week.
+var PODYT = load("sp_podyt", {}), PODYTC = {}, PODYTB = {};
+function podYtCh(sid) { var s = podShow(sid); return s ? { ch: s.yc || "", t: +s.yct || 0 } : PODYTC[sid] || { ch: "", t: 0 }; }
+function podYtVid(id) { var v = PODYT[id]; return v && v[0] ? v[0] : ""; }
+function podYtCheck() {
+  var c = podCur();
+  if (!c || !sb || !USER || !c.sn || PODYTB[c.id]) return;
+  var now = Date.now(), v = PODYT[c.id], cc = podYtCh(c.s);
+  if (v && (v[0] || now - v[1] < 3600000)) return;
+  if (cc.ch === "-" && now - cc.t < 7 * 86400000) return;
+  // the show's newest episodes (for finding its channel) with the one in the player
+  var all = ((PODC[c.s] || {}).eps || []).concat((PODSH[c.s] || {}).eps || []), eps = [], seen = {};
+  [c].concat(all.sort(function (a, b) { return b.ts - a.ts; })).forEach(function (e) { if (e && e.id && !seen[e.id] && eps.length < 6) { seen[e.id] = 1; eps.push({ id: e.id, t: e.t, ts: e.ts, len: e.len }); } });
+  PODYTB[c.id] = 1;
+  sb.functions.invoke(window.FEEDS_FN || "feeds", { body: { pyt: { n: c.sn, ch: cc.ch !== "-" ? cc.ch : "", eps: eps, want: c.id } } }).then(function (r) {
+    var x = r.data && r.data.pyt;
+    if (r.error || !x || x._err) throw new Error("no answer");
+    var ch = /^UC[\w-]{20,}$/.test(x.ch || "") ? x.ch : "-", s = podShow(c.s), t = Date.now();
+    if (s) { if (s.yc !== ch) { s.yc = ch; s.yct = t; persist(); } else if (ch === "-") { s.yct = t; persist(); } } else PODYTC[c.s] = { ch: ch, t: t };
+    var got = x.vids && typeof x.vids === "object" ? x.vids : {};
+    eps.forEach(function (e) { var id = /^[\w-]{11}$/.test(got[e.id] || "") ? got[e.id] : ""; if (id || e.id === c.id) PODYT[e.id] = [id, t]; });
+    // at most 300 episodes are remembered: the oldest asked go first
+    var k = Object.keys(PODYT); if (k.length > 300) k.sort(function (a, b) { return PODYT[a][1] - PODYT[b][1]; }).slice(0, k.length - 300).forEach(function (x) { delete PODYT[x]; });
+    save("sp_podyt", PODYT);
+    podPlayerRefresh();
+  }).catch(function () {}).then(function () { delete PODYTB[c.id]; });
+}
+// the row of YouTube buttons under the podcast's own ones: only when that episode was found there
+function podYtHtml(c) {
+  var v = podYtVid(c.id);
+  if (!v) return "";
+  var at = podPos(c.id) > 60 ? " It starts near where you are in the episode (the video can be a little ahead or behind)." : "";
+  return '<p class="tools pdyt"><span class="pdytl"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">' + FZ_ICO.youtube + "</svg>Also on YouTube</span>" +
+    '<button data-a="podyt" data-k="l" title="Watch it at the side of the page.' + at + '">' + DOCK_LAB + '</button><button class="dkr" data-a="podyt" data-k="r" title="Watch it at the right side of the page.' + at + '">Dock right</button>' +
+    '<button data-a="podyt" data-k="pop" title="In a window of its own.' + at + '">Pop out</button><button data-a="podyt" data-k="open" title="On youtube.com, in a new tab.' + at + '">Open on YouTube</button></p>';
+}
+// watching the video: the episode stops, and the video starts about where you were in it
+function podYtGo(how) {
+  var c = podCur(), v = c && podYtVid(c.id);
+  if (!v) return;
+  var at = Math.round(podPos(c.id)); if (at < 60) at = 0;
+  if (PODST === "play" || PODST === "load") podPause();
+  YTDS[v] = { id: v, t: c.t, c: c.sn || "" };
+  var url = "https://www.youtube.com/watch?v=" + encodeURIComponent(v) + (at ? "&t=" + at + "s" : "");
+  if (how === "open") { window.open(url, "_blank", "noopener"); return; }
+  if (how === "pop") { var w = Math.round(Math.min(1280, (screen.availWidth || 1280) * 0.6)); window.open(url, "yt_pod", "popup,width=" + w + ",height=" + Math.round(w * 9 / 16)); return; }
+  dockAdd("v:" + v + (at ? "@" + at : ""), how === "r" ? "r" : "l");
+}
+function podPlayerRefresh() { if (podPlayerOpen()) { var sc = document.querySelector("#modal .mbox"), t = sc ? sc.scrollTop : 0; $("mBody").innerHTML = podPlayerHtml(); if (sc) sc.scrollTop = t; podYtCheck(); } }
 
 function podAct(a, k) {
   if (a === "podplay") { podPlay(k); return; }
@@ -2295,6 +2347,7 @@ function podAct(a, k) {
   if (a === "podback15") { podSkip(-podBack()); return; }
   if (a === "podfwd") { podSkip(podFwd()); return; }
   if (a === "podplayer") { openPodPlayer(); return; }
+  if (a === "podyt") { podYtGo(k); return; }
   if (a === "podmode") {
     var p = podp();
     if (podMode() === "pod") { if (PODST === "play" || PODST === "load") podPause(); p.mode = "radio"; } else p.mode = "pod";
@@ -2852,6 +2905,18 @@ function icsExport() {
 // to other places. While the field of News, Telegram, Reddit or Sports is open, the list under it is therefore made shorter by
 // exactly the field's height (and held at that height, also when a search finds little or nothing).
 var FLT_BOX = [["news", "newsQ"], ["telegram", "tgQ"], ["reddit", "rdQ"], ["sports", "spQ"]], FLT_H = {};
+// Esc in one of these fields: the first press empties it, the next (or the first, when it is empty) closes it
+document.addEventListener("keydown", function (e) {
+  var t = e.target, id = t && t.id;
+  if (e.key !== "Escape" || !/^(newsQ|tgQ|rdQ|spQ)$/.test(id || "")) return;
+  e.preventDefault(); e.stopPropagation();
+  var full = !!t.value;
+  if (id === "newsQ") { NQ = ""; if (!full) NFILT = false; }
+  else if (id === "spQ") { SPQ = ""; if (!full) SPFIND = false; }
+  else { var k = id === "tgQ" ? "tg" : "rd"; FQ[k] = ""; if (!full) FON[k] = false; }
+  render();
+  if (full && $(id)) { $(id).value = ""; $(id).focus(); }
+}, true);
 // before a redraw: how tall each of these lists is while its field is closed
 function fltNote() {
   FLT_BOX.forEach(function (p) {
@@ -6406,9 +6471,10 @@ var WIDGETS = {
   notes: { t: "Notes", html: function () { return notesHtml(); } },
   cal: { t: "Calendar", html: function () { return calHtml(); } },
   calc: { t: "Calculator", html: function () { return calcHtml(); } },
+  keys: { t: "Shortcuts", html: function () { return keysPanelHtml(); }, pc: true },   // (a phone has no keys: not there)
   adm: { t: "Owner panel", html: function () { return admHtml(); }, owner: true }
 };
-function widgetOk(w) { return !!WIDGETS[w] && (!WIDGETS[w].owner || isAdmin()); }   // the owner panel exists only for the site owner
+function widgetOk(w) { return !!WIDGETS[w] && (!WIDGETS[w].owner || isAdmin()) && (!WIDGETS[w].pc || !layM()); }   // the owner panel exists only for the site owner
 function sideOf(w) { var s = P.side && P.side[w]; return widgetOk(w) && (s === "left" || s === "right") ? s : ""; }
 function dlP() { return P.dl && typeof P.dl === "object" ? P.dl : {}; }
 function dlSet(k, w, v) { P.dl = Object.assign({}, dlP()); P.dl[k] = Object.assign({}, P.dl[k] || {}); if (v == null) delete P.dl[k][w]; else P.dl[k][w] = v; }
@@ -6498,6 +6564,9 @@ function dockPlace() {
   if (col.right && swAt("right")) dr.style.right = Math.max(0, Math.round(W - (g.right + 14 - 6) - col.right)) + "px";
 }
 window.addEventListener("resize", function () { dockPlace(); });
+// across the phone width the panels change (one column at the top, and the keys panel only on a computer): drawn again
+var SIDE_M = layM();
+window.addEventListener("resize", function () { if (layM() !== SIDE_M) { SIDE_M = layM(); renderSide(); } });
 function renderSide() {
   dlApply();
   ["left", "right"].forEach(function (side) {
@@ -7191,8 +7260,10 @@ function toastPlace() {
 }
 window.addEventListener("resize", function () { clearTimeout(toastPlace.t); toastPlace.t = setTimeout(toastPlace, 150); });
 function dockAdd(k, side) {
-  // "t:login" a Twitch stream, "v:videoId" a YouTube video, "v:videoId|listId" a video of a playlist (the rest goes in Up next)
-  var kind = k.charAt(0), id = k.slice(2), list = "";
+  // "t:login" a Twitch stream, "v:videoId" a YouTube video, "v:videoId|listId" a video of a playlist (the rest goes in Up next),
+  // "v:videoId@seconds" a video that starts that far in (a podcast's YouTube version, from where you were)
+  var kind = k.charAt(0), id = k.slice(2), list = "", start = 0;
+  if (kind === "v" && /@\d+$/.test(id)) { start = +id.split("@")[1]; id = id.split("@")[0]; }
   if (kind === "v" && id.indexOf("|") > 0) { list = id.split("|")[1]; id = id.split("|")[0]; }
   // (in the focus view the window it came from stays open beside the list, so you do not lose your place)
   if (DOCK.some(function (d) { return d.kind === kind && (d.id === id || d.cur === id); })) { if (!FZ.dock) closeModal(); return; }
@@ -7201,7 +7272,7 @@ function dockAdd(k, side) {
   if (kind === "v") { d.cur = id; d.q = []; d.hist = [id]; d.pop = ""; }
   DOCK.push(d);
   // docking is always your own click, so the stream starts with its sound (a muted one seemed to stop when you looked away)
-  var src = kind === "t" ? twEmbedSrc(id).replace("&muted=true", "&muted=false") : ytSrc(id).replace("&mute=1", "&mute=0");
+  var src = kind === "t" ? twEmbedSrc(id).replace("&muted=true", "&muted=false") : ytSrc(id).replace("&mute=1", "&mute=0") + (start ? "&start=" + start : "");
   var w = document.createElement("div");
   w.className = "dk" + (kind === "v" ? " dkyt" : ""); w.id = "dk" + d.uid;
   // Twitch: just the player, with Chat and close in its top-right corner when the mouse is over it.
@@ -8328,6 +8399,9 @@ document.addEventListener("click", function (e) {
   if (a === "pastesave") { pasteSave(k); return; }
   if (a === "keyset") { e.preventDefault(); KEYCAP = KEYCAP === k ? "" : k; renderKeys(); return; }
   if (a === "keyreset") { delete P.keys; KEYCAP = ""; persist(); renderKeys(); return; }
+  if (a === "keypanel") { $("panel").hidden = true; putWidget("keys"); return; }
+  if (a === "keyon") { P.keysOff = false; persist(); renderKeys(); putWidget("keys"); return; }
+  if (a === "keyrun") { var ka = KEY_ACTS.filter(function (x) { return x[0] === k; })[0]; if (ka) { if ($("mTitle").textContent === WIDGETS.keys.t && !$("modal").hidden) closeModal(); ka[3](); } return; }
   if (a === "srchans") { srchTake(); return; }
   if (a === "nfmailtest") {
     $("nfMailMsg").textContent = "Sending…";
@@ -9091,6 +9165,7 @@ function openHelp() {
       "The box shows the title and time left, play and pause, jump back, jump forward and the volume (one volume for radio and podcasts).",
       "Click the title for the player: the cover, a bar to jump anywhere, the jump buttons, the speed (0.8&times; to 2&times;), the volume, <b>Mark as played</b>, the episode&rsquo;s notes and <b>Up next</b>.",
       "The radio and a podcast never play at the same time.",
+      "<b>Also on YouTube</b> (signed in): many shows put every episode on YouTube too. When the player finds this episode on the show&rsquo;s own channel, it shows a row for it under the player: <b>Dock left</b> or <b>Dock right</b> (on a phone <b>Dock to top</b>), <b>Pop out</b> or <b>Open on YouTube</b>. The episode pauses, and the video starts about where you were (it can be a little ahead or behind). Fan and clip channels are never used; a show that is not on YouTube, or an episode that is not there yet, simply has no row. A new episode is looked for again after an hour.",
       "Where you stopped is saved with your account, so you can go on on another device. On a phone it keeps playing with the screen off and can be paused from the lock screen."]) +
     h4("Settings (" + S("Podcasts") + ")") +
     ul(["The playing speed and how far the jump buttons go.", "Whether played episodes stay in the list (dimmed) or leave it, and the country Discover starts with.",
@@ -9172,7 +9247,8 @@ function openHelp() {
 
   html += h3("keys", "Search bar &amp; shortcuts") + searchHelpHtml() +
     h4("Keyboard shortcuts") +
-    p("They work when you are not typing in a box: " + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close." : "switched off.") + " Change any key, or switch them off, in " + S("Keyboard shortcuts") + ".");
+    p("They work when you are not typing in a box: " + (keysOn() ? KEY_ACTS.filter(function (x) { return keyOf(x[0]); }).map(function (x) { return "<code>" + esc(keyLabel(keyOf(x[0]))) + "</code> " + x[2].toLowerCase(); }).join(" · ") + " · <code>Esc</code> close (in a box&rsquo;s search field: the first <code>Esc</code> empties it, the next closes it)." : "switched off.") + " Change any key, or switch them off, in " + S("Keyboard shortcuts") + ".") +
+    p("To keep them in view on a computer: " + S("Keyboard shortcuts") + " &rarr; <b>Show the keys in a panel</b>, then <b>Dock left</b> or <b>Dock right</b>. The panel lists every key in four groups (Page, Open, Discover, Tools); click a line to do it. Like Notes, it can be moved, folded to its title line or closed with ✕, and it follows when you change a key.");
 
   html += h3("bm", "Bookmarks bar") +
     p("A slim row of your own links at the very top of the page. Switched off, it takes no room.") +
@@ -9195,8 +9271,8 @@ function openHelp() {
       "The page in the box cannot read anything from OmniTree and cannot take over the tab."]);
 
   html += h3("dock", "Docking") +
-    h4("Notes, calendar and calculator") +
-    ul(["Open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it stays open beside the boxes. ✕ turns it back into a window.",
+    h4("Notes, calendar, calculator and shortcuts") +
+    ul(["Open one and press <b>Dock left</b> or <b>Dock right</b> at the bottom; it stays open beside the boxes. ✕ turns it back into a window. (The list of shortcuts comes from " + S("Keyboard shortcuts") + " and is only on a computer.)",
       "The arrow beside a docked panel&rsquo;s title folds it to just its title line when you are not using it; it stays docked in its place. Click the arrow again to unfold it. Folded panels stay folded on your other devices too.",
       "On a computer, drag a docked panel by its title up or down, or across to the other side (⇄ does that in one click). Drag it in toward the boxes and it attaches right next to them; drag it out and it sits at the screen&rsquo;s edge. The page stays centered as long as the panels fit beside it.",
       "In Edit mode each panel gets T&minus; T+ for its text size, its bottom edge sets its height and its inner edge the width of all panels on that side (double-click an edge to undo).",
@@ -12803,7 +12879,8 @@ function refreshAll(force) { fetchNews(); fetchTG(); fetchQuotes(force); fetchTw
 // change them in Settings > Keyboard shortcuts.
 var KEY_ACTS = [
   ["search", "/", "Jump to the search bar", function () { openSearch(); }],
-  ["refresh", "r", "Refresh everything", function () { refreshAll(true); }],
+  // (every box's ↻ turns while it loads, so you see that all of them were asked, not only News and Reddit)
+  ["refresh", "r", "Refresh everything", function () { var t = Date.now(); Object.keys(REFRESH).forEach(function (id) { SPIN[id] = t; }); refreshAll(true); fetchTv(true); render(); setTimeout(render, 1300); }],
   ["edit", "e", "Edit the layout", function () { toggleEdit(); }],
   ["notes", "n", "Notes and to-dos", function () { openNotes(); }],
   ["cal", "c", "Calendar", function () { CALV = null; openCal(); }],
@@ -12843,9 +12920,29 @@ function renderKeys() {
     var k = keyOf(x[0]), cap = KEYCAP === x[0];
     return "<label>" + x[2] + ' <button class="kbd' + (cap ? " cap" : "") + (k || cap ? "" : " none") + '" data-a="keyset" data-k="' + x[0] + '">' + (cap ? "Press a key…" : esc(keyLabel(k))) + "</button></label>";
   }).join("");
+  if (sideOf("keys")) putWidget("keys");   // the docked list of keys follows
   var sk = keyOf("search");
   $("srchIn").placeholder = "Search… (type " + cmdW("help") + " for info)";
   $("srchIn").title = "Type " + cmdW("help") + " and press Enter to see everything the search bar can do" + (sk && keysOn() ? ". Shortcut to jump here: " + keyLabel(sk) : "");
+}
+// The keys as a small panel (Settings > Keyboard shortcuts > Show the keys in a panel), to keep docked like Notes: in four
+// groups, two columns, short names. Click a line to do it. Actions without a key are left out.
+var KEY_SHORT = { search: "Search bar", site: "Search all boxes", refresh: "Refresh", seen: "Mark all seen", edit: "Edit layout", focus: "Focus view", theme: "Light / dark",
+  notes: "Notes", cal: "Calendar", brief: "Summary", weather: "Weather", bell: "Notifications", filter: "Search news", settings: "Settings", help: "Help",
+  discover: "Twitch", ytdiscover: "YouTube", tvdiscover: "TV shows", poddiscover: "Podcasts", newsdiscover: "News sites",
+  timer: "New timer", stopwatch: "Stopwatch", undock: "Close players", keys: "Change keys" };
+var KEY_GROUPS = [["Page", ["search", "site", "refresh", "seen", "edit", "focus", "theme"]], ["Open", ["notes", "cal", "brief", "weather", "bell", "filter", "settings", "help"]],
+  ["Discover", ["discover", "ytdiscover", "tvdiscover", "poddiscover", "newsdiscover"]], ["Tools", ["timer", "stopwatch", "undock", "keys"]]];
+function keysPanelHtml() {
+  if (!keysOn()) return '<div class="kyp"><p class="mut sn">Keyboard shortcuts are off.</p><button data-a="keyon">Turn them on</button></div>';
+  var grp = KEY_GROUPS.map(function (g) {
+    var rows = g[1].filter(function (n) { return keyOf(n); }).map(function (n) {
+      var x = KEY_ACTS.filter(function (a) { return a[0] === n; })[0];
+      return '<button class="kyr" data-a="keyrun" data-k="' + n + '" title="' + esc(x ? x[2] : "") + '"><kbd>' + esc(keyLabel(keyOf(n))) + "</kbd><span>" + KEY_SHORT[n] + "</span></button>";
+    }).join("");
+    return rows ? '<div class="kyg"><h5>' + g[0] + '</h5><div class="kyl">' + rows + "</div></div>" : "";
+  }).join("");
+  return '<div class="kyp">' + (grp || '<p class="mut sn">No keys are set.</p>') + '<div class="kyf"><span class="mut">Not while typing in a box</span><button class="lnk2" data-a="keyrun" data-k="keys">Change</button></div></div>';
 }
 function openKeys() {
   var i = -1;
