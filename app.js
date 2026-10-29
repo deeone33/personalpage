@@ -1,4 +1,4 @@
-var VERSION = "0.36.1";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.36.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -12888,6 +12888,9 @@ var KEY_ACTS = [
   ["weather", "w", "Weather", function () { openWeather(); }],
   ["bell", "a", "Notification history", function () { MENU_OPEN = MENU_OPEN === "bell" ? "" : "bell"; if (MENU_OPEN) { NLOG.forEach(function (x) { x.seen = 1; }); save("sp_nlog", NLOG); sy().nseen = Date.now(); persist(); } render(); }],
   ["seen", "x", "Mark everything as seen", function () { markSeen(""); render(); }],
+  // the reader, as its button in the box opens it: at the oldest headline or post you have not seen
+  ["readnews", "g", "Read the news in the reader", function () { if (!boxOff("news")) openReader("news", "", true); }],
+  ["readtg", "l", "Read Telegram in the reader", function () { if (!boxOff("telegram")) openReader("tg", "", true); }],
   ["filter", "f", "Search the news", function () { NFILT = !(NFILT || NQ); if (!NFILT) NQ = ""; render(); var q = $("newsQ"); if (q) { q.value = ""; q.focus(); } }],
   ["site", "q", "Search all boxes", function () { openSearch(); $("srchIn").value = cmdW("ss") + " "; srchShow(); }],
   ["discover", "d", "Discover on Twitch", function () { openDiscover(); }],
@@ -12928,10 +12931,10 @@ function renderKeys() {
 // The keys as a small panel (Settings > Keyboard shortcuts > Show the keys in a panel), to keep docked like Notes: in four
 // groups, two columns, short names. Click a line to do it. Actions without a key are left out.
 var KEY_SHORT = { search: "Search bar", site: "Search all boxes", refresh: "Refresh", seen: "Mark all seen", edit: "Edit layout", focus: "Focus view", theme: "Light / dark",
-  notes: "Notes", cal: "Calendar", brief: "Summary", weather: "Weather", bell: "Notifications", filter: "Search news", settings: "Settings", help: "Help",
+  readnews: "Read news", readtg: "Read Telegram", notes: "Notes", cal: "Calendar", brief: "Summary", weather: "Weather", bell: "Notifications", filter: "Search news", settings: "Settings", help: "Help",
   discover: "Twitch", ytdiscover: "YouTube", tvdiscover: "TV shows", poddiscover: "Podcasts", newsdiscover: "News sites",
   timer: "New timer", stopwatch: "Stopwatch", undock: "Close players", keys: "Change keys" };
-var KEY_GROUPS = [["Page", ["search", "site", "refresh", "seen", "edit", "focus", "theme"]], ["Open", ["notes", "cal", "brief", "weather", "bell", "filter", "settings", "help"]],
+var KEY_GROUPS = [["Page", ["search", "site", "refresh", "seen", "edit", "focus", "theme"]], ["Open", ["readnews", "readtg", "notes", "cal", "brief", "weather", "bell", "filter", "settings", "help"]],
   ["Discover", ["discover", "ytdiscover", "tvdiscover", "poddiscover", "newsdiscover"]], ["Tools", ["timer", "stopwatch", "undock", "keys"]]];
 function keysPanelHtml() {
   if (!keysOn()) return '<div class="kyp"><p class="mut sn">Keyboard shortcuts are off.</p><button data-a="keyon">Turn them on</button></div>';
