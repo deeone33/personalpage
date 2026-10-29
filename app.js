@@ -1,4 +1,4 @@
-var VERSION = "0.36.2";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.36.3";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -3084,6 +3084,7 @@ function rdrDraw(key, exact) {
   L.scrollTop = el && el.previousElementSibling && el.previousElementSibling.id !== "rdrTop" ? el.offsetTop : 0;
   R.last = L.scrollTop;
   L.addEventListener("scroll", rdrOnScroll, { passive: true });
+  L.addEventListener("wheel", rdrWheel, { passive: false });
   rdrWatch();
   Object.keys(R.com).forEach(function (u) { loadRdComments(u); });
   try { L.focus({ preventScroll: true }); } catch (e) {}
@@ -3153,7 +3154,9 @@ function rdrCount() {
   el.title = (left ? left + " unread still to come · " : "Nothing unread left · ") + "post " + n + " of " + ps.length;
 }
 window.addEventListener("resize", rdrFit);
-document.addEventListener("wheel", function (e) {
+// (listened to on the reader's list only, set in rdrDraw: a wheel listener on the whole page makes the browser wait for this
+// page's code before it scrolls anything anywhere, so every scroll stopped while the page was busy with a refresh)
+function rdrWheel(e) {
   var L = $("rdrL");
   if (!RDR || !L || !L.classList.contains("snap") || !L.contains(e.target) || e.ctrlKey || !e.deltaY) return;
   var now = Date.now(), dn = e.deltaY > 0, p = e.target.closest ? e.target.closest(".rdp") : null;
@@ -3179,7 +3182,7 @@ document.addEventListener("wheel", function (e) {
   RDR.push = (RDR.push || 0) + (big ? 1 : Math.abs(e.deltaY) / 120);
   if (RDR.push < S.push) return;
   RDR.push = 0; RDR.wh = now; RDR.holdT = now + S.hold; rdrStep(dn ? 1 : -1);
-}, { passive: false });
+}
 function rdrOnScroll() { if (RDR && !RDR.raf) RDR.raf = setTimeout(function () { if (RDR) { RDR.raf = 0; rdrScan(); } }, 80); }
 // A post counts as read once it has come into the upper half of the window (or the list has reached its end). A jump of
 // several screens at once (End, the scroll bar) reads only where it lands, not everything it passed.
@@ -13529,7 +13532,8 @@ function fzLeave(fromPop, instant) {
     if (!t.closest || !t.closest("#fzBody") || t.closest("input, textarea, select, video, iframe, .fzgut, .tv, .tradingview-widget-container") || scrollsX(t)) return;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; on = true; body = $("fzBody");
   }, { passive: true });
-  document.addEventListener("touchmove", function (e) {
+  // (on the focus view only: a touchmove listener that can stop scrolling, on the whole page, makes every scroll wait for this page)
+  $("fzWrap").addEventListener("touchmove", function (e) {
     if (!on) return;
     var dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
     if (!dir) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; dir = Math.abs(dx) > Math.abs(dy) * 1.4 ? 1 : -1; }

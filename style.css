@@ -2191,7 +2191,8 @@ body.foc.fznotop #fzShelf{margin-top:0}
 .fzdet .mbox{width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;border:0;border-radius:0;box-shadow:none;background:none;animation:none;padding:14px 18px 24px;display:block!important}
 .fzdet .mbox #mClose{display:none}
 #modal.fzdk{display:none!important}
-.fznat .list{max-height:none!important;min-height:0!important;height:auto!important}
+/* (in the focus view the side scrolls, not the box's own list: a list that scrolls itself here would catch the wheel and do nothing) */
+.fznat .list{max-height:none!important;min-height:0!important;height:auto!important;overflow:visible!important}
 .fznat .empty{padding:30px 10px;text-align:center}
 .fzph{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--mut);text-align:center;padding:30px;font-size:13.5px}
 .fzph svg{opacity:.45}
