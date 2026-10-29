@@ -1,4 +1,4 @@
-var VERSION = "0.35.13";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
+var VERSION = "0.35.14";   // Semantic Versioning: patch = fixes, minor = new features or changes, 1.0.0 = public launch
 // Shown inside another site's frame (to trick a signed-in visitor into clicking): the page hides itself and opens as itself.
 // (GitHub Pages cannot send the header that forbids this, and a meta tag cannot carry it.) Also update the ?v= of the files
 // in every .html page when VERSION changes, so a browser never mixes new code with an old style sheet.
@@ -10372,7 +10372,7 @@ function spGetX(list) {
 // sports the score changes all the time) and when it ends. Also when a ★ fighter or tennis player goes on and finishes.
 var SPPREV = {}, SPV = 0;
 // ---- Following one game (🔔 in its window): told only the big moments of that one game, then it stops by itself.
-// P.spFol = { game id or fight key: when you started following }. What you are told depends on the sport:
+// P.spFol = { game id or fight key: { s: when you started following, e: when the event starts } }. What you are told depends on the sport:
 //   football: kick-off, every goal, extra time / penalties, full time · ice hockey: start, every goal, overtime / shootout, final
 //   esports: start, every map, final · basketball, American football, rugby, Australian football: start, half-time, overtime, final
 //   baseball, cricket: start, final · a UFC fight: start, result · a tennis match: start, each set, result · a race or golf: start, winner
@@ -10380,9 +10380,21 @@ var SPPREV = {}, SPV = 0;
 var RACE_KEY = /qualif|sprint|race|shootout|grand prix/i;
 function spFolMap() {
   var m = P.spFol && typeof P.spFol === "object" ? P.spFol : {}, now = Date.now(), gone = false;
-  Object.keys(m).forEach(function (k) { if (!(now - m[k] < 3 * 86400000)) { delete m[k]; gone = true; } });   // forgotten after 3 days
+  // forgotten 3 days after the event starts (a race or golf weekend: 5), in case its end was never seen. Without a known
+  // start (and the old way, a bare number for when you clicked): 30 days after the click.
+  Object.keys(m).forEach(function (k) {
+    var v = m[k], o = v && typeof v === "object", at = o ? +v.e || 0 : 0, from = o ? +v.s || 0 : +v || 0;
+    if (!(at ? now < at + (/^race/.test(v.k || "") ? 5 : 3) * 86400000 : now - from < 30 * 86400000)) { delete m[k]; gone = true; }
+  });
   if (gone) { P.spFol = m; persist(); }
   return m;
+}
+// when a followed game, fight or race weekend starts (its last session for a weekend), and what kind it is
+function spFolAt(id) {
+  var x = id.indexOf("#") > 0 ? fightFind(id) : null, e = x ? x.e : spFind(id);
+  if (!e) return { e: 0, k: "" };
+  var t = x ? x.f.ts || e.ts : (e.sessions || []).reduce(function (a, s) { return Math.max(a, s.ts || 0); }, e.ts || 0);
+  return { e: t > 0 ? t : 0, k: e.kind || "" };
 }
 function spFolOn(id) { return !!spFolMap()[id]; }
 function spFolDone(id) { var m = spFolMap(); if (m[id]) { delete m[id]; P.spFol = m; persist(); SPV++; } }
@@ -10400,7 +10412,7 @@ function spFolWhat(id) {
 }
 function spFolToggle(id) {
   var m = spFolMap(), on = !m[id];
-  if (on) m[id] = Date.now(); else delete m[id];
+  if (on) { var at = spFolAt(id); m[id] = { s: Date.now(), e: at.e, k: at.k }; } else delete m[id];
   P.spFol = m; persist(); SPV++; render();
   spRedraw(true);
   // what you will be told: a small bubble under the bell for a few seconds, over the window (nothing in it moves)
